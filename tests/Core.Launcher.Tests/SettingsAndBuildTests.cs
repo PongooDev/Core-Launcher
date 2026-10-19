@@ -160,7 +160,7 @@ public sealed class SettingsAndBuildTests
     public void UnknownBuildHasNoDlls()
     {
         var build = KnownBuilds.Create(@"F:\Builds\Other", new BuildVersion(4, 19, 0, 3700114, "++Fortnite+Release-1.8"));
-        Assert.Equal("Fortnite+Release-1.8 CL-3700114", build.Name);
+        Assert.Equal("Fortnite 1.8 CL-3700114", build.Name);
         Assert.Empty(build.ServerDlls);
         Assert.Empty(build.ClientDlls);
     }

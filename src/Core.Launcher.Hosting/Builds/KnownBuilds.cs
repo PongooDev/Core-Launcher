@@ -33,13 +33,32 @@ public static class KnownBuilds
 
     public static bool IsKnown(int changelist) => Builds.ContainsKey(changelist);
 
+    /// <summary>"Cert CL-3532353" (every supported build, for messages).</summary>
+    public static string SupportedNames => string.Join(", ", Builds.Values.Select(create => create().Name));
+
+    /// <summary>
+    /// Whether Core can run this build as set up: it is a supported build, or someone has given it the Core DLLs by
+    /// hand. An unsupported build left as added would start the client against Epic's own services and "servers"
+    /// without Core.dll.
+    /// </summary>
+    public static bool CanPlay(BuildSettings build) => build.UseHttpProxy || build.ClientDlls.Contains(DllRole.Redirect);
+
+    public static bool CanHost(BuildSettings build) => build.ServerDlls.Contains(DllRole.Server);
+
+    public static string NotSupported(BuildSettings build) =>
+        IsKnown(build.Changelist)
+            ? $"{build.Name} has the Core DLLs turned off (Settings → Builds)"
+            : $"Core doesn't support {build.Name} yet. It supports {SupportedNames}.";
+
     public static BuildSettings Create(string folder, BuildVersion version)
     {
         var build = Builds.TryGetValue(version.Changelist, out var known)
             ? known()
             : new BuildSettings
             {
-                Name = $"{version.BranchName.TrimStart('+')} CL-{version.Changelist}",
+                Name = version.Changelist == 0 ? "Fortnite build"
+                    : version.ShortName.Length > 0 ? $"Fortnite {version.ShortName} CL-{version.Changelist}"
+                    : $"Fortnite CL-{version.Changelist}",
                 ClientArguments = "-epicapp=Fortnite -epicenv=Prod -epicportal -SkipPatchCheck",
                 ServerArguments = "-epicapp=Fortnite -epicenv=Prod -epicportal -SkipPatchCheck -nullrhi -nosplash -nosound",
             };

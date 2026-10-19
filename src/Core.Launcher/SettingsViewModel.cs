@@ -126,16 +126,18 @@ public sealed partial class SettingsViewModel : ObservableObject
     public Func<string, string?>? PickFolder { get; set; }
 
     [RelayCommand]
-    private void AddBuild()
+    private async Task AddBuildAsync()
     {
         if (PickFolder?.Invoke("Pick the build folder (the one with Engine and FortniteGame)") is not { } folder)
         {
             return;
         }
 
-        if (BuildDetector.Detect(folder) is not { } detected)
+        Message = "Checking the build…";
+        var detected = await Task.Run(() => BuildDetector.Detect(folder));
+        Message = BuildMessages.Describe(detected).Text;
+        if (detected is null)
         {
-            Message = $"No {BuildVersion.RelativePath} found in or around {folder}";
             return;
         }
 
@@ -151,8 +153,8 @@ public sealed partial class SettingsViewModel : ObservableObject
         Builds.Add(editor);
         SelectedBuild = editor;
         Message = KnownBuilds.IsKnown(detected.Version.Changelist)
-            ? $"Added {build.Name} (UE {detected.Version.EngineVersion})"
-            : $"CL-{detected.Version.Changelist} ({detected.Version.BranchName}) isn't a known build yet: check its arguments and pick its DLLs";
+            ? $"Added {build.Name}"
+            : $"Added {build.Name}. Core doesn't support it yet: its DLLs stay off until you turn them on.";
     }
 
     [RelayCommand]

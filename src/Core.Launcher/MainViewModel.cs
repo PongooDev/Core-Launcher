@@ -200,9 +200,14 @@ public sealed partial class MainViewModel : ObservableObject
             }
 
             SelectedBuild = settings.FindSelectedBuild();
-            BuildDetail = SelectedBuild is { } selected && BuildVersion.Read(selected.Path) is { } version
-                ? $"UE {version.EngineVersion} · CL {version.Changelist}"
-                : SelectedBuild is null ? "No build yet" : "Build folder not found";
+            BuildDetail = SelectedBuild is not { } selected ? "No build yet"
+                : !File.Exists(selected.ExecutablePath) ? "Build folder not found"
+                : string.Join(" · ", new[]
+                {
+                    BuildVersion.Read(selected.Path)?.Engine,
+                    selected.Changelist > 0 ? $"CL {selected.Changelist}" : null,
+                    KnownBuilds.IsKnown(selected.Changelist) ? null : "not supported yet",
+                }.Where(part => part is not null));
             Hosting = _host.Servers.Enabled;
             Instances = settings.Servers.Instances;
             ClientRunning = _host.Client is not null;
@@ -351,6 +356,11 @@ public sealed partial class MainViewModel : ObservableObject
         {
             (text, brush) = ($"The {build.Name} folder can't be found", "BadBrush");
             (actionText, action) = ("Choose build folder", ChooseBuildFolder);
+        }
+        else if (!KnownBuilds.CanPlay(build))
+        {
+            (text, brush) = (KnownBuilds.NotSupported(build), "BusyBrush");
+            (actionText, action) = ("Choose another build", ChooseBuildFolder);
         }
         else if (backend.State == BackendState.Failed && backend.Error is { } error)
         {
@@ -633,16 +643,18 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
-    private void ChooseBuildFolder()
+    private async void ChooseBuildFolder()
     {
         if (PickFolder?.Invoke("Pick your Fortnite build folder (the one with Engine and FortniteGame)") is not { } folder)
         {
             return;
         }
 
-        if (BuildDetector.Detect(folder) is not { } detected)
+        var detected = await Task.Run(() => BuildDetector.Detect(folder));
+        var (description, brush) = BuildMessages.Describe(detected);
+        if (detected is null)
         {
-            Toast($"No {BuildVersion.RelativePath} in or around {folder}", "BadBrush");
+            Toast(description, brush);
             return;
         }
 
@@ -663,7 +675,7 @@ public sealed partial class MainViewModel : ObservableObject
 
         updated.SelectedBuild = build.Name;
         _host.SaveSettings(updated);
-        Toast($"Using {build.Name}", "GoodBrush");
+        Toast(KnownBuilds.IsKnown(build.Changelist) ? $"Using {build.Name}" : description, brush);
     }
 
     private void UseRunningBackend()

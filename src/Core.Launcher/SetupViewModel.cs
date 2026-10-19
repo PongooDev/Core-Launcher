@@ -14,6 +14,8 @@ public sealed partial class SetupViewModel : ObservableObject
 {
     private readonly LauncherHost _host;
     private DetectedBuild? _detected;
+    private Task _detecting = Task.CompletedTask;
+    private int _detection;
 
     public SetupViewModel(LauncherHost host)
     {
@@ -69,22 +71,38 @@ public sealed partial class SetupViewModel : ObservableObject
 
     public bool Editable => !Installing;
 
+    // Reading the exe for its build string can take a moment, so detection runs off the UI thread and only the
+    // latest folder's result is shown.
     partial void OnBuildFolderChanged(string value)
     {
-        _detected = value.Trim().Length > 0 && Directory.Exists(value.Trim()) ? BuildDetector.Detect(value.Trim()) : null;
-        if (_detected is { } build)
+        var folder = value.Trim();
+        var detection = ++_detection;
+        _detected = null;
+        if (folder.Length == 0)
         {
-            var known = KnownBuilds.IsKnown(build.Version.Changelist);
-            BuildStatus = known
-                ? $"{KnownBuilds.Create(build.Folder, build.Version).Name} (UE {build.Version.EngineVersion}) is supported"
-                : $"CL-{build.Version.Changelist} ({build.Version.BranchName}) isn't a supported build yet";
-            BuildStatusBrush = MainViewModel.Brush(known ? "GoodBrush" : "BusyBrush");
+            BuildStatus = "Pick the folder that has Engine and FortniteGame in it";
+            BuildStatusBrush = MainViewModel.Brush("MutedBrush");
+            _detecting = Task.CompletedTask;
+            return;
         }
-        else
+
+        BuildStatus = "Checking the build…";
+        BuildStatusBrush = MainViewModel.Brush("MutedBrush");
+        _detecting = DetectAsync(folder, detection);
+    }
+
+    private async Task DetectAsync(string folder, int detection)
+    {
+        var build = await Task.Run(() => BuildDetector.Detect(folder));
+        if (detection != _detection)
         {
-            BuildStatus = value.Trim().Length == 0 ? "Pick the folder that holds Engine and FortniteGame" : "No Engine\\Build\\Build.version in or around this folder";
-            BuildStatusBrush = MainViewModel.Brush(value.Trim().Length == 0 ? "MutedBrush" : "BadBrush");
+            return;
         }
+
+        _detected = build;
+        var (text, brush) = BuildMessages.Describe(build);
+        BuildStatus = text;
+        BuildStatusBrush = MainViewModel.Brush(brush);
     }
 
     [RelayCommand]
@@ -124,6 +142,7 @@ public sealed partial class SetupViewModel : ObservableObject
             return;
         }
 
+        await _detecting;
         if (_detected is not { } build)
         {
             Message = "Pick your Fortnite build folder";

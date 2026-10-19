@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Core.Launcher.Hosting.Backend;
+using Core.Launcher.Hosting.Builds;
 using Core.Launcher.Hosting.Components;
 using Core.Launcher.Hosting.Dlls;
 using Core.Launcher.Hosting.Logging;
@@ -315,6 +316,11 @@ public sealed class LauncherHost : IAsyncDisposable
 
         var settings = Settings;
         var build = settings.FindSelectedBuild() ?? throw new InvalidOperationException("Add a build first (Settings → Builds)");
+        if (!KnownBuilds.CanPlay(build))
+        {
+            throw new InvalidOperationException(KnownBuilds.NotSupported(build));
+        }
+
         if (settings.PlayerName.Length == 0)
         {
             throw new InvalidOperationException("Enter a player name");
@@ -374,9 +380,14 @@ public sealed class LauncherHost : IAsyncDisposable
     {
         public string? Blocker()
         {
-            if (host.Settings.FindSelectedBuild() is null)
+            if (host.Settings.FindSelectedBuild() is not { } build)
             {
                 return "no build (Settings → Builds)";
+            }
+
+            if (!KnownBuilds.CanHost(build))
+            {
+                return KnownBuilds.NotSupported(build);
             }
 
             if (host.CheckingForUpdates)
