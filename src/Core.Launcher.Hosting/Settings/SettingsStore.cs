@@ -7,6 +7,14 @@ public sealed class SettingsStore
 {
     public const int MaxInstances = 16;
 
+    /// <summary>
+    /// 1: -FORCELOGFLUSH is removed from every saved build's arguments. Cert's defaults had it (from run_server.py), and
+    /// it can deadlock the game before its first log line: every line's Flush() holds FAsyncWriter's buffer lock and
+    /// waits for the writer thread, which can be waiting for that lock in its periodic flush (CoreV2 session,
+    /// 2026-10-19: about 2 runs in 3 stalled with it, 4 in 4 started without it). Core's own logs flush themselves.
+    /// </summary>
+    public const int CurrentVersion = 1;
+
     private static readonly JsonSerializerOptions Options = new()
     {
         WriteIndented = true,
@@ -30,9 +38,27 @@ public sealed class SettingsStore
         }
 
         var settings = JsonSerializer.Deserialize<LauncherSettings>(File.ReadAllText(_path), Options) ?? new LauncherSettings();
+        if (settings.Version < CurrentVersion)
+        {
+            Migrate(settings);
+            Save(settings);
+        }
+
         Normalize(settings);
         return settings;
     }
+
+    private static void Migrate(LauncherSettings settings)
+    {
+        foreach (var build in settings.Builds ?? [])
+        {
+            build.ClientArguments = WithoutSwitch(build.ClientArguments ?? "", "-FORCELOGFLUSH");
+            build.ServerArguments = WithoutSwitch(build.ServerArguments ?? "", "-FORCELOGFLUSH");
+        }
+    }
+
+    private static string WithoutSwitch(string arguments, string name) =>
+        string.Join(' ', arguments.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(argument => !argument.Equals(name, StringComparison.OrdinalIgnoreCase)));
 
     public void Save(LauncherSettings settings)
     {
@@ -48,6 +74,7 @@ public sealed class SettingsStore
 
     private static void Normalize(LauncherSettings settings)
     {
+        settings.Version = CurrentVersion;
         settings.Builds ??= [];
         settings.Dlls ??= new DllSettings();
         settings.Backend ??= new BackendSettings();

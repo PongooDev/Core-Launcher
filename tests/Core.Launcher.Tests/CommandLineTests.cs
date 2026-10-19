@@ -69,7 +69,7 @@ public sealed partial class CommandLineTests
         string[] expected =
         [
             "-epicapp=Fortnite", "-epicenv=Prod", "-epicportal", "-httpproxy=127.0.0.1:5595", "-AUTH_LOGIN=CoreServer",
-            "-AUTH_PASSWORD=Core", "-AUTH_TYPE=epic", "-SkipPatchCheck", "-FORCELOGFLUSH", "-nullrhi", "-nosplash", "-nosound",
+            "-AUTH_PASSWORD=Core", "-AUTH_TYPE=epic", "-SkipPatchCheck", "-nullrhi", "-nosplash", "-nosound",
             "-CoreBackend=http://127.0.0.1:5595", "-unattended",
         ];
         Assert.Equal(expected.Order(), Split("x.exe " + arguments).Skip(1).Order());

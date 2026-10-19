@@ -4,6 +4,9 @@ namespace Core.Launcher.Hosting.Settings;
 
 public sealed class LauncherSettings
 {
+    /// <summary>The settings format; older files are migrated on load (<see cref="SettingsStore.CurrentVersion"/>).</summary>
+    public int Version { get; set; }
+
     /// <summary>False until the first-run setup has finished.</summary>
     public bool SetupComplete { get; set; }
 

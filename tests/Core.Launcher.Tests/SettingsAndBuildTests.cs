@@ -53,6 +53,33 @@ public sealed class SettingsAndBuildTests
     }
 
     [Fact]
+    public void OlderSettingsLoseForceLogFlushOnce()
+    {
+        using var folder = new TempFolder();
+        var path = folder.Combine("settings.json");
+        File.WriteAllText(path, """
+            {
+              "SetupComplete": true,
+              "Builds": [
+                { "Name": "Cert CL-3532353", "ClientArguments": "-epicapp=Fortnite -SkipPatchCheck -FORCELOGFLUSH",
+                  "ServerArguments": "-epicapp=Fortnite -forcelogflush -nullrhi" }
+              ]
+            }
+            """);
+        var store = new SettingsStore(path);
+
+        var migrated = store.Load();
+        Assert.Equal(SettingsStore.CurrentVersion, migrated.Version);
+        Assert.Equal("-epicapp=Fortnite -SkipPatchCheck", migrated.Builds[0].ClientArguments);
+        Assert.Equal("-epicapp=Fortnite -nullrhi", migrated.Builds[0].ServerArguments);
+        Assert.DoesNotContain("FORCELOGFLUSH", File.ReadAllText(path), StringComparison.OrdinalIgnoreCase);
+
+        migrated.Builds[0].ClientArguments += " -FORCELOGFLUSH";
+        store.Save(migrated);
+        Assert.EndsWith("-FORCELOGFLUSH", store.Load().Builds[0].ClientArguments);
+    }
+
+    [Fact]
     public void ServerLoginNumbersEachInstance()
     {
         Assert.Equal("CoreServer2", new ServerSettings().LoginFor(2));
@@ -93,6 +120,7 @@ public sealed class SettingsAndBuildTests
         Assert.Equal([DllRole.Redirect, DllRole.Server], build.ServerDlls);
         Assert.Contains("-nullrhi", build.ServerArguments);
         Assert.DoesNotContain("-nullrhi", build.ClientArguments);
+        Assert.DoesNotContain("FORCELOGFLUSH", build.ClientArguments + build.ServerArguments);
         Assert.Equal(@"F:\Builds\++Fortnite+Cert-CL-3532353\Fortnite\FortniteGame\Binaries\Win64\FortniteClient-Win64-Shipping.exe", build.ExecutablePath);
     }
 

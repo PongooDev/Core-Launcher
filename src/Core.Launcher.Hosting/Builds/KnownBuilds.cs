@@ -6,7 +6,8 @@ namespace Core.Launcher.Hosting.Builds;
 /// <summary>Per-build launch settings, keyed by changelist. A build missing here gets the same shape with no DLLs.</summary>
 public static class KnownBuilds
 {
-    private const string CertClientArguments = "-epicapp=Fortnite -epicenv=Prod -epicportal -SkipPatchCheck -FORCELOGFLUSH";
+    // No -FORCELOGFLUSH: it can deadlock the game at start-up (see SettingsStore's version 1 migration).
+    private const string CertClientArguments = "-epicapp=Fortnite -epicenv=Prod -epicportal -SkipPatchCheck";
 
     // Core-Docs/Tools/run_server.py and Backend-Evidence-3532353.md (launch line); DLL order from CoreV2 (redirect first).
     private static readonly Dictionary<int, Func<BuildSettings>> Builds = new()
