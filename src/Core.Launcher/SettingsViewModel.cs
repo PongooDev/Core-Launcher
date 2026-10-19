@@ -12,10 +12,13 @@ namespace Core.Launcher;
 public sealed partial class SettingsViewModel : ObservableObject
 {
     private readonly LauncherHost _host;
+    private readonly Action<bool> _finished;
 
-    public SettingsViewModel(LauncherHost host)
+    /// <param name="finished">Called with true after a save, false after the changes are discarded.</param>
+    public SettingsViewModel(LauncherHost host, Action<bool> finished)
     {
         _host = host;
+        _finished = finished;
         Settings = SettingsStore.Clone(host.Settings);
         foreach (var build in Settings.Builds)
         {
@@ -35,6 +38,10 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     public partial string Message { get; set; } = "";
+
+    /// <summary>0 Builds, 1 Core DLLs, 2 Backend, 3 Servers, 4 About.</summary>
+    [ObservableProperty]
+    public partial int SelectedTab { get; set; }
 
     public bool HasBuild => SelectedBuild is not null;
 
@@ -115,8 +122,6 @@ public sealed partial class SettingsViewModel : ObservableObject
             OnPropertyChanged();
         }
     }
-
-    public event Action<bool>? CloseRequested;
 
     public Func<string, string?>? PickFolder { get; set; }
 
@@ -216,11 +221,27 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
 
         _host.SaveSettings(Settings);
-        CloseRequested?.Invoke(true);
+        _finished(true);
     }
 
     [RelayCommand]
-    private void Cancel() => CloseRequested?.Invoke(false);
+    private void Discard() => _finished(false);
+
+    public string Version => $"v{_host.Updater.Current.ToString(3)}";
+
+    public string DataFolder => _host.Paths.Root;
+
+    [RelayCommand]
+    private void OpenDataFolder() => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(_host.Paths.Root) { UseShellExecute = true });
+
+    [RelayCommand]
+    private void OpenBuildFolder()
+    {
+        if (SelectedBuild is { } build && Directory.Exists(build.Settings.Path))
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(build.Settings.Path) { UseShellExecute = true });
+        }
+    }
 }
 
 /// <summary>Edits one build; the DLL lists are kept in load order (redirect first).</summary>

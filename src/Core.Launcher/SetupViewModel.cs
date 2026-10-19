@@ -216,8 +216,10 @@ public sealed partial class SetupStepViewModel(string name) : ObservableObject
     public string Name { get; } = name;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(StateBrush))]
+    [NotifyPropertyChangedFor(nameof(StateBrush), nameof(Working))]
     public partial StepState State { get; set; }
+
+    public bool Working => State == StepState.Working;
 
     [ObservableProperty]
     public partial string Status { get; set; } = "Waiting";

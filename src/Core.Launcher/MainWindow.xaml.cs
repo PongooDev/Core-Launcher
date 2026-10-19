@@ -16,6 +16,13 @@ public partial class MainWindow : Window
         SourceInitialized += (_, _) => DarkTitleBar.Apply(this);
         _model = model;
         DataContext = model;
+        model.PickFolder = PickFolder;
+    }
+
+    private string? PickFolder(string title)
+    {
+        var dialog = new Microsoft.Win32.OpenFolderDialog { Title = title };
+        return dialog.ShowDialog(this) == true ? dialog.FolderName : null;
     }
 
     /// <summary>Closes and stops everything without the "close anyway?" question (the caller already asked).</summary>

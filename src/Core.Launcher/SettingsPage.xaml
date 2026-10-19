@@ -1,0 +1,275 @@
+<UserControl x:Class="Core.Launcher.SettingsPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:Core.Launcher">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="Visible" />
+        <local:InverseBooleanConverter x:Key="Not" />
+        <Style x:Key="Label" TargetType="{x:Type TextBlock}" BasedOn="{StaticResource Muted}">
+            <Setter Property="Margin" Value="0,14,0,5" />
+        </Style>
+        <Style x:Key="Hint" TargetType="{x:Type TextBlock}" BasedOn="{StaticResource Subtle}">
+            <Setter Property="Margin" Value="0,5,0,0" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style x:Key="Section" TargetType="{x:Type Border}" BasedOn="{StaticResource Panel}">
+            <Setter Property="Margin" Value="0,0,0,14" />
+            <Setter Property="Padding" Value="20,16,20,20" />
+        </Style>
+    </UserControl.Resources>
+
+    <DockPanel>
+        <TextBlock DockPanel.Dock="Top" Text="Settings" Style="{StaticResource PageTitle}" Margin="0,0,0,14" />
+
+        <Border DockPanel.Dock="Bottom" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,14,0,0" Margin="0,12,0,0">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button Content="Discard changes" Command="{Binding DiscardCommand}" />
+                    <Button Content="Save" Margin="8,0,0,0" MinWidth="90" Style="{StaticResource PrimaryButton}" Command="{Binding SaveCommand}" />
+                </StackPanel>
+                <TextBlock Text="{Binding Message}" Foreground="{StaticResource BusyBrush}" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,12,0" />
+            </DockPanel>
+        </Border>
+
+        <TabControl SelectedIndex="{Binding SelectedTab}">
+            <TabItem Header="Builds">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="230" />
+                        <ColumnDefinition Width="16" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border Style="{StaticResource Panel}" Padding="8">
+                        <DockPanel>
+                            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="4,8,4,4">
+                                <Button Command="{Binding AddBuildCommand}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="&#xE710;" Style="{StaticResource Icon}" FontSize="11" Margin="0,0,8,0" />
+                                        <TextBlock Text="Add build" />
+                                    </StackPanel>
+                                </Button>
+                                <Button Content="Remove" Margin="6,0,0,0" Command="{Binding RemoveBuildCommand}" IsEnabled="{Binding HasBuild}" />
+                            </StackPanel>
+                            <ListBox ItemsSource="{Binding Builds}" SelectedItem="{Binding SelectedBuild}" DisplayMemberPath="Name" Background="Transparent" BorderThickness="0" />
+                        </DockPanel>
+                    </Border>
+
+                    <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
+                        <Grid>
+                            <TextBlock TextWrapping="Wrap" Style="{StaticResource Muted}" Margin="4"
+                                       Text="No builds yet. Add one by picking its folder; the launcher reads Engine\Build\Build.version and fills in the rest."
+                                       Visibility="{Binding HasBuild, Converter={StaticResource Not}, ConverterParameter=Visibility}" />
+                            <StackPanel DataContext="{Binding SelectedBuild}" Visibility="{Binding DataContext.HasBuild, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource Visible}}">
+                                <Border Style="{StaticResource Section}">
+                                    <StackPanel>
+                                        <TextBlock Text="BUILD" Style="{StaticResource Heading}" />
+                                        <TextBlock Text="Name" Style="{StaticResource Label}" Margin="0,4,0,5" />
+                                        <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" />
+                                        <TextBlock Text="Build folder (holds Engine and FortniteGame)" Style="{StaticResource Label}" />
+                                        <DockPanel>
+                                            <Button DockPanel.Dock="Right" Margin="6,0,0,0" ToolTip="Open the folder"
+                                                    Command="{Binding DataContext.OpenBuildFolderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                                <TextBlock Text="&#xE838;" Style="{StaticResource Icon}" FontSize="12" />
+                                            </Button>
+                                            <TextBox Text="{Binding Path, UpdateSourceTrigger=PropertyChanged}" />
+                                        </DockPanel>
+                                        <TextBlock Text="Executable, relative to the build folder" Style="{StaticResource Label}" />
+                                        <TextBox Text="{Binding Executable, UpdateSourceTrigger=PropertyChanged}" />
+                                        <TextBlock Text="{Binding ExecutableStatus}" Style="{StaticResource Hint}" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource Section}">
+                                    <StackPanel>
+                                        <TextBlock Text="LAUNCH" Style="{StaticResource Heading}" />
+                                        <TextBlock Text="Client arguments" Style="{StaticResource Label}" Margin="0,4,0,5" />
+                                        <TextBox Text="{Binding ClientArguments, UpdateSourceTrigger=PropertyChanged}" />
+                                        <TextBlock Text="Server arguments" Style="{StaticResource Label}" />
+                                        <TextBox Text="{Binding ServerArguments, UpdateSourceTrigger=PropertyChanged}" />
+                                        <TextBlock Style="{StaticResource Hint}"
+                                                   Text="The launcher adds -AUTH_LOGIN, -AUTH_PASSWORD and -AUTH_TYPE=epic itself, -CoreBackend=http://127.0.0.1:&lt;port&gt; when CoreRedirect.dll is loaded, and -nullrhi -unattended for servers." />
+                                        <CheckBox Style="{StaticResource Switch}" Content="Send HTTP through the backend (-httpproxy)" IsChecked="{Binding UseHttpProxy}" Margin="0,16,0,0" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource Section}">
+                                    <StackPanel>
+                                        <TextBlock Text="CORE DLLS" Style="{StaticResource Heading}" />
+                                        <TextBlock Text="The game client loads" Style="{StaticResource Label}" Margin="0,4,0,8" />
+                                        <StackPanel Orientation="Horizontal">
+                                            <CheckBox Style="{StaticResource Switch}" Content="CoreRedirect.dll" IsChecked="{Binding ClientRedirect}" />
+                                            <CheckBox Style="{StaticResource Switch}" Content="CoreClient.dll" IsChecked="{Binding ClientClient}" Margin="24,0,0,0" />
+                                        </StackPanel>
+                                        <TextBlock Text="Each server loads" Style="{StaticResource Label}" Margin="0,16,0,8" />
+                                        <StackPanel Orientation="Horizontal">
+                                            <CheckBox Style="{StaticResource Switch}" Content="CoreRedirect.dll" IsChecked="{Binding ServerRedirect}" />
+                                            <CheckBox Style="{StaticResource Switch}" Content="Core.dll" IsChecked="{Binding ServerServer}" Margin="24,0,0,0" />
+                                        </StackPanel>
+                                        <TextBlock Style="{StaticResource Hint}" Margin="0,10,0,0" Text="They load at process start, before WinMain, in this order: CoreRedirect, CoreClient, Core." />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Grid>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Core DLLs">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel MaxWidth="820" HorizontalAlignment="Left">
+                        <Border Style="{StaticResource Section}">
+                            <StackPanel>
+                                <RadioButton Content="Latest GitHub release (recommended)" IsChecked="{Binding UseRelease}" GroupName="DllSource" FontSize="14" />
+                                <TextBlock Style="{StaticResource Hint}" Margin="28,4,0,0"
+                                           Text="Core.dll, CoreClient.dll and CoreRedirect.dll are downloaded once per release and checked against the release's size and SHA-256." />
+                                <TextBlock Text="Repository (owner/name)" Style="{StaticResource Label}" Margin="28,12,0,5" />
+                                <TextBox Text="{Binding Settings.Dlls.Repository, UpdateSourceTrigger=PropertyChanged}" Margin="28,0,0,0" IsEnabled="{Binding UseRelease}" />
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource Section}">
+                            <StackPanel>
+                                <RadioButton Content="Local folder (developers)" IsChecked="{Binding UseLocal}" GroupName="DllSource" FontSize="14" />
+                                <TextBlock Style="{StaticResource Hint}" Margin="28,4,0,0"
+                                           Text="For example CoreV2\x64\Release. Each process gets a copy (with its .pdb), so you can rebuild while servers run; restarts pick up the new build." />
+                                <DockPanel Margin="28,12,0,0" IsEnabled="{Binding UseLocal}">
+                                    <Button Content="Browse…" DockPanel.Dock="Right" Margin="6,0,0,0" Command="{Binding BrowseLocalFolderCommand}" />
+                                    <TextBox Text="{Binding LocalFolder, UpdateSourceTrigger=PropertyChanged}" />
+                                </DockPanel>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <TabItem Header="Backend">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel MaxWidth="820" HorizontalAlignment="Left">
+                        <Border Style="{StaticResource Section}" Padding="20,14"
+                                DataContext="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}">
+                            <DockPanel>
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Button Command="{Binding RestartBackendCommand}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="&#xE72C;" Style="{StaticResource Icon}" FontSize="12" Margin="0,0,8,0" />
+                                            <TextBlock Text="Restart" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Margin="8,0,0,0" Command="{Binding StopBackendCommand}" IsEnabled="{Binding BackendRunning}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="&#xE71A;" Style="{StaticResource Icon}" FontSize="12" Margin="0,0,8,0" />
+                                            <TextBlock Text="Stop" />
+                                        </StackPanel>
+                                    </Button>
+                                </StackPanel>
+                                <Ellipse Width="10" Height="10" Fill="{Binding BackendBrush}" Margin="0,0,12,0" VerticalAlignment="Center" />
+                                <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                                    <TextBlock Text="{Binding BackendSummary, StringFormat=Core-Backend: {0}}" FontSize="14" FontWeight="SemiBold" />
+                                    <TextBlock Text="{Binding BackendDetail}" Style="{StaticResource Subtle}" TextTrimming="CharacterEllipsis" ToolTip="{Binding BackendDetail}" />
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Style="{StaticResource Section}">
+                            <StackPanel>
+                                <RadioButton Content="Installed and updated by the launcher (recommended)" IsChecked="{Binding BackendManaged}" GroupName="BackendSource" FontSize="14" />
+                                <TextBlock Style="{StaticResource Hint}" Margin="28,4,0,0"
+                                           Text="Core-Backend from its latest release (or its main branch until it has one), with its own Node.js. Accounts are kept across updates." />
+                                <TextBlock Text="Repository (owner/name)" Style="{StaticResource Label}" Margin="28,12,0,5" />
+                                <TextBox Text="{Binding Settings.Backend.Repository, UpdateSourceTrigger=PropertyChanged}" Margin="28,0,0,0" IsEnabled="{Binding BackendManaged}" />
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource Section}">
+                            <StackPanel>
+                                <RadioButton Content="My Core-Backend folder (developers)" IsChecked="{Binding BackendFromFolder}" GroupName="BackendSource" FontSize="14" />
+                                <StackPanel Margin="28,0,0,0" IsEnabled="{Binding BackendFromFolder}">
+                                    <TextBlock Text="Folder (has src\main.js; run npm install there once)" Style="{StaticResource Label}" Margin="0,12,0,5" />
+                                    <DockPanel>
+                                        <Button Content="Browse…" DockPanel.Dock="Right" Margin="6,0,0,0" Command="{Binding BrowseBackendFolderCommand}" />
+                                        <TextBox Text="{Binding BackendFolder, UpdateSourceTrigger=PropertyChanged}" />
+                                    </DockPanel>
+                                    <TextBlock Text="Node.js" Style="{StaticResource Label}" />
+                                    <TextBox Text="{Binding Settings.Backend.Node, UpdateSourceTrigger=PropertyChanged}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource Section}">
+                            <StackPanel>
+                                <RadioButton Content="Already running (started outside the launcher)" IsChecked="{Binding BackendExternal}" GroupName="BackendSource" FontSize="14" />
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource Section}">
+                            <StackPanel>
+                                <TextBlock Text="CONNECTION" Style="{StaticResource Heading}" />
+                                <TextBlock Text="Port" Style="{StaticResource Label}" Margin="0,4,0,5" />
+                                <TextBox Text="{Binding Settings.Backend.Port, UpdateSourceTrigger=PropertyChanged}" Width="110" HorizontalAlignment="Left" />
+                                <TextBlock Style="{StaticResource Hint}" Text="0 lets the backend pick a free port." />
+                                <TextBlock Text="Data folder" Style="{StaticResource Label}" />
+                                <DockPanel>
+                                    <Button Content="Browse…" DockPanel.Dock="Right" Margin="6,0,0,0" Command="{Binding BrowseBackendDataFolderCommand}" />
+                                    <TextBox Text="{Binding BackendDataFolder, UpdateSourceTrigger=PropertyChanged}" />
+                                </DockPanel>
+                                <TextBlock Style="{StaticResource Hint}" Text="Empty uses the launcher's Backend\data, or for your own folder its data folder (the one npm start uses)." />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <TabItem Header="Servers">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel MaxWidth="820" HorizontalAlignment="Left">
+                        <Border Style="{StaticResource Section}">
+                            <StackPanel>
+                                <CheckBox Style="{StaticResource Switch}" Content="Host servers" IsChecked="{Binding Settings.Servers.Enabled}" FontSize="14" />
+                                <TextBlock Text="Servers to keep running" Style="{StaticResource Label}" Margin="0,16,0,5" />
+                                <TextBox Text="{Binding Settings.Servers.Instances, UpdateSourceTrigger=PropertyChanged}" Width="110" HorizontalAlignment="Left" />
+                                <TextBlock Text="Ready timeout (seconds)" Style="{StaticResource Label}" />
+                                <TextBox Text="{Binding Settings.Servers.ReadyTimeoutSeconds, UpdateSourceTrigger=PropertyChanged}" Width="110" HorizontalAlignment="Left" />
+                                <TextBlock Style="{StaticResource Hint}" Text="A server that hasn't logged &quot;Server ready&quot; by then is restarted. 0 waits forever." />
+                                <TextBlock Text="Server login" Style="{StaticResource Label}" />
+                                <TextBox Text="{Binding Settings.Servers.Login, UpdateSourceTrigger=PropertyChanged}" Width="240" HorizontalAlignment="Left" />
+                                <TextBlock Style="{StaticResource Hint}" Text="{}{n} is the server's number, so each server logs in with its own account." />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <TabItem Header="About">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel MaxWidth="820" HorizontalAlignment="Left">
+                        <Border Style="{StaticResource Section}">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <Image Source="{StaticResource LogoImage}" Width="48" Height="48" />
+                                    <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
+                                        <TextBlock Text="Core Launcher" FontFamily="{StaticResource DisplayFont}" FontSize="20" FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding Version}" Style="{StaticResource Muted}" />
+                                    </StackPanel>
+                                </StackPanel>
+                                <TextBlock Style="{StaticResource Hint}" Margin="0,14,0,0"
+                                           Text="Core is an independent community project. It is not affiliated with, endorsed by, or supported by Epic Games. Licensed under the GNU General Public License v3.0." />
+                                <WrapPanel Margin="0,16,0,0">
+                                    <Button Margin="0,0,8,8" Command="{Binding DataContext.CheckForUpdatesCommand, RelativeSource={RelativeSource AncestorType=Window}}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="&#xE895;" Style="{StaticResource Icon}" FontSize="12" Margin="0,0,8,0" />
+                                            <TextBlock Text="Check for updates" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Margin="0,0,8,8" Command="{Binding OpenDataFolderCommand}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="&#xE838;" Style="{StaticResource Icon}" FontSize="12" Margin="0,0,8,0" />
+                                            <TextBlock Text="Open data folder" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Margin="0,0,8,8" Content="GitHub"
+                                            Command="{Binding DataContext.OpenLinkCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{x:Static local:MainViewModel.GitHubUrl}" />
+                                    <Button Margin="0,0,8,8" Content="Discord"
+                                            Command="{Binding DataContext.OpenLinkCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{x:Static local:MainViewModel.DiscordUrl}" />
+                                </WrapPanel>
+                                <TextBlock Text="{Binding DataFolder, StringFormat=Data folder: {0}}" Style="{StaticResource Hint}" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</UserControl>

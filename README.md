@@ -37,6 +37,8 @@ This repository does NOT include Fortnite game files. Core-Backend, a Node.js ru
 3. Press **Install**. The launcher downloads Node.js, Core-Backend and the Core DLLs, then **Continue**.
 4. Press **Play**.
 
+**Home** says in one line whether you can play, and when something is wrong it offers the fix (for example "Use the running backend" when another program has the backend's port). **Servers** shows each hosted server and lets you change how many run, **Logs** has every log with Copy and Open logs folder, and **Settings** holds the rest.
+
 Everything goes in `%LOCALAPPDATA%\Core-Launcher`; nothing is installed system-wide.
 
 ## What it does
@@ -47,7 +49,7 @@ Everything goes in `%LOCALAPPDATA%\Core-Launcher`; nothing is installed system-w
 
 ## Updates
 
-Each time it starts, and when you press **Check for updates**, the launcher checks for:
+Each time it starts, and when you press **Check for updates** (Settings → About), the launcher checks for:
 
 | Component | From | Checked against |
 | --- | --- | --- |

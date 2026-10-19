@@ -9,6 +9,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Core.Launcher.Hosting;
 using Core.Launcher.Hosting.Backend;
+using Core.Launcher.Hosting.Builds;
 using Core.Launcher.Hosting.Components;
 using Core.Launcher.Hosting.Logging;
 using Core.Launcher.Hosting.Servers;
@@ -16,10 +17,29 @@ using Core.Launcher.Hosting.Settings;
 
 namespace Core.Launcher;
 
+public enum LauncherPage
+{
+    Home,
+    Servers,
+    Logs,
+    Settings,
+}
+
 public sealed partial class MainViewModel : ObservableObject
 {
+    public const string GitHubUrl = "https://github.com/PongooDev/Core-Launcher";
+    public const string DiscordUrl = "https://discord.gg/auzEaKs7AS";
+
+    private const int ActivityLines = 6;
+    private const int MaxToasts = 4;
+    private static readonly TimeSpan ToastLifetime = TimeSpan.FromSeconds(6);
+
     private readonly LauncherHost _host;
     private readonly DispatcherTimer _clock;
+    private readonly Dictionary<int, ServerState> _lastSlots = [];
+    private BackendState? _lastBackend;
+    private string? _announcedUpdate;
+    private Action? _statusAction;
     private bool _refreshQueued;
     private bool _syncing;
 
@@ -31,7 +51,12 @@ public sealed partial class MainViewModel : ObservableObject
         Logs.Add(new LogTabViewModel(host.ClientLog));
         SelectedLog = Logs[0];
         PlayerName = host.Settings.PlayerName;
+        foreach (var line in host.Log.Snapshot().TakeLast(ActivityLines))
+        {
+            Activity.Add(line);
+        }
 
+        host.Log.LineWritten += (_, line) => Application.Current?.Dispatcher.BeginInvoke(() => AddActivity(line));
         host.Changed += QueueRefresh;
         _clock = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (_, _) => Refresh(), Dispatcher.CurrentDispatcher);
         _clock.Start();
@@ -40,14 +65,31 @@ public sealed partial class MainViewModel : ObservableObject
 
     public LauncherHost Host => _host;
 
+    public string Version => $"v{_host.Updater.Current.ToString(3)}";
+
+    public Func<string, string?>? PickFolder { get; set; }
+
     public ObservableCollection<BuildSettings> Builds { get; } = [];
 
     public ObservableCollection<ServerRowViewModel> Servers { get; } = [];
 
     public ObservableCollection<LogTabViewModel> Logs { get; } = [];
 
+    public ObservableCollection<string> Activity { get; } = [];
+
+    public ObservableCollection<ToastViewModel> Toasts { get; } = [];
+
+    [ObservableProperty]
+    public partial LauncherPage CurrentPage { get; set; }
+
+    [ObservableProperty]
+    public partial SettingsViewModel? Settings { get; set; }
+
     [ObservableProperty]
     public partial BuildSettings? SelectedBuild { get; set; }
+
+    [ObservableProperty]
+    public partial string BuildDetail { get; set; } = "";
 
     [ObservableProperty]
     public partial string PlayerName { get; set; } = "";
@@ -56,16 +98,49 @@ public sealed partial class MainViewModel : ObservableObject
     public partial bool Hosting { get; set; }
 
     [ObservableProperty]
+    public partial int Instances { get; set; }
+
+    [ObservableProperty]
     public partial bool ClientRunning { get; set; }
 
     [ObservableProperty]
     public partial bool CanChangeBuild { get; set; }
 
     [ObservableProperty]
-    public partial string ClientStatus { get; set; } = "";
+    [NotifyPropertyChangedFor(nameof(PlayLabel))]
+    public partial bool Busy { get; set; }
+
+    public string PlayLabel => Busy ? "STARTING…" : ClientRunning ? "CLOSE GAME" : "PLAY";
 
     [ObservableProperty]
-    public partial string BackendStatus { get; set; } = "";
+    public partial string Status { get; set; } = "";
+
+    [ObservableProperty]
+    public partial Brush StatusBrush { get; set; } = Brushes.Gray;
+
+    [ObservableProperty]
+    public partial string StatusActionText { get; set; } = "";
+
+    [ObservableProperty]
+    public partial bool HasStatusAction { get; set; }
+
+    [ObservableProperty]
+    public partial string Message { get; set; } = "";
+
+    [ObservableProperty]
+    public partial string ServersSummary { get; set; } = "";
+
+    [ObservableProperty]
+    public partial string ServersDetail { get; set; } = "";
+
+    [ObservableProperty]
+    public partial Brush ServersBrush { get; set; } = Brushes.Gray;
+
+    [ObservableProperty]
+    public partial string BackendSummary { get; set; } = "";
+
+    [ObservableProperty]
+    public partial string BackendDetail { get; set; } = "";
 
     [ObservableProperty]
     public partial Brush BackendBrush { get; set; } = Brushes.Gray;
@@ -74,10 +149,13 @@ public sealed partial class MainViewModel : ObservableObject
     public partial bool BackendRunning { get; set; }
 
     [ObservableProperty]
-    public partial string DllStatus { get; set; } = "";
+    public partial string DllSummary { get; set; } = "";
 
     [ObservableProperty]
-    public partial string BackendDescription { get; set; } = "";
+    public partial string DllDetail { get; set; } = "";
+
+    [ObservableProperty]
+    public partial Brush DllBrush { get; set; } = Brushes.Gray;
 
     [ObservableProperty]
     public partial bool CanCheckForUpdates { get; set; }
@@ -87,12 +165,6 @@ public sealed partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     public partial bool HasUpdate { get; set; }
-
-    [ObservableProperty]
-    public partial string Message { get; set; } = "";
-
-    [ObservableProperty]
-    public partial bool Busy { get; set; }
 
     [ObservableProperty]
     public partial LogTabViewModel? SelectedLog { get; set; }
@@ -128,48 +200,26 @@ public sealed partial class MainViewModel : ObservableObject
             }
 
             SelectedBuild = settings.FindSelectedBuild();
+            BuildDetail = SelectedBuild is { } selected && BuildVersion.Read(selected.Path) is { } version
+                ? $"UE {version.EngineVersion} · CL {version.Changelist}"
+                : SelectedBuild is null ? "No build yet" : "Build folder not found";
             Hosting = _host.Servers.Enabled;
-
-            var client = _host.Client;
-            ClientRunning = client is not null;
-            ClientStatus = client is null ? "Not running" : $"Running, pid {client.Id}, {Uptime(client.StartedAt)}";
-
-            RefreshBackend();
-            RefreshServers();
-
+            Instances = settings.Servers.Instances;
+            ClientRunning = _host.Client is not null;
             CanChangeBuild = !_host.GamesRunning;
-            CanCheckForUpdates = !_host.CheckingForUpdates && !Busy;
-            DllStatus = _host.CheckingForUpdates ? "Checking for updates…" : _host.Dlls.Describe();
-            BackendDescription = _host.BackendDescription;
+            CanCheckForUpdates = !_host.CheckingForUpdates;
+            OnPropertyChanged(nameof(PlayLabel));
 
-            var update = _host.Updater.Available;
-            HasUpdate = update is not null;
-            if (!Busy)
-            {
-                UpdateText = update is null ? ""
-                    : _host.Updater.Executable is null ? $"Core Launcher {update.Tag} is available on GitHub (this build can't update itself)."
-                    : $"Core Launcher {update.Tag} is available.";
-            }
+            RefreshServers();
+            RefreshBackend();
+            RefreshDlls(settings);
+            RefreshUpdate();
+            RefreshStatus(settings);
         }
         finally
         {
             _syncing = false;
         }
-    }
-
-    private void RefreshBackend()
-    {
-        var backend = _host.Backend;
-        BackendRunning = backend.Running;
-        (BackendStatus, BackendBrush) = backend.State switch
-        {
-            BackendState.Ready => ($"Listening on port {backend.Port}{(backend.ProcessId is { } pid ? $", pid {pid}" : " (started outside the launcher)")}", Brush("GoodBrush")),
-            BackendState.Starting => ("Starting…", Brush("BusyBrush")),
-            BackendState.Restarting => ("Exited, restarting…", Brush("BusyBrush")),
-            BackendState.Unreachable => (backend.Error ?? "Unreachable", Brush("BadBrush")),
-            BackendState.Failed => (backend.Error ?? "Failed", Brush("BadBrush")),
-            _ => ("Stopped", Brush("IdleBrush")),
-        };
     }
 
     private void RefreshServers()
@@ -184,12 +234,177 @@ public sealed partial class MainViewModel : ObservableObject
         {
             if (index == Servers.Count)
             {
-                Servers.Add(new ServerRowViewModel(_host.Servers));
+                Servers.Add(new ServerRowViewModel(_host.Servers, ShowServerLog));
             }
 
-            Servers[index].Update(slots[index]);
-            EnsureServerLog(slots[index].Instance);
+            var slot = slots[index];
+            Servers[index].Update(slot);
+            EnsureServerLog(slot.Instance);
+
+            _lastSlots.TryGetValue(slot.Instance, out var previous);
+            if (slot.State == ServerState.Ready && previous != ServerState.Ready)
+            {
+                Toast($"Server {slot.Instance} is ready{(slot.Ports.Count > 0 ? $" on UDP {slot.Ports[0]}" : "")}", "GoodBrush");
+            }
+            else if (previous == ServerState.Ready && slot.State != ServerState.Ready && _host.Servers.Enabled)
+            {
+                Toast($"Server {slot.Instance} stopped; it will restart", "BusyBrush");
+            }
+
+            _lastSlots[slot.Instance] = slot.State;
         }
+
+        var ready = slots.Count(slot => slot.State == ServerState.Ready);
+        ServersSummary = _host.Servers.Enabled ? $"{ready} / {slots.Count} ready" : "Off";
+        ServersDetail = !_host.Servers.Enabled ? "Hosting is off"
+            : slots.FirstOrDefault(slot => slot.State == ServerState.Starting) is { } booting ? $"Server {booting.Instance} is booting"
+            : slots.FirstOrDefault(slot => slot.ProcessId is null) is { } waiting ? Capitalize(waiting.Note)
+            : "All servers are up";
+        ServersBrush = Brush(!_host.Servers.Enabled ? "IdleBrush" : slots.Count > 0 && ready == slots.Count ? "GoodBrush" : "BusyBrush");
+    }
+
+    private void RefreshBackend()
+    {
+        var backend = _host.Backend;
+        BackendRunning = backend.Running;
+        (BackendSummary, BackendBrush) = backend.State switch
+        {
+            BackendState.Ready => ("Running", Brush("GoodBrush")),
+            BackendState.Starting => ("Starting…", Brush("BusyBrush")),
+            BackendState.Restarting => ("Restarting…", Brush("BusyBrush")),
+            BackendState.Unreachable => ("Not reachable", Brush("BadBrush")),
+            BackendState.Failed => ("Needs attention", Brush("BadBrush")),
+            _ => (_host.CheckingForUpdates ? "Installing…" : "Stopped", Brush(_host.CheckingForUpdates ? "BusyBrush" : "IdleBrush")),
+        };
+        BackendDetail = backend.State == BackendState.Ready
+            ? $"Port {backend.Port} · {_host.BackendDescription}"
+            : _host.BackendDescription;
+
+        if (_lastBackend is { } previous && previous != backend.State)
+        {
+            if (backend.State == BackendState.Ready)
+            {
+                Toast("Core-Backend is running", "GoodBrush");
+            }
+            else if (backend.State is BackendState.Failed or BackendState.Unreachable)
+            {
+                Toast($"Core-Backend: {backend.Error}", "BadBrush");
+            }
+        }
+
+        _lastBackend = backend.State;
+    }
+
+    private void RefreshDlls(LauncherSettings settings)
+    {
+        if (settings.Dlls.Source == DllSource.Local)
+        {
+            DllSummary = "Local folder";
+            DllDetail = settings.Dlls.LocalFolder.Length > 0 ? settings.Dlls.LocalFolder : "No folder set";
+            DllBrush = Brush(Directory.Exists(settings.Dlls.LocalFolder) ? "GoodBrush" : "BadBrush");
+            return;
+        }
+
+        DllSummary = _host.CheckingForUpdates && _host.Dlls.ReleaseTag is null ? "Checking…" : _host.Dlls.ReleaseTag ?? "Not downloaded";
+        DllDetail = _host.Dlls.ReleaseTag is null ? $"No {settings.Dlls.Repository} release found yet" : $"{settings.Dlls.Repository} release";
+        DllBrush = Brush(_host.Dlls.ReleaseTag is null ? "BusyBrush" : "GoodBrush");
+    }
+
+    private void RefreshUpdate()
+    {
+        var update = _host.Updater.Available;
+        HasUpdate = update is not null;
+        if (!Busy)
+        {
+            UpdateText = update is null ? ""
+                : _host.Updater.Executable is null ? $"Core Launcher {update.Tag} is available on GitHub."
+                : $"Core Launcher {update.Tag} is available.";
+        }
+
+        if (update is not null && _announcedUpdate != update.Tag)
+        {
+            _announcedUpdate = update.Tag;
+            Toast($"Core Launcher {update.Tag} is available", "AccentBrush");
+        }
+    }
+
+    /// <summary>One plain sentence about whether the player can play, with the one thing that fixes it when not.</summary>
+    private void RefreshStatus(LauncherSettings settings)
+    {
+        var backend = _host.Backend;
+        var build = settings.FindSelectedBuild();
+        Action? action = null;
+        var actionText = "";
+        string text;
+        string brush;
+
+        if (_host.Client is { } client)
+        {
+            (text, brush) = ($"In game · {Elapsed(client.StartedAt)}", "GoodBrush");
+        }
+        else if (build is null)
+        {
+            (text, brush) = ("Add your Fortnite build to play", "BusyBrush");
+            (actionText, action) = ("Choose build folder", ChooseBuildFolder);
+        }
+        else if (!File.Exists(build.ExecutablePath))
+        {
+            (text, brush) = ($"The {build.Name} folder can't be found", "BadBrush");
+            (actionText, action) = ("Choose build folder", ChooseBuildFolder);
+        }
+        else if (backend.State == BackendState.Failed && backend.Error is { } error)
+        {
+            (text, brush) = (error, "BadBrush");
+            if (error.Contains("already in use", StringComparison.Ordinal))
+            {
+                text = $"Another program is using port {_host.Backend.Target.Port}, maybe a Core-Backend you started yourself";
+                (actionText, action) = ("Use the running backend", UseRunningBackend);
+            }
+            else if (error.Contains("isn't installed", StringComparison.Ordinal))
+            {
+                (actionText, action) = ("Install Core-Backend", () => _host.CheckForUpdates(startBackend: true));
+            }
+            else
+            {
+                (actionText, action) = ("Try again", () => _ = _host.RestartBackendAsync());
+            }
+        }
+        else if (backend.State == BackendState.Unreachable)
+        {
+            (text, brush) = (backend.Error ?? "Core-Backend isn't reachable", "BadBrush");
+            (actionText, action) = ("Let the launcher run it", UseManagedBackend);
+        }
+        else if (_host.CheckingForUpdates)
+        {
+            (text, brush) = ("Checking for updates…", "BusyBrush");
+        }
+        else if (backend.State != BackendState.Ready)
+        {
+            (text, brush) = ("Starting Core-Backend…", "BusyBrush");
+        }
+        else if (settings.Dlls.Source == DllSource.Release && _host.Dlls.ReleaseTag is null)
+        {
+            (text, brush) = ("Waiting for the Core DLLs: no release found yet", "BusyBrush");
+            (actionText, action) = ("Check again", () => _host.CheckForUpdates());
+        }
+        else if (PlayerName.Trim().Length == 0)
+        {
+            (text, brush) = ("Enter a player name to play", "BusyBrush");
+        }
+        else if (_host.Servers.Enabled && !_host.Servers.Slots.Any(slot => slot.State == ServerState.Ready))
+        {
+            (text, brush) = ("Ready to play · servers are starting", "GoodBrush");
+        }
+        else
+        {
+            (text, brush) = ("Ready to play", "GoodBrush");
+        }
+
+        Status = text;
+        StatusBrush = Brush(brush);
+        StatusActionText = actionText;
+        HasStatusAction = action is not null;
+        _statusAction = action;
     }
 
     private void EnsureServerLog(int instance)
@@ -199,6 +414,53 @@ public sealed partial class MainViewModel : ObservableObject
         {
             Logs.Add(new LogTabViewModel(channel));
         }
+    }
+
+    private void ShowServerLog(int instance)
+    {
+        var channel = _host.ServerLog(instance);
+        SelectedLog = Logs.FirstOrDefault(tab => tab.Channel == channel) ?? SelectedLog;
+        CurrentPage = LauncherPage.Logs;
+    }
+
+    private void AddActivity(string line)
+    {
+        Activity.Add(line);
+        while (Activity.Count > ActivityLines)
+        {
+            Activity.RemoveAt(0);
+        }
+    }
+
+    private void Toast(string text, string brush)
+    {
+        var toast = new ToastViewModel(text, Brush(brush));
+        Toasts.Add(toast);
+        while (Toasts.Count > MaxToasts)
+        {
+            Toasts.RemoveAt(0);
+        }
+
+        var timer = new DispatcherTimer { Interval = ToastLifetime };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            Toasts.Remove(toast);
+        };
+        timer.Start();
+    }
+
+    partial void OnCurrentPageChanged(LauncherPage value)
+    {
+        Settings = value == LauncherPage.Settings ? new SettingsViewModel(_host, OnSettingsFinished) : null;
+    }
+
+    private void OnSettingsFinished(bool saved)
+    {
+        Toast(saved ? "Settings saved" : "Changes discarded", saved ? "GoodBrush" : "IdleBrush");
+        Settings = new SettingsViewModel(_host, OnSettingsFinished);
+        PlayerName = _host.Settings.PlayerName;
+        Refresh();
     }
 
     partial void OnSelectedBuildChanged(BuildSettings? value)
@@ -222,19 +484,53 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void SavePlayerName()
+    {
+        var name = PlayerName.Trim();
+        if (name.Contains('"'))
+        {
+            Message = "A player name can't contain quotes";
+            return;
+        }
+
+        Message = "";
+        if (name != _host.Settings.PlayerName)
+        {
+            var updated = SettingsStore.Clone(_host.Settings);
+            updated.PlayerName = name;
+            _host.SaveSettings(updated);
+        }
+    }
+
+    [RelayCommand]
+    private void ChangeInstances(string delta)
+    {
+        var updated = SettingsStore.Clone(_host.Settings);
+        updated.Servers.Instances = Math.Clamp(updated.Servers.Instances + int.Parse(delta), 1, SettingsStore.MaxInstances);
+        if (updated.Servers.Instances != _host.Settings.Servers.Instances)
+        {
+            _host.SaveSettings(updated);
+        }
+    }
+
+    [RelayCommand]
     private async Task PlayAsync()
     {
-        Message = "";
+        if (ClientRunning)
+        {
+            _host.StopClient();
+            return;
+        }
+
+        SavePlayerName();
+        if (Message.Length > 0)
+        {
+            return;
+        }
+
         Busy = true;
         try
         {
-            if (PlayerName.Trim() != _host.Settings.PlayerName)
-            {
-                var updated = SettingsStore.Clone(_host.Settings);
-                updated.PlayerName = PlayerName.Trim();
-                _host.SaveSettings(updated);
-            }
-
             await _host.PlayAsync();
         }
         catch (Exception exception)
@@ -250,7 +546,20 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void StopClient() => _host.StopClient();
+    private void RunStatusAction() => _statusAction?.Invoke();
+
+    [RelayCommand]
+    private void Navigate(LauncherPage page) => CurrentPage = page;
+
+    [RelayCommand]
+    private void OpenSettingsTab(string tab)
+    {
+        CurrentPage = LauncherPage.Settings;
+        if (Settings is not null)
+        {
+            Settings.SelectedTab = int.Parse(tab);
+        }
+    }
 
     [RelayCommand]
     private async Task RestartBackendAsync()
@@ -270,6 +579,26 @@ public sealed partial class MainViewModel : ObservableObject
     private void CheckForUpdates() => _host.CheckForUpdates();
 
     [RelayCommand]
+    private void CopyLog()
+    {
+        if (SelectedLog is { } log)
+        {
+            Clipboard.SetText(string.Join(Environment.NewLine, log.Channel.Snapshot()));
+            Toast($"{log.Name} log copied", "GoodBrush");
+        }
+    }
+
+    [RelayCommand]
+    private void OpenLogsFolder()
+    {
+        Directory.CreateDirectory(_host.Paths.Logs);
+        Open(_host.Paths.Logs);
+    }
+
+    [RelayCommand]
+    private static void OpenLink(string url) => Open(url);
+
+    [RelayCommand]
     private async Task UpdateLauncherAsync()
     {
         if (_host.Updater.Available is not { } release)
@@ -279,7 +608,7 @@ public sealed partial class MainViewModel : ObservableObject
 
         if (_host.Updater.Executable is not { } executable)
         {
-            Process.Start(new ProcessStartInfo($"https://github.com/{LauncherUpdater.Repository}/releases/latest") { UseShellExecute = true });
+            Open($"https://github.com/{LauncherUpdater.Repository}/releases/latest");
             return;
         }
 
@@ -291,7 +620,6 @@ public sealed partial class MainViewModel : ObservableObject
         }
 
         Busy = true;
-        Message = "";
         try
         {
             await _host.Updater.InstallAsync(release, new Progress<string>(status => UpdateText = $"Updating to {release.Tag}: {status}"), CancellationToken.None);
@@ -299,37 +627,73 @@ public sealed partial class MainViewModel : ObservableObject
         }
         catch (Exception exception) when (exception is HttpRequestException or InvalidDataException or IOException or UnauthorizedAccessException or InvalidOperationException)
         {
-            Message = $"Update failed: {exception.Message}";
+            Toast($"Update failed: {exception.Message}", "BadBrush");
             _host.Log.Write($"Launcher update failed: {exception.Message}");
             Busy = false;
         }
     }
 
-    [RelayCommand]
-    private void OpenLogsFolder()
+    private void ChooseBuildFolder()
     {
-        Directory.CreateDirectory(_host.Paths.Logs);
-        Process.Start(new ProcessStartInfo(_host.Paths.Logs) { UseShellExecute = true });
+        if (PickFolder?.Invoke("Pick your Fortnite build folder (the one with Engine and FortniteGame)") is not { } folder)
+        {
+            return;
+        }
+
+        if (BuildDetector.Detect(folder) is not { } detected)
+        {
+            Toast($"No {BuildVersion.RelativePath} in or around {folder}", "BadBrush");
+            return;
+        }
+
+        var updated = SettingsStore.Clone(_host.Settings);
+        var build = updated.FindSelectedBuild();
+        if (build is not null && !File.Exists(build.ExecutablePath) && KnownBuilds.Create(detected.Folder, detected.Version).Name == build.Name)
+        {
+            build.Path = detected.Folder;
+        }
+        else
+        {
+            build = KnownBuilds.Create(detected.Folder, detected.Version);
+            if (updated.Builds.All(existing => !string.Equals(existing.Name, build.Name, StringComparison.OrdinalIgnoreCase)))
+            {
+                updated.Builds.Add(build);
+            }
+        }
+
+        updated.SelectedBuild = build.Name;
+        _host.SaveSettings(updated);
+        Toast($"Using {build.Name}", "GoodBrush");
     }
 
-    [RelayCommand]
-    private void OpenSettings()
+    private void UseRunningBackend()
     {
-        var window = new SettingsWindow(new SettingsViewModel(_host)) { Owner = Application.Current.MainWindow };
-        window.ShowDialog();
-        Refresh();
+        var updated = SettingsStore.Clone(_host.Settings);
+        updated.Backend.Source = BackendSource.External;
+        _host.SaveSettings(updated);
     }
 
-    private static string Uptime(DateTime startedAt)
+    private void UseManagedBackend()
+    {
+        var updated = SettingsStore.Clone(_host.Settings);
+        updated.Backend.Source = BackendSource.Managed;
+        _host.SaveSettings(updated);
+    }
+
+    private static void Open(string target) => Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
+
+    private static string Capitalize(string text) => text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text[1..];
+
+    internal static string Elapsed(DateTime startedAt)
     {
         var elapsed = DateTime.UtcNow - startedAt;
-        return elapsed.TotalHours >= 1 ? $"up {(int)elapsed.TotalHours}h {elapsed.Minutes}m" : $"up {elapsed.Minutes}m {elapsed.Seconds}s";
+        return elapsed.TotalHours >= 1 ? $"{(int)elapsed.TotalHours}h {elapsed.Minutes}m" : elapsed.TotalMinutes >= 1 ? $"{elapsed.Minutes}m {elapsed.Seconds}s" : $"{elapsed.Seconds}s";
     }
 
     internal static Brush Brush(string key) => (Brush)Application.Current.Resources[key];
 }
 
-public sealed partial class ServerRowViewModel(ServerPool pool) : ObservableObject
+public sealed partial class ServerRowViewModel(ServerPool pool, Action<int> showLog) : ObservableObject
 {
     [ObservableProperty]
     public partial int Instance { get; set; }
@@ -341,13 +705,16 @@ public sealed partial class ServerRowViewModel(ServerPool pool) : ObservableObje
     public partial Brush StateBrush { get; set; } = Brushes.Gray;
 
     [ObservableProperty]
+    public partial string Headline { get; set; } = "";
+
+    [ObservableProperty]
     public partial string Details { get; set; } = "";
 
     [ObservableProperty]
-    public partial string Note { get; set; } = "";
+    public partial bool CanRestart { get; set; }
 
     [ObservableProperty]
-    public partial bool CanRestart { get; set; }
+    public partial bool Booting { get; set; }
 
     public void Update(ServerSlotView slot)
     {
@@ -359,6 +726,12 @@ public sealed partial class ServerRowViewModel(ServerPool pool) : ObservableObje
             ServerState.Stopping => ("Stopping", MainViewModel.Brush("BusyBrush")),
             _ => ("Waiting", MainViewModel.Brush("IdleBrush")),
         };
+        Booting = slot.State == ServerState.Starting;
+        Headline = slot.State switch
+        {
+            ServerState.Ready => slot.Ports.Count > 0 ? $"Ready on UDP {string.Join(", ", slot.Ports)}" : "Ready",
+            _ => slot.Note.Length > 0 ? char.ToUpperInvariant(slot.Note[0]) + slot.Note[1..] : State,
+        };
 
         var parts = new List<string>();
         if (slot.ProcessId is { } pid)
@@ -368,18 +741,19 @@ public sealed partial class ServerRowViewModel(ServerPool pool) : ObservableObje
 
         if (slot.Since is { } since)
         {
-            var elapsed = DateTimeOffset.UtcNow - since;
-            parts.Add(elapsed.TotalHours >= 1 ? $"{(int)elapsed.TotalHours}h {elapsed.Minutes}m" : $"{elapsed.Minutes}m {elapsed.Seconds}s");
+            parts.Add($"up {MainViewModel.Elapsed(since.UtcDateTime)}");
         }
 
         parts.Add(slot.Restarts == 1 ? "1 restart" : $"{slot.Restarts} restarts");
         Details = string.Join(" · ", parts);
-        Note = slot.Note;
         CanRestart = slot.ProcessId is not null && slot.State != ServerState.Stopping;
     }
 
     [RelayCommand]
     private void Restart() => pool.Restart(Instance);
+
+    [RelayCommand]
+    private void ViewLog() => showLog(Instance);
 }
 
 public sealed class LogTabViewModel(LogChannel channel)
@@ -388,3 +762,5 @@ public sealed class LogTabViewModel(LogChannel channel)
 
     public string Name => Channel.Name;
 }
+
+public sealed record ToastViewModel(string Text, Brush Brush);

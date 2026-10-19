@@ -5,6 +5,7 @@
     <AssemblyName>CoreLauncher</AssemblyName>
     <RootNamespace>Core.Launcher</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\Core.ico</ApplicationIcon>
   </PropertyGroup>
   <PropertyGroup Condition="'$(_IsPublishing)' == 'true'">
     <SelfContained>true</SelfContained>
@@ -12,6 +13,9 @@
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
   </PropertyGroup>
+  <ItemGroup>
+    <Resource Include="Assets\Core.ico" />
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Core.Launcher.Hosting\Core.Launcher.Hosting.csproj" />
   </ItemGroup>
