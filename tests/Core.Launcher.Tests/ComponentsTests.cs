@@ -229,6 +229,32 @@ public sealed class ComponentsTests
         TestContext.Current.SendDiagnosticMessage(string.Join('\n', log.Snapshot()));
     }
 
+    /// <summary>The Core DLLs from CoreV2's latest release for real, each checked against GitHub's digest and loadable as x64.</summary>
+    [Fact]
+    public async Task DownloadsTheRealCoreDlls()
+    {
+        if (Environment.GetEnvironmentVariable("CORE_LAUNCHER_NETWORK_TESTS") != "1")
+        {
+            Assert.Skip("Set CORE_LAUNCHER_NETWORK_TESTS=1 to download the Core DLLs for real");
+        }
+
+        using var folder = new TempFolder();
+        using var http = GitHubClient.CreateHttpClient();
+        var log = new List<string>();
+        var store = new Hosting.Dlls.DllStore(new LauncherPaths(folder.Combine("Launcher")), new GitHubClient(http), log.Add);
+        store.Configure(new Hosting.Settings.DllSettings());
+
+        await store.RefreshAsync(null, TestContext.Current.CancellationToken);
+
+        Assert.NotNull(store.ReleaseTag);
+        foreach (var role in Hosting.Dlls.CoreDlls.All)
+        {
+            Assert.Equal(Hosting.Dlls.CoreDlls.FileName(role), Path.GetFileName(store.Resolve(role)));
+        }
+
+        TestContext.Current.SendDiagnosticMessage(string.Join('\n', log));
+    }
+
     private static string Release(string tag, params (string Name, string Content)[] assets) =>
         $$"""{"tag_name":"{{tag}}","published_at":"2026-10-20T10:00:00Z","assets":[{{string.Join(',', assets.Select(asset =>
             $$"""{"name":"{{asset.Name}}","size":{{Encoding.UTF8.GetByteCount(asset.Content)}},"digest":"sha256:{{Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(asset.Content)))}}","browser_download_url":"https://example.test/{{asset.Name}}"}"""))}}]}""";
