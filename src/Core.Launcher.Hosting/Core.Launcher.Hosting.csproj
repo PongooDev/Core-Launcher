@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <InternalsVisibleTo Include="Core.Launcher.Tests" />
+  </ItemGroup>
+</Project>
