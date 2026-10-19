@@ -4,6 +4,9 @@ namespace Core.Launcher.Hosting.Settings;
 
 public sealed class LauncherSettings
 {
+    /// <summary>False until the first-run setup has finished.</summary>
+    public bool SetupComplete { get; set; }
+
     public string PlayerName { get; set; } = "";
 
     public string SelectedBuild { get; set; } = "";
@@ -60,23 +63,36 @@ public sealed class DllSettings
     public string LocalFolder { get; set; } = "";
 }
 
+public enum BackendSource
+{
+    /// <summary>The launcher installs Core-Backend and a Node.js runtime itself and keeps them updated.</summary>
+    Managed,
+
+    /// <summary>A Core-Backend checkout, run with the configured Node.js.</summary>
+    Folder,
+
+    /// <summary>A Core-Backend that is already running on the port.</summary>
+    External,
+}
+
 public sealed class BackendSettings
 {
-    /// <summary>False uses a Core-Backend that is already running on <see cref="Port"/>.</summary>
-    public bool Start { get; set; } = true;
+    public BackendSource Source { get; set; } = BackendSource.Managed;
 
-    /// <summary>The Core-Backend checkout, holding src\main.js and node_modules.</summary>
+    /// <summary>GitHub repository the managed backend is installed from, as owner/name.</summary>
+    public string Repository { get; set; } = "PongooDev/Core-Backend";
+
+    /// <summary>The Core-Backend checkout for <see cref="BackendSource.Folder"/>, holding src\main.js and node_modules.</summary>
     public string Folder { get; set; } = "";
 
+    /// <summary>Node.js for <see cref="BackendSource.Folder"/>; the managed backend uses the launcher's own.</summary>
     public string Node { get; set; } = "node";
 
     /// <summary>0 lets the backend pick a free port; the launcher reads it from the backend's log.</summary>
     public int Port { get; set; } = 5595;
 
-    /// <summary>Empty uses &lt;Folder&gt;\data, the folder npm start uses.</summary>
+    /// <summary>Empty uses the launcher's Backend\data for the managed backend, or &lt;Folder&gt;\data (the folder npm start uses).</summary>
     public string DataFolder { get; set; } = "";
-
-    public string ResolvedDataFolder => DataFolder.Length > 0 ? DataFolder : System.IO.Path.Combine(Folder, "data");
 }
 
 public sealed class ServerSettings

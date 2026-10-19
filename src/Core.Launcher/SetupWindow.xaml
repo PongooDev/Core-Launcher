@@ -1,0 +1,86 @@
+<Window x:Class="Core.Launcher.SetupWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:Core.Launcher"
+        Title="Core Launcher setup" Width="640" Height="700" MinWidth="560" MinHeight="600"
+        Style="{StaticResource WindowStyle}" WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="Visible" />
+        <local:InverseBooleanConverter x:Key="Not" />
+        <Style x:Key="Label" TargetType="{x:Type TextBlock}" BasedOn="{StaticResource Muted}">
+            <Setter Property="Margin" Value="0,14,0,4" />
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel>
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="CORE" FontSize="26" FontWeight="Bold" />
+                <TextBlock Text="Launcher" FontSize="26" Margin="8,0,0,0" Style="{StaticResource Muted}" />
+            </StackPanel>
+            <TextBlock Text="Two things to set, then the launcher downloads the rest: Core-Backend, a Node.js runtime for it, and the Core DLLs."
+                       Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,6,0,0" />
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,8,0,0">
+            <StackPanel>
+                <StackPanel IsEnabled="{Binding Editable}">
+                    <TextBlock Text="Player name" Style="{StaticResource Label}" />
+                    <TextBox Text="{Binding PlayerName, UpdateSourceTrigger=PropertyChanged}" />
+
+                    <TextBlock Text="Fortnite build folder" Style="{StaticResource Label}" />
+                    <DockPanel>
+                        <Button Content="Browse…" DockPanel.Dock="Right" Margin="6,0,0,0" Command="{Binding BrowseBuildCommand}" />
+                        <TextBox Text="{Binding BuildFolder, UpdateSourceTrigger=PropertyChanged}" />
+                    </DockPanel>
+                    <TextBlock Text="{Binding BuildStatus}" Foreground="{Binding BuildStatusBrush}" Margin="0,4,0,0" TextWrapping="Wrap" />
+
+                    <Expander Header="Advanced (for developers)" Margin="0,18,0,0" Foreground="{StaticResource MutedBrush}">
+                        <StackPanel Margin="0,8,0,0">
+                            <CheckBox Content="Use my own Core-Backend folder" IsChecked="{Binding UseLocalBackend}" />
+                            <DockPanel Margin="22,6,0,0" IsEnabled="{Binding UseLocalBackend}">
+                                <Button Content="Browse…" DockPanel.Dock="Right" Margin="6,0,0,0" Command="{Binding BrowseBackendCommand}" />
+                                <TextBox Text="{Binding BackendFolder, UpdateSourceTrigger=PropertyChanged}" />
+                            </DockPanel>
+                            <CheckBox Content="Use my own Core DLL folder" IsChecked="{Binding UseLocalDlls}" Margin="0,12,0,0" />
+                            <DockPanel Margin="22,6,0,0" IsEnabled="{Binding UseLocalDlls}">
+                                <Button Content="Browse…" DockPanel.Dock="Right" Margin="6,0,0,0" Command="{Binding BrowseDllsCommand}" />
+                                <TextBox Text="{Binding DllFolder, UpdateSourceTrigger=PropertyChanged}" />
+                            </DockPanel>
+                        </StackPanel>
+                    </Expander>
+                </StackPanel>
+
+                <ItemsControl ItemsSource="{Binding Steps}" Margin="0,20,0,0">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Background="{StaticResource RaisedBrush}" CornerRadius="4" Padding="10,8" Margin="0,0,0,6">
+                                <DockPanel>
+                                    <Ellipse Width="9" Height="9" Fill="{Binding StateBrush}" Margin="0,0,10,0" VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Width="110" VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding Status}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                                </DockPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </ScrollViewer>
+
+        <DockPanel Grid.Row="2" Margin="0,16,0,0">
+            <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+                <Button Content="Install" Style="{StaticResource PrimaryButton}" Command="{Binding InstallCommand}" MinWidth="100"
+                        Visibility="{Binding Installed, Converter={StaticResource Not}, ConverterParameter=Visibility}" />
+                <Button Content="Continue" Style="{StaticResource PrimaryButton}" Command="{Binding ContinueCommand}" MinWidth="100"
+                        Visibility="{Binding Installed, Converter={StaticResource Visible}}" />
+            </StackPanel>
+            <TextBlock Text="{Binding Message}" Foreground="{StaticResource BadBrush}" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,12,0" />
+        </DockPanel>
+    </Grid>
+</Window>

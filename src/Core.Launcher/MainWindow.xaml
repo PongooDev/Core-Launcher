@@ -13,8 +13,17 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
+
+        <Border Grid.Row="1" Background="{StaticResource RaisedBrush}" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1" CornerRadius="6"
+                Padding="14,8" Margin="0,0,0,14" Visibility="{Binding HasUpdate, Converter={StaticResource Visible}}">
+            <DockPanel>
+                <Button Content="Update" DockPanel.Dock="Right" Style="{StaticResource PrimaryButton}" Command="{Binding UpdateLauncherCommand}" />
+                <TextBlock Text="{Binding UpdateText}" VerticalAlignment="Center" TextWrapping="Wrap" />
+            </DockPanel>
+        </Border>
 
         <DockPanel Margin="0,0,0,14">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -29,7 +38,7 @@
             </StackPanel>
         </DockPanel>
 
-        <Grid Grid.Row="1" Margin="0,0,0,14">
+        <Grid Grid.Row="2" Margin="0,0,0,14">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="300" />
                 <ColumnDefinition Width="14" />
@@ -99,6 +108,7 @@
                         </Grid.ColumnDefinitions>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
                             <RowDefinition Height="10" />
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
@@ -113,16 +123,19 @@
                             <Button Content="Stop" Margin="6,0,0,0" Command="{Binding StopBackendCommand}" IsEnabled="{Binding BackendRunning}" />
                         </StackPanel>
 
-                        <TextBlock Grid.Row="2" Text="DLLS" Style="{StaticResource Heading}" Margin="0" VerticalAlignment="Center" />
-                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding DllStatus}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding BackendDescription}" Style="{StaticResource Muted}" FontSize="11"
+                                   Margin="17,2,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding BackendDescription}" />
+
+                        <TextBlock Grid.Row="3" Text="DLLS" Style="{StaticResource Heading}" Margin="0" VerticalAlignment="Center" />
+                        <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding DllStatus}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
                                    ToolTip="{Binding DllStatus}" />
-                        <Button Grid.Row="2" Grid.Column="2" Content="Check for updates" Command="{Binding CheckDllsCommand}" IsEnabled="{Binding CanCheckDlls}" />
+                        <Button Grid.Row="3" Grid.Column="2" Content="Check for updates" Command="{Binding CheckForUpdatesCommand}" IsEnabled="{Binding CanCheckForUpdates}" />
                     </Grid>
                 </Border>
             </StackPanel>
         </Grid>
 
-        <Grid Grid.Row="2">
+        <Grid Grid.Row="3">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />

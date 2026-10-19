@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using Core.Launcher.Hosting;
+using Core.Launcher.Hosting.Components;
 using Core.Launcher.Hosting.Dlls;
 using Core.Launcher.Hosting.Settings;
 
@@ -23,7 +24,7 @@ public sealed class DllStoreTests
         """;
 
     private static DllStore Store(TempFolder folder, HttpMessageHandler? handler = null, List<string>? log = null) =>
-        new(new LauncherPaths(folder.Combine("Launcher")), new ReleaseClient(new HttpClient(handler ?? new Respond(HttpStatusCode.NotFound))), (log ?? []).Add);
+        new(new LauncherPaths(folder.Combine("Launcher")), new GitHubClient(new HttpClient(handler ?? new Respond(HttpStatusCode.NotFound))), (log ?? []).Add);
 
     [Fact]
     public void LocalDllsAreCopiedWithTheirPdbUnderTheirHash()
@@ -73,7 +74,7 @@ public sealed class DllStoreTests
         var store = Store(folder, new Respond(HttpStatusCode.NotFound), log);
         store.Configure(new DllSettings());
 
-        await store.RefreshAsync(TestContext.Current.CancellationToken);
+        await store.RefreshAsync(null, TestContext.Current.CancellationToken);
 
         Assert.Contains("PongooDev/CoreV2 has no release yet", log);
         Assert.Null(store.ReleaseTag);
@@ -94,7 +95,7 @@ public sealed class DllStoreTests
 
         var store = Store(folder, new Respond(HttpStatusCode.ServiceUnavailable));
         store.Configure(new DllSettings());
-        await store.RefreshAsync(TestContext.Current.CancellationToken);
+        await store.RefreshAsync(null, TestContext.Current.CancellationToken);
 
         Assert.Equal("v2", store.ReleaseTag);
         Assert.Equal(folder.Combine("Launcher", "Dlls", "Release", "v2", "Core.dll"), store.Resolve(DllRole.Server));
@@ -103,7 +104,7 @@ public sealed class DllStoreTests
     [Fact]
     public void ReleaseJsonParses()
     {
-        var release = ReleaseClient.Parse(ReleaseJson);
+        var release = GitHubClient.ParseRelease(ReleaseJson);
 
         Assert.Equal("v0.1.0", release.Tag);
         Assert.Equal(new DateTimeOffset(2026, 10, 20, 10, 0, 0, TimeSpan.Zero), release.PublishedAt);
@@ -116,18 +117,19 @@ public sealed class DllStoreTests
     public async Task DownloadsAreCheckedAgainstTheReleaseDigest()
     {
         using var folder = new TempFolder();
-        var asset = ReleaseClient.Parse(ReleaseJson).Assets[0];
+        var asset = GitHubClient.ParseRelease(ReleaseJson).Assets[0];
 
-        var good = new ReleaseClient(new HttpClient(new Respond(HttpStatusCode.OK, "test")));
-        await good.DownloadAsync(asset, folder.Combine("Core.dll"), TestContext.Current.CancellationToken);
+        var good = new GitHubClient(new HttpClient(new Respond(HttpStatusCode.OK, "test")));
+        await good.DownloadAssetAsync(asset, folder.Combine("Core.dll"), null, TestContext.Current.CancellationToken);
         Assert.Equal("test", File.ReadAllText(folder.Combine("Core.dll")));
 
-        var tampered = new ReleaseClient(new HttpClient(new Respond(HttpStatusCode.OK, "TEST")));
-        await Assert.ThrowsAsync<InvalidDataException>(() => tampered.DownloadAsync(asset, folder.Combine("Other.dll"), TestContext.Current.CancellationToken));
+        var tampered = new GitHubClient(new HttpClient(new Respond(HttpStatusCode.OK, "TEST")));
+        await Assert.ThrowsAsync<InvalidDataException>(() => tampered.DownloadAssetAsync(asset, folder.Combine("Other.dll"), null, TestContext.Current.CancellationToken));
         Assert.False(File.Exists(folder.Combine("Other.dll")));
 
-        var truncated = new ReleaseClient(new HttpClient(new Respond(HttpStatusCode.OK, "tes")));
-        await Assert.ThrowsAsync<InvalidDataException>(() => truncated.DownloadAsync(asset, folder.Combine("Short.dll"), TestContext.Current.CancellationToken));
+        var truncated = new GitHubClient(new HttpClient(new Respond(HttpStatusCode.OK, "tes")));
+        await Assert.ThrowsAsync<InvalidDataException>(() => truncated.DownloadAssetAsync(asset, folder.Combine("Short.dll"), null, TestContext.Current.CancellationToken));
+        Assert.False(File.Exists(folder.Combine("Short.dll.download")));
     }
 
     private sealed class Respond(HttpStatusCode status, string body = "") : HttpMessageHandler

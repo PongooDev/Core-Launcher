@@ -5,9 +5,14 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Core.Launcher.Hosting.Logging;
 using Core.Launcher.Hosting.Native;
-using Core.Launcher.Hosting.Settings;
 
 namespace Core.Launcher.Hosting.Backend;
+
+/// <summary>What the backend host runs. With <see cref="Start"/> false it only watches a backend already running on <see cref="Port"/>.</summary>
+public sealed record BackendTarget(bool Start, string Node, string Folder, string DataFolder, int Port, string? Problem = null)
+{
+    public static BackendTarget Running(int port) => new(false, "", "", "", port);
+}
 
 public enum BackendState
 {
@@ -21,7 +26,7 @@ public enum BackendState
 
 /// <summary>
 /// Runs Core-Backend as its README's "From a launcher" describes: <c>node src/main.js --port &lt;n&gt; --data &lt;folder&gt;</c>,
-/// ready on "Listening on port &lt;n&gt;", exit 1 = port taken, exit 2 = bad options. Or, with Start off, watches one that is already running.
+/// ready on "Listening on port &lt;n&gt;", exit 1 = port taken, exit 2 = bad options. Or watches one that is already running.
 /// </summary>
 public sealed partial class BackendHost : IAsyncDisposable
 {
@@ -33,7 +38,7 @@ public sealed partial class BackendHost : IAsyncDisposable
     private readonly LogChannel _output;
     private readonly LogChannel _log;
     private readonly Lock _gate = new();
-    private BackendSettings _settings = new();
+    private BackendTarget _target = BackendTarget.Running(5595);
     private CancellationTokenSource? _stop;
     private Task _run = Task.CompletedTask;
 
@@ -56,11 +61,22 @@ public sealed partial class BackendHost : IAsyncDisposable
 
     public event Action? Changed;
 
-    public void Configure(BackendSettings settings)
+    public BackendTarget Target
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _target;
+            }
+        }
+    }
+
+    public void Configure(BackendTarget target)
     {
         lock (_gate)
         {
-            _settings = settings;
+            _target = target;
         }
     }
 
@@ -74,9 +90,9 @@ public sealed partial class BackendHost : IAsyncDisposable
             }
 
             _stop = new CancellationTokenSource();
-            var settings = _settings;
+            var target = _target;
             var token = _stop.Token;
-            _run = Task.Run(() => settings.Start ? SuperviseAsync(settings, token) : WatchAsync(settings, token));
+            _run = Task.Run(() => target.Start ? SuperviseAsync(target, token) : WatchAsync(target, token));
         }
     }
 
@@ -114,18 +130,18 @@ public sealed partial class BackendHost : IAsyncDisposable
         return true;
     }
 
-    private async Task SuperviseAsync(BackendSettings settings, CancellationToken stop)
+    private async Task SuperviseAsync(BackendTarget target, CancellationToken stop)
     {
         var failures = 0;
         while (!stop.IsCancellationRequested)
         {
-            if (Validate(settings) is { } problem)
+            if (Validate(target) is { } problem)
             {
                 Fail(problem);
                 return;
             }
 
-            var exit = await RunOnceAsync(settings, stop);
+            var exit = await RunOnceAsync(target, stop);
             if (exit is null)
             {
                 return;
@@ -135,7 +151,7 @@ public sealed partial class BackendHost : IAsyncDisposable
             switch (code)
             {
                 case 1:
-                    Fail($"Port {settings.Port} is already in use. If Core-Backend is already running, turn off \"Start Core-Backend\" in Settings.");
+                    Fail($"Port {target.Port} is already in use. If Core-Backend is already running, choose \"Already running\" in Settings → Backend.");
                     return;
                 case 2:
                     Fail("Core-Backend refused its options (exit code 2); see the Backend log");
@@ -160,11 +176,11 @@ public sealed partial class BackendHost : IAsyncDisposable
     }
 
     /// <summary>Runs the backend until it exits (its exit code and how long it was ready) or until stopped (null).</summary>
-    private async Task<(int Code, TimeSpan ReadyFor)?> RunOnceAsync(BackendSettings settings, CancellationToken stop)
+    private async Task<(int Code, TimeSpan ReadyFor)?> RunOnceAsync(BackendTarget target, CancellationToken stop)
     {
-        var info = new ProcessStartInfo(settings.Node)
+        var info = new ProcessStartInfo(target.Node)
         {
-            WorkingDirectory = settings.Folder,
+            WorkingDirectory = target.Folder,
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -175,13 +191,13 @@ public sealed partial class BackendHost : IAsyncDisposable
         };
         info.ArgumentList.Add(Path.Combine("src", "main.js"));
         info.ArgumentList.Add("--port");
-        info.ArgumentList.Add(settings.Port.ToString());
+        info.ArgumentList.Add(target.Port.ToString());
         info.ArgumentList.Add("--data");
-        info.ArgumentList.Add(settings.ResolvedDataFolder);
+        info.ArgumentList.Add(target.DataFolder);
 
         Port = null;
         Set(BackendState.Starting, null);
-        _log.Write($"Backend: starting {settings.Node} {string.Join(' ', info.ArgumentList.Select(Processes.CommandLine.Quote))} in {settings.Folder}");
+        _log.Write($"Backend: starting {target.Node} {string.Join(' ', info.ArgumentList.Select(Processes.CommandLine.Quote))} in {target.Folder}");
 
         using var process = new Process { StartInfo = info };
         DateTime? readyAt = null;
@@ -215,7 +231,7 @@ public sealed partial class BackendHost : IAsyncDisposable
         }
         catch (Win32Exception exception)
         {
-            Fail($"Couldn't start {settings.Node}: {exception.Message}. Install Node.js 22 or newer, or set its path in Settings.");
+            Fail($"Couldn't start {target.Node}: {exception.Message}. Install Node.js 22 or newer, or set its path in Settings.");
             return null;
         }
 
@@ -272,14 +288,14 @@ public sealed partial class BackendHost : IAsyncDisposable
         _log.Write("Backend: killed");
     }
 
-    private async Task WatchAsync(BackendSettings settings, CancellationToken stop)
+    private async Task WatchAsync(BackendTarget target, CancellationToken stop)
     {
-        Port = settings.Port;
-        _log.Write($"Backend: using the one already running on port {settings.Port}");
+        Port = target.Port;
+        _log.Write($"Backend: using the one already running on port {target.Port}");
         while (!stop.IsCancellationRequested)
         {
-            var reachable = await AcceptsConnectionsAsync(settings.Port, stop);
-            Set(reachable ? BackendState.Ready : BackendState.Unreachable, reachable ? null : $"Nothing is listening on port {settings.Port}");
+            var reachable = await AcceptsConnectionsAsync(target.Port, stop);
+            Set(reachable ? BackendState.Ready : BackendState.Unreachable, reachable ? null : $"Nothing is listening on port {target.Port}");
             try
             {
                 await Task.Delay(ProbeInterval, stop);
@@ -310,21 +326,26 @@ public sealed partial class BackendHost : IAsyncDisposable
         }
     }
 
-    public static string? Validate(BackendSettings settings)
+    public static string? Validate(BackendTarget target)
     {
-        if (settings.Folder.Length == 0)
+        if (target.Problem is not null)
+        {
+            return target.Problem;
+        }
+
+        if (target.Folder.Length == 0)
         {
             return "The Core-Backend folder isn't set (Settings → Backend)";
         }
 
-        if (!File.Exists(Path.Combine(settings.Folder, "src", "main.js")))
+        if (!File.Exists(Path.Combine(target.Folder, "src", "main.js")))
         {
-            return $"{settings.Folder} isn't a Core-Backend checkout (no src\\main.js)";
+            return $"{target.Folder} isn't a Core-Backend checkout (no src\\main.js)";
         }
 
-        if (!Directory.Exists(Path.Combine(settings.Folder, "node_modules")))
+        if (!Directory.Exists(Path.Combine(target.Folder, "node_modules")))
         {
-            return $"Core-Backend's dependencies aren't installed: run npm install in {settings.Folder}";
+            return $"Core-Backend's dependencies aren't installed: run npm install in {target.Folder}";
         }
 
         return null;

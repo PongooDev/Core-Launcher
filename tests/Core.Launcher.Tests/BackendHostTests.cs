@@ -1,4 +1,5 @@
 using System.Net.Sockets;
+using Core.Launcher.Hosting;
 using Core.Launcher.Hosting.Backend;
 using Core.Launcher.Hosting.Logging;
 using Core.Launcher.Hosting.Native;
@@ -8,26 +9,46 @@ namespace Core.Launcher.Tests;
 
 public sealed class BackendHostTests
 {
+    private static BackendTarget Folder(string folder) => new(true, "node", folder, Path.Combine(folder, "data"), 5595);
+
     [Fact]
     public void ValidateExplainsWhatIsMissing()
     {
         using var folder = new TempFolder();
-        Assert.Contains("isn't set", BackendHost.Validate(new BackendSettings()));
-        Assert.Contains("no src\\main.js", BackendHost.Validate(new BackendSettings { Folder = folder.Path }));
+        Assert.Contains("isn't set", BackendHost.Validate(Folder("")));
+        Assert.Contains("no src\\main.js", BackendHost.Validate(Folder(folder.Path)));
 
         Directory.CreateDirectory(folder.Combine("src"));
         File.WriteAllText(folder.Combine("src", "main.js"), "");
-        Assert.Contains("run npm install", BackendHost.Validate(new BackendSettings { Folder = folder.Path }));
+        Assert.Contains("run npm install", BackendHost.Validate(Folder(folder.Path)));
 
         Directory.CreateDirectory(folder.Combine("node_modules"));
-        Assert.Null(BackendHost.Validate(new BackendSettings { Folder = folder.Path }));
+        Assert.Null(BackendHost.Validate(Folder(folder.Path)));
+        Assert.Equal("not installed", BackendHost.Validate(Folder(folder.Path) with { Problem = "not installed" }));
     }
 
     [Fact]
-    public void DataFolderDefaultsToTheBackendsOwn()
+    public async Task TargetsFollowTheBackendSource()
     {
-        Assert.Equal(@"C:\Core-Backend\data", new BackendSettings { Folder = @"C:\Core-Backend" }.ResolvedDataFolder);
-        Assert.Equal(@"D:\Data", new BackendSettings { Folder = @"C:\Core-Backend", DataFolder = @"D:\Data" }.ResolvedDataFolder);
+        using var folder = new TempFolder();
+        var host = new LauncherHost(new LauncherPaths(folder.Combine("Launcher")));
+        try
+        {
+            var external = host.TargetFor(new BackendSettings { Source = BackendSource.External, Port = 6000 });
+            Assert.False(external.Start);
+            Assert.Equal(6000, external.Port);
+
+            var local = host.TargetFor(new BackendSettings { Source = BackendSource.Folder, Folder = @"C:\Core-Backend", Node = @"C:\node\node.exe" });
+            Assert.Equal((true, @"C:\node\node.exe", @"C:\Core-Backend", @"C:\Core-Backend\data"), (local.Start, local.Node, local.Folder, local.DataFolder));
+            Assert.Equal(@"D:\Data", host.TargetFor(new BackendSettings { Source = BackendSource.Folder, Folder = @"C:\Core-Backend", DataFolder = @"D:\Data" }).DataFolder);
+
+            var managed = host.TargetFor(new BackendSettings());
+            Assert.Contains("isn't installed yet", managed.Problem);
+        }
+        finally
+        {
+            await host.DisposeAsync();
+        }
     }
 
     /// <summary>Runs the real Core-Backend from CORE_BACKEND_DIR on a free port with a throwaway data folder.</summary>
@@ -45,7 +66,7 @@ public sealed class BackendHostTests
         using var output = new LogChannel("Backend");
         using var log = new LogChannel("Launcher");
         var host = new BackendHost(job, output, log);
-        host.Configure(new BackendSettings { Folder = backendFolder, Port = 0, DataFolder = data.Path });
+        host.Configure(new BackendTarget(true, "node", backendFolder, data.Path, 0));
 
         host.Start();
         Assert.True(await host.WaitReadyAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken), string.Join('\n', log.Snapshot().Concat(output.Snapshot())));

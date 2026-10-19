@@ -7,6 +7,8 @@ public partial class MainWindow : Window
 {
     private readonly MainViewModel _model;
     private bool _closing;
+    private bool _stopping;
+    private bool _asked;
 
     public MainWindow(MainViewModel model)
     {
@@ -14,6 +16,13 @@ public partial class MainWindow : Window
         SourceInitialized += (_, _) => DarkTitleBar.Apply(this);
         _model = model;
         DataContext = model;
+    }
+
+    /// <summary>Closes and stops everything without the "close anyway?" question (the caller already asked).</summary>
+    public void CloseWithoutAsking()
+    {
+        _asked = true;
+        Close();
     }
 
     protected override async void OnClosing(CancelEventArgs e)
@@ -25,13 +34,19 @@ public partial class MainWindow : Window
         }
 
         e.Cancel = true;
-        if (_model.Host.GamesRunning &&
+        if (_stopping)
+        {
+            return;
+        }
+
+        if (!_asked && _model.Host.GamesRunning &&
             MessageBox.Show(this, "Closing the launcher stops the game, the servers and the backend. Close anyway?", "Core Launcher",
                 MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
         {
             return;
         }
 
+        _stopping = true;
         IsEnabled = false;
         Title = "Core Launcher (stopping…)";
         try

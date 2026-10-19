@@ -65,6 +65,37 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
     }
 
+    public bool BackendManaged
+    {
+        get => Settings.Backend.Source == BackendSource.Managed;
+        set => SetBackendSource(value, BackendSource.Managed);
+    }
+
+    public bool BackendFromFolder
+    {
+        get => Settings.Backend.Source == BackendSource.Folder;
+        set => SetBackendSource(value, BackendSource.Folder);
+    }
+
+    public bool BackendExternal
+    {
+        get => Settings.Backend.Source == BackendSource.External;
+        set => SetBackendSource(value, BackendSource.External);
+    }
+
+    private void SetBackendSource(bool selected, BackendSource source)
+    {
+        if (!selected)
+        {
+            return;
+        }
+
+        Settings.Backend.Source = source;
+        OnPropertyChanged(nameof(BackendManaged));
+        OnPropertyChanged(nameof(BackendFromFolder));
+        OnPropertyChanged(nameof(BackendExternal));
+    }
+
     public string BackendFolder
     {
         get => Settings.Backend.Folder;

@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
+using System.Net.Http;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -8,6 +9,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Core.Launcher.Hosting;
 using Core.Launcher.Hosting.Backend;
+using Core.Launcher.Hosting.Components;
 using Core.Launcher.Hosting.Logging;
 using Core.Launcher.Hosting.Servers;
 using Core.Launcher.Hosting.Settings;
@@ -75,7 +77,16 @@ public sealed partial class MainViewModel : ObservableObject
     public partial string DllStatus { get; set; } = "";
 
     [ObservableProperty]
-    public partial bool CanCheckDlls { get; set; }
+    public partial string BackendDescription { get; set; } = "";
+
+    [ObservableProperty]
+    public partial bool CanCheckForUpdates { get; set; }
+
+    [ObservableProperty]
+    public partial string UpdateText { get; set; } = "";
+
+    [ObservableProperty]
+    public partial bool HasUpdate { get; set; }
 
     [ObservableProperty]
     public partial string Message { get; set; } = "";
@@ -127,8 +138,18 @@ public sealed partial class MainViewModel : ObservableObject
             RefreshServers();
 
             CanChangeBuild = !_host.GamesRunning;
-            CanCheckDlls = settings.Dlls.Source == DllSource.Release && !_host.RefreshingDlls;
-            DllStatus = _host.RefreshingDlls ? "Checking for updates…" : _host.Dlls.Describe();
+            CanCheckForUpdates = !_host.CheckingForUpdates && !Busy;
+            DllStatus = _host.CheckingForUpdates ? "Checking for updates…" : _host.Dlls.Describe();
+            BackendDescription = _host.BackendDescription;
+
+            var update = _host.Updater.Available;
+            HasUpdate = update is not null;
+            if (!Busy)
+            {
+                UpdateText = update is null ? ""
+                    : _host.Updater.Executable is null ? $"Core Launcher {update.Tag} is available on GitHub (this build can't update itself)."
+                    : $"Core Launcher {update.Tag} is available.";
+            }
         }
         finally
         {
@@ -234,19 +255,55 @@ public sealed partial class MainViewModel : ObservableObject
     [RelayCommand]
     private async Task RestartBackendAsync()
     {
-        await _host.Backend.RestartAsync();
+        await _host.RestartBackendAsync();
         Refresh();
     }
 
     [RelayCommand]
     private async Task StopBackendAsync()
     {
-        await _host.Backend.StopAsync();
+        await _host.StopBackendAsync();
         Refresh();
     }
 
     [RelayCommand]
-    private void CheckDlls() => _host.RefreshDlls();
+    private void CheckForUpdates() => _host.CheckForUpdates();
+
+    [RelayCommand]
+    private async Task UpdateLauncherAsync()
+    {
+        if (_host.Updater.Available is not { } release)
+        {
+            return;
+        }
+
+        if (_host.Updater.Executable is not { } executable)
+        {
+            Process.Start(new ProcessStartInfo($"https://github.com/{LauncherUpdater.Repository}/releases/latest") { UseShellExecute = true });
+            return;
+        }
+
+        if (_host.GamesRunning &&
+            MessageBox.Show(Application.Current.MainWindow, "Updating restarts the launcher, which stops the game and the servers. Update now?", "Core Launcher",
+                MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        Busy = true;
+        Message = "";
+        try
+        {
+            await _host.Updater.InstallAsync(release, new Progress<string>(status => UpdateText = $"Updating to {release.Tag}: {status}"), CancellationToken.None);
+            ((App)Application.Current).RestartAfterUpdate(executable);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or InvalidDataException or IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            Message = $"Update failed: {exception.Message}";
+            _host.Log.Write($"Launcher update failed: {exception.Message}");
+            Busy = false;
+        }
+    }
 
     [RelayCommand]
     private void OpenLogsFolder()

@@ -18,6 +18,15 @@ public sealed class LauncherPaths
 
     public string LocalDlls => Path.Combine(Root, "Dlls", "Local");
 
+    public string Runtime => Path.Combine(Root, "Runtime");
+
+    public string Backend => Path.Combine(Root, "Backend");
+
+    public string BackendVersions => Path.Combine(Backend, "versions");
+
+    /// <summary>The managed backend's accounts and profiles; shared by every installed version.</summary>
+    public string BackendData => Path.Combine(Backend, "data");
+
     public string Logs => Path.Combine(Root, "Logs");
 
     public string CoreLogs => Path.Combine(Logs, "Core");

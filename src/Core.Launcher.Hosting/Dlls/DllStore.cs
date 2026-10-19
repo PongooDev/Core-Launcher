@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using Core.Launcher.Hosting.Components;
 using Core.Launcher.Hosting.Settings;
 
 namespace Core.Launcher.Hosting.Dlls;
@@ -12,16 +13,16 @@ public sealed class DllStore
     private const string MarkerName = "release.json";
 
     private readonly LauncherPaths _paths;
-    private readonly ReleaseClient _releases;
+    private readonly GitHubClient _github;
     private readonly Action<string> _log;
     private readonly Lock _gate = new();
     private DllSettings _settings = new();
     private string? _releaseFolder;
 
-    public DllStore(LauncherPaths paths, ReleaseClient releases, Action<string> log)
+    public DllStore(LauncherPaths paths, GitHubClient github, Action<string> log)
     {
         _paths = paths;
-        _releases = releases;
+        _github = github;
         _log = log;
     }
 
@@ -46,7 +47,7 @@ public sealed class DllStore
     }
 
     /// <summary>Downloads the latest release's DLLs if they aren't here yet. Offline or without a release, the newest downloaded one stays in use.</summary>
-    public async Task RefreshAsync(CancellationToken cancellation)
+    public async Task RefreshAsync(IProgress<string>? progress, CancellationToken cancellation)
     {
         DllSettings settings;
         lock (_gate)
@@ -61,19 +62,23 @@ public sealed class DllStore
 
         try
         {
-            var release = await _releases.LatestAsync(settings.Repository, cancellation);
+            progress?.Report($"Checking {settings.Repository}");
+            var release = await _github.LatestReleaseAsync(settings.Repository, cancellation);
             if (release is null)
             {
                 _log($"{settings.Repository} has no release yet");
+                progress?.Report($"{settings.Repository} has no release yet");
             }
             else
             {
-                await DownloadAsync(release, cancellation);
+                await DownloadAsync(release, progress, cancellation);
+                progress?.Report($"Core DLLs {release.Tag}");
             }
         }
         catch (Exception exception) when (exception is HttpRequestException or InvalidDataException or IOException or TaskCanceledException or JsonException)
         {
             _log($"Couldn't check {settings.Repository} for a release: {exception.Message}");
+            progress?.Report($"Couldn't check {settings.Repository}: {exception.Message}");
         }
 
         if (ReleaseTag is null && NewestDownloaded() is { } cached)
@@ -83,7 +88,7 @@ public sealed class DllStore
         }
     }
 
-    private async Task DownloadAsync(Release release, CancellationToken cancellation)
+    private async Task DownloadAsync(Release release, IProgress<string>? progress, CancellationToken cancellation)
     {
         var folder = Path.Combine(_paths.ReleaseDlls, SafeName(release.Tag));
         if (File.Exists(Path.Combine(folder, MarkerName)))
@@ -103,7 +108,8 @@ public sealed class DllStore
         foreach (var asset in assets)
         {
             _log($"Downloading {asset.Name} ({asset.Size:N0} bytes) from release {release.Tag}");
-            await _releases.DownloadAsync(asset, Path.Combine(folder, asset.Name), cancellation);
+            await _github.DownloadAssetAsync(asset, Path.Combine(folder, asset.Name),
+                progress is null ? null : new Progress<string>(text => progress.Report($"Downloading {asset.Name}: {text}")), cancellation);
         }
 
         await File.WriteAllTextAsync(Path.Combine(folder, MarkerName),

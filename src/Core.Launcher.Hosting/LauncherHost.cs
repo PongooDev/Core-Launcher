@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Core.Launcher.Hosting.Backend;
+using Core.Launcher.Hosting.Components;
 using Core.Launcher.Hosting.Dlls;
 using Core.Launcher.Hosting.Logging;
 using Core.Launcher.Hosting.Native;
@@ -9,19 +10,29 @@ using Core.Launcher.Hosting.Settings;
 
 namespace Core.Launcher.Hosting;
 
-/// <summary>Everything the window drives: settings, the backend, the client and the server pool.</summary>
+/// <summary>One line of setup or update progress: which component, and what is happening to it.</summary>
+public sealed record ComponentProgress(string Component, string Status, bool Failed = false);
+
+/// <summary>Everything the windows drive: settings, components and their updates, the backend, the client and the server pool.</summary>
 public sealed class LauncherHost : IAsyncDisposable
 {
+    public const string RuntimeComponent = "Node.js";
+    public const string BackendComponent = "Core-Backend";
+    public const string DllComponent = "Core DLLs";
+
     private static readonly TimeSpan BackendReadyTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan ShutdownTimeout = TimeSpan.FromSeconds(10);
 
     private readonly SettingsStore _store;
     private readonly JobObject _job = new();
-    private readonly HttpClient _http = ReleaseClient.CreateHttpClient();
+    private readonly HttpClient _http = GitHubClient.CreateHttpClient();
     private readonly GameLauncher _launcher;
     private readonly Dictionary<int, LogChannel> _serverLogs = [];
     private readonly Lock _gate = new();
-    private Task _dllRefresh = Task.CompletedTask;
+    private readonly SemaphoreSlim _updating = new(1, 1);
+    private readonly CancellationTokenSource _shutdown = new();
+    private Task _updates = Task.CompletedTask;
+    private bool _started;
 
     public LauncherHost(LauncherPaths paths)
     {
@@ -41,7 +52,11 @@ public sealed class LauncherHost : IAsyncDisposable
             Settings = new LauncherSettings();
         }
 
-        Dlls = new DllStore(paths, new ReleaseClient(_http), Log.Write);
+        var github = new GitHubClient(_http);
+        Dlls = new DllStore(paths, github, Log.Write);
+        Node = new NodeRuntime(paths, _http, Log.Write);
+        BackendPackage = new BackendPackage(paths, github, Node, Log.Write);
+        Updater = new LauncherUpdater(github, LauncherUpdater.RunningVersion, LauncherUpdater.PublishedExecutable(typeof(LauncherHost).Assembly), Log.Write);
         Backend = new BackendHost(_job, BackendLog, Log);
         _launcher = new GameLauncher(_job, Dlls, paths, Log);
         Servers = new ServerPool(new ServerStarter(this), Log, TimeProvider.System);
@@ -62,13 +77,22 @@ public sealed class LauncherHost : IAsyncDisposable
 
     public DllStore Dlls { get; }
 
+    public NodeRuntime Node { get; }
+
+    public BackendPackage BackendPackage { get; }
+
+    public LauncherUpdater Updater { get; }
+
     public BackendHost Backend { get; }
 
     public ServerPool Servers { get; }
 
     public RunningGame? Client { get; private set; }
 
-    public bool RefreshingDlls => !_dllRefresh.IsCompleted;
+    public bool CheckingForUpdates => !_updates.IsCompleted;
+
+    /// <summary>A newer managed Core-Backend installed while the old one runs; it is used from the backend's next start.</summary>
+    public string? BackendUpdateReady { get; private set; }
 
     public bool GamesRunning => Client is not null || Servers.Slots.Any(slot => slot.ProcessId is not null);
 
@@ -90,24 +114,49 @@ public sealed class LauncherHost : IAsyncDisposable
         }
     }
 
+    /// <summary>Starts hosting: checks every component for updates, then starts the backend and lets the servers start.</summary>
     public void Start()
     {
-        Log.Write($"Core Launcher {typeof(LauncherHost).Assembly.GetName().Version?.ToString(3)}, data in {Paths.Root}");
+        Log.Write($"Core Launcher {Updater.Current.ToString(3)}, data in {Paths.Root}");
+        LauncherUpdater.CleanUp(Updater.Executable);
         Dlls.CleanUp();
+        _started = true;
         Apply(Settings, previous: null);
         Servers.StartTimer();
-        RefreshDlls();
+        CheckForUpdates(startBackend: true);
     }
 
-    public void RefreshDlls()
+    public void CheckForUpdates(bool startBackend = false)
     {
         lock (_gate)
         {
-            if (_dllRefresh.IsCompleted)
+            if (_updates.IsCompleted)
             {
-                _dllRefresh = Task.Run(async () =>
+                _updates = Task.Run(async () =>
                 {
-                    await Dlls.RefreshAsync(CancellationToken.None);
+                    try
+                    {
+                        await UpdateComponentsAsync(null, checkLauncher: true, _shutdown.Token);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        return;
+                    }
+                    catch (Exception exception)
+                    {
+                        Log.Write($"Checking for updates failed: {exception}");
+                    }
+
+                    if (_shutdown.IsCancellationRequested)
+                    {
+                        return;
+                    }
+
+                    if (startBackend)
+                    {
+                        StartBackend();
+                    }
+
                     OnChanged();
                 });
                 OnChanged();
@@ -115,12 +164,118 @@ public sealed class LauncherHost : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Installs or updates what the settings need: the Node.js runtime and Core-Backend when the launcher manages the
+    /// backend, and the release DLLs. Returns false when the managed backend couldn't be installed.
+    /// </summary>
+    public async Task<bool> UpdateComponentsAsync(IProgress<ComponentProgress>? progress, bool checkLauncher, CancellationToken cancellation)
+    {
+        await _updating.WaitAsync(cancellation);
+        try
+        {
+            var settings = Settings;
+            if (checkLauncher)
+            {
+                try
+                {
+                    await Updater.CheckAsync(cancellation);
+                }
+                catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or JsonException)
+                {
+                    Log.Write($"Couldn't check for a launcher update: {exception.Message}");
+                }
+            }
+
+            Dlls.Configure(settings.Dlls);
+            await Dlls.RefreshAsync(Report(progress, DllComponent), cancellation);
+
+            if (settings.Backend.Source != BackendSource.Managed)
+            {
+                return true;
+            }
+
+            try
+            {
+                await Node.EnsureAsync(Report(progress, RuntimeComponent), cancellation);
+                progress?.Report(new ComponentProgress(RuntimeComponent, $"Node.js {Node.Version}"));
+                var updated = await BackendPackage.UpdateAsync(settings.Backend.Repository, Report(progress, BackendComponent), cancellation);
+                progress?.Report(new ComponentProgress(BackendComponent, $"Core-Backend {BackendPackage.Installed?.Id}"));
+                if (updated is not null && Backend.ProcessId is not null)
+                {
+                    BackendUpdateReady = updated.Id;
+                    Log.Write($"Core-Backend {updated.Id} is installed; restart the backend to use it");
+                }
+
+                return true;
+            }
+            catch (Exception exception) when (exception is HttpRequestException or InvalidDataException or InvalidOperationException or IOException or UnauthorizedAccessException or TaskCanceledException or JsonException)
+            {
+                Log.Write($"Couldn't install Core-Backend: {exception.Message}");
+                var component = Node.Executable is null ? RuntimeComponent : BackendComponent;
+                progress?.Report(new ComponentProgress(component, exception.Message, Failed: true));
+                return BackendPackage.Installed is not null;
+            }
+        }
+        finally
+        {
+            _updating.Release();
+        }
+    }
+
+    private static Progress<string>? Report(IProgress<ComponentProgress>? progress, string component) =>
+        progress is null ? null : new Progress<string>(status => progress.Report(new ComponentProgress(component, status)));
+
+    /// <summary>What the backend settings point at right now.</summary>
+    public BackendTarget TargetFor(BackendSettings settings) => settings.Source switch
+    {
+        BackendSource.External => BackendTarget.Running(settings.Port),
+        BackendSource.Folder => new(true, settings.Node, settings.Folder, settings.DataFolder.Length > 0 ? settings.DataFolder : Path.Combine(settings.Folder, "data"), settings.Port),
+        _ => BackendPackage.Installed is { } installed && Node.Executable is { } node
+            ? new(true, node, installed.Folder, settings.DataFolder.Length > 0 ? settings.DataFolder : Paths.BackendData, settings.Port)
+            : new(true, "", "", "", settings.Port, "Core-Backend isn't installed yet; Check for updates installs it"),
+    };
+
+    public string BackendDescription => Settings.Backend.Source switch
+    {
+        BackendSource.External => $"Already running on port {Settings.Backend.Port}",
+        BackendSource.Folder => $"Folder: {Settings.Backend.Folder}",
+        _ => BackendPackage.Installed is { } installed
+            ? $"Core-Backend {installed.Id}, Node.js {Node.Version}{(BackendUpdateReady is { } ready ? $" ({ready} installed, restart the backend to use it)" : "")}"
+            : "Core-Backend not installed yet",
+    };
+
+    public void StartBackend()
+    {
+        Backend.Configure(TargetFor(Settings.Backend));
+        Backend.Start();
+    }
+
+    public async Task RestartBackendAsync()
+    {
+        await Backend.StopAsync();
+        if (Settings.Backend.Source == BackendSource.Managed && BackendPackage.Installed is null)
+        {
+            await UpdateComponentsAsync(null, checkLauncher: false, CancellationToken.None);
+        }
+
+        BackendUpdateReady = null;
+        StartBackend();
+        OnChanged();
+    }
+
+    public Task StopBackendAsync() => Backend.StopAsync();
+
+    /// <summary>Saves the settings; once the launcher has started they also take effect (setup only saves them).</summary>
     public void SaveSettings(LauncherSettings updated)
     {
         var previous = Settings;
         _store.Save(updated);
         Settings = updated;
-        Apply(updated, previous);
+        if (_started)
+        {
+            Apply(updated, previous);
+        }
+
         Log.Write("Settings saved");
         OnChanged();
     }
@@ -130,18 +285,13 @@ public sealed class LauncherHost : IAsyncDisposable
         Dlls.Configure(settings.Dlls);
         if (previous is not null && !SameJson(previous.Dlls, settings.Dlls))
         {
-            RefreshDlls();
+            CheckForUpdates();
         }
 
-        Backend.Configure(settings.Backend);
-        if (previous is null)
-        {
-            Backend.Start();
-        }
-        else if (!SameJson(previous.Backend, settings.Backend))
+        if (previous is not null && !SameJson(previous.Backend, settings.Backend))
         {
             Log.Write("Backend settings changed, restarting it");
-            _ = Backend.RestartAsync();
+            _ = RestartBackendAsync();
         }
 
         Servers.Configure(settings.Servers.Instances, TimeSpan.FromSeconds(settings.Servers.ReadyTimeoutSeconds));
@@ -170,10 +320,10 @@ public sealed class LauncherHost : IAsyncDisposable
             throw new InvalidOperationException("Enter a player name");
         }
 
-        await _dllRefresh;
+        await _updates;
         if (!Backend.Running)
         {
-            Backend.Start();
+            StartBackend();
         }
 
         if (!await Backend.WaitReadyAsync(BackendReadyTimeout) || Backend.Port is not { } port)
@@ -198,6 +348,8 @@ public sealed class LauncherHost : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         Log.Write("Shutting down");
+        _shutdown.Cancel();
+        await _updates;
         await Servers.StopAllAsync(ShutdownTimeout);
         if (Client is { } client)
         {
@@ -227,9 +379,9 @@ public sealed class LauncherHost : IAsyncDisposable
                 return "no build (Settings → Builds)";
             }
 
-            if (host.RefreshingDlls)
+            if (host.CheckingForUpdates)
             {
-                return "checking for DLL updates";
+                return "checking for updates";
             }
 
             return host.Backend.State == BackendState.Ready && host.Backend.Port is not null ? null : "waiting for the backend";
