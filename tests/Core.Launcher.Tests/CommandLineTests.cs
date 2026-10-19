@@ -76,14 +76,22 @@ public sealed partial class CommandLineTests
     }
 
     [Fact]
-    public void ServersRunUnattendedAndClientsNever()
+    public void ServersAlwaysRunNullRhiAndUnattendedAndClientsNever()
     {
         var build = Cert();
-        Assert.EndsWith(" -unattended", LaunchArguments.Server(build, 5595, "CoreServer1"));
-        Assert.DoesNotContain("-unattended", LaunchArguments.Client(build, 5595, "Player"));
+        build.ServerArguments = "-epicapp=Fortnite -epicportal";
+        var server = Split("x.exe " + LaunchArguments.Server(build, 5595, "CoreServer1"));
+        Assert.Contains("-nullrhi", server);
+        Assert.Contains("-unattended", server);
 
-        build.ServerArguments += " -Unattended";
-        Assert.Single(Split("x.exe " + LaunchArguments.Server(build, 5595, "CoreServer1")), argument => argument.Equals("-unattended", StringComparison.OrdinalIgnoreCase));
+        var client = LaunchArguments.Client(Cert(), 5595, "Player");
+        Assert.DoesNotContain("-nullrhi", client);
+        Assert.DoesNotContain("-unattended", client);
+
+        build.ServerArguments += " -NullRHI -Unattended";
+        server = Split("x.exe " + LaunchArguments.Server(build, 5595, "CoreServer1"));
+        Assert.Single(server, argument => argument.Equals("-nullrhi", StringComparison.OrdinalIgnoreCase));
+        Assert.Single(server, argument => argument.Equals("-unattended", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

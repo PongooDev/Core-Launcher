@@ -75,7 +75,7 @@ Settings are saved in `%LOCALAPPDATA%\Core-Launcher\settings.json`.
 | Ready timeout | `180` s | `0` waits forever |
 | Server login | `CoreServer{n}` | `{n}` is the server's number, so each server has its own account |
 
-The launcher adds `-AUTH_LOGIN`, `-AUTH_PASSWORD` and `-AUTH_TYPE=epic` itself. It adds `-httpproxy=127.0.0.1:<port>` when the build uses it, `-CoreBackend=http://127.0.0.1:<port>` for processes that load `CoreRedirect.dll`, and `-unattended` for servers (as dedicated servers run: engine message boxes are logged instead of waiting for a click).
+The launcher adds `-AUTH_LOGIN`, `-AUTH_PASSWORD` and `-AUTH_TYPE=epic` itself. It adds `-httpproxy=127.0.0.1:<port>` when the build uses it, `-CoreBackend=http://127.0.0.1:<port>` for processes that load `CoreRedirect.dll`, and `-nullrhi -unattended` for servers (no renderer, and engine message boxes are logged instead of waiting for a click, as dedicated servers run).
 
 ## Logs
 

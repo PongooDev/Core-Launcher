@@ -12,15 +12,18 @@ public static class LaunchArguments
         CommandLine.Join([build.ClientArguments, .. Common(build, build.ClientDlls, backendPort, playerName)]);
 
     /// <summary>
-    /// Servers always run -unattended, as Epic's dedicated servers do: FMessageDialog::Open then logs the message and
-    /// answers OK instead of opening a modal window that blocks startup. FApp::IsUnattended() reads it once, so it has to
-    /// be on the original command line. Clients never get it.
+    /// Switches every server needs, whatever its build's arguments say. -nullrhi: the engine's own null-RHI decision for
+    /// servers is folded out of the client exe. -unattended: as Epic's dedicated servers run, FMessageDialog::Open logs
+    /// the message and answers OK instead of opening a modal window that blocks startup (FApp::IsUnattended() reads it
+    /// once, so it has to be on the original command line). Clients never get them.
     /// </summary>
+    public static IReadOnlyList<string> ServerSwitches { get; } = ["-nullrhi", "-unattended"];
+
     public static string Server(BuildSettings build, int backendPort, string login) =>
-        CommandLine.Join([build.ServerArguments, .. Common(build, build.ServerDlls, backendPort, login), HasSwitch(build.ServerArguments, "unattended") ? "" : "-unattended"]);
+        CommandLine.Join([build.ServerArguments, .. Common(build, build.ServerDlls, backendPort, login), .. ServerSwitches.Where(name => !HasSwitch(build.ServerArguments, name))]);
 
     private static bool HasSwitch(string arguments, string name) =>
-        arguments.Split(' ', StringSplitOptions.RemoveEmptyEntries).Any(argument => argument.Equals("-" + name, StringComparison.OrdinalIgnoreCase));
+        arguments.Split(' ', StringSplitOptions.RemoveEmptyEntries).Any(argument => argument.Equals(name, StringComparison.OrdinalIgnoreCase));
 
     private static IEnumerable<string> Common(BuildSettings build, IReadOnlyList<DllRole> dlls, int backendPort, string login)
     {
