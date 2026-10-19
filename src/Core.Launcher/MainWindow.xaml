@@ -52,6 +52,9 @@
                                  IsChecked="{Binding CurrentPage, Converter={StaticResource Page}, ConverterParameter=Logs}" />
                     <RadioButton Style="{StaticResource NavItem}" Tag="&#xE713;" Content="Settings"
                                  IsChecked="{Binding CurrentPage, Converter={StaticResource Page}, ConverterParameter=Settings}" />
+                    <Border Height="1" Background="{StaticResource BorderBrush}" Margin="10,10,10,10" />
+                    <Button Style="{StaticResource NavLink}" Tag="&#xE7EF;" Content="Admin panel" Command="{Binding OpenAdminPanelCommand}"
+                            IsEnabled="{Binding CanOpenAdminPanel}" ToolTip="{Binding AdminPanelHint}" ToolTipService.ShowOnDisabled="True" />
                 </StackPanel>
             </DockPanel>
         </Border>

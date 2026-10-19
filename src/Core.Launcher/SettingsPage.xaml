@@ -146,6 +146,13 @@
                                 DataContext="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}">
                             <DockPanel>
                                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Button Command="{Binding OpenAdminPanelCommand}" IsEnabled="{Binding CanOpenAdminPanel}" Margin="0,0,8,0"
+                                            ToolTip="{Binding AdminPanelHint}" ToolTipService.ShowOnDisabled="True">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="&#xE8A7;" Style="{StaticResource Icon}" FontSize="12" Margin="0,0,8,0" />
+                                            <TextBlock Text="Admin panel" />
+                                        </StackPanel>
+                                    </Button>
                                     <Button Command="{Binding RestartBackendCommand}">
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Text="&#xE72C;" Style="{StaticResource Icon}" FontSize="12" Margin="0,0,8,0" />

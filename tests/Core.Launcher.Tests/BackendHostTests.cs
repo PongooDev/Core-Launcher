@@ -51,6 +51,28 @@ public sealed class BackendHostTests
         }
     }
 
+    [Fact]
+    public async Task TheAdminPanelFollowsABackendThatIsAlreadyRunning()
+    {
+        var listener = new TcpListener(System.Net.IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+        using var job = new JobObject();
+        using var output = new LogChannel("Backend");
+        using var log = new LogChannel("Launcher");
+        var host = new BackendHost(job, output, log);
+        Assert.Null(host.AdminPanelUrl);
+
+        host.Configure(BackendTarget.Running(port));
+        host.Start();
+        Assert.True(await host.WaitReadyAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+        Assert.Equal($"http://127.0.0.1:{port}/admin", host.AdminPanelUrl);
+
+        listener.Stop();
+        await host.StopAsync();
+        Assert.Null(host.AdminPanelUrl);
+    }
+
     /// <summary>Runs the real Core-Backend from CORE_BACKEND_DIR on a free port with a throwaway data folder.</summary>
     [Fact]
     public async Task StartsTheRealBackendAndStopsIt()
@@ -76,6 +98,13 @@ public sealed class BackendHostTests
         using (var client = new TcpClient())
         {
             await client.ConnectAsync("127.0.0.1", host.Port!.Value, TestContext.Current.CancellationToken);
+        }
+
+        Assert.Equal($"http://127.0.0.1:{host.Port}/admin", host.AdminPanelUrl);
+        using (var http = new HttpClient())
+        {
+            using var panel = await http.GetAsync(host.AdminPanelUrl, TestContext.Current.CancellationToken);
+            Assert.True(panel.IsSuccessStatusCode, $"GET {host.AdminPanelUrl} answered {(int)panel.StatusCode}");
         }
 
         await host.StopAsync();

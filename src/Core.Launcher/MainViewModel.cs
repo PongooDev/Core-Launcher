@@ -149,6 +149,12 @@ public sealed partial class MainViewModel : ObservableObject
     public partial bool BackendRunning { get; set; }
 
     [ObservableProperty]
+    public partial bool CanOpenAdminPanel { get; set; }
+
+    [ObservableProperty]
+    public partial string AdminPanelHint { get; set; } = "";
+
+    [ObservableProperty]
     public partial string DllSummary { get; set; } = "";
 
     [ObservableProperty]
@@ -272,6 +278,8 @@ public sealed partial class MainViewModel : ObservableObject
     {
         var backend = _host.Backend;
         BackendRunning = backend.Running;
+        CanOpenAdminPanel = backend.AdminPanelUrl is not null;
+        AdminPanelHint = backend.AdminPanelUrl is { } url ? $"Open Core-Backend's admin panel ({url})" : "The admin panel opens once Core-Backend is running";
         (BackendSummary, BackendBrush) = backend.State switch
         {
             BackendState.Ready => ("Running", Brush("GoodBrush")),
@@ -281,7 +289,7 @@ public sealed partial class MainViewModel : ObservableObject
             BackendState.Failed => ("Needs attention", Brush("BadBrush")),
             _ => (_host.CheckingForUpdates ? "Installing…" : "Stopped", Brush(_host.CheckingForUpdates ? "BusyBrush" : "IdleBrush")),
         };
-        BackendDetail = backend.State == BackendState.Ready
+        BackendDetail = backend.State == BackendState.Ready && _host.Settings.Backend.Source != BackendSource.External
             ? $"Port {backend.Port} · {_host.BackendDescription}"
             : _host.BackendDescription;
 
@@ -587,6 +595,15 @@ public sealed partial class MainViewModel : ObservableObject
 
     [RelayCommand]
     private void CheckForUpdates() => _host.CheckForUpdates();
+
+    [RelayCommand]
+    private void OpenAdminPanel()
+    {
+        if (_host.Backend.AdminPanelUrl is { } url)
+        {
+            Open(url);
+        }
+    }
 
     [RelayCommand]
     private void CopyLog()

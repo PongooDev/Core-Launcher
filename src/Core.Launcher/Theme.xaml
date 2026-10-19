@@ -281,6 +281,36 @@
         </Setter>
     </Style>
 
+    <!-- A sidebar entry that opens something outside the launcher. -->
+    <Style x:Key="NavLink" TargetType="{x:Type Button}">
+        <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Margin" Value="0,0,0,2" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type Button}">
+                    <Border x:Name="Chrome" Background="Transparent" CornerRadius="6" Padding="12,9">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Right" Text="&#xE8A7;" Style="{StaticResource Icon}" FontSize="11" Foreground="{TemplateBinding Foreground}" />
+                            <TextBlock Text="{TemplateBinding Tag}" Style="{StaticResource Icon}" Foreground="{TemplateBinding Foreground}" Width="22" />
+                            <ContentPresenter Margin="8,0,0,0" VerticalAlignment="Center" />
+                        </DockPanel>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Chrome" Property="Background" Value="{StaticResource PanelBrush}" />
+                            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.4" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- Chips (log channels, settings sections). -->
     <Style x:Key="Chip" TargetType="{x:Type RadioButton}">
         <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />

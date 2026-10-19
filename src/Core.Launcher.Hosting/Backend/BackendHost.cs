@@ -57,6 +57,12 @@ public sealed partial class BackendHost : IAsyncDisposable
 
     public int? ProcessId { get; private set; }
 
+    /// <summary>Core-Backend's admin panel (loopback only), served by the backend itself.</summary>
+    public const string AdminPath = "/admin";
+
+    /// <summary>The admin panel of the backend in use (started here or already running), or null while it isn't reachable.</summary>
+    public string? AdminPanelUrl => State == BackendState.Ready && Port is { } port ? $"http://127.0.0.1:{port}{AdminPath}" : null;
+
     public bool Running => !_run.IsCompleted;
 
     public event Action? Changed;
