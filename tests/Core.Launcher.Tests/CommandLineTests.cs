@@ -65,12 +65,12 @@ public sealed partial class CommandLineTests
     {
         var arguments = LaunchArguments.Server(Cert(), 5595, "CoreServer");
 
-        // Core-Docs/Tools/run_server.py ARGS, plus CoreRedirect's backend since servers load it first.
+        // Core-Docs/Tools/run_server.py ARGS, CoreRedirect's backend (servers load it first) and the session region.
         string[] expected =
         [
             "-epicapp=Fortnite", "-epicenv=Prod", "-epicportal", "-httpproxy=127.0.0.1:5595", "-AUTH_LOGIN=CoreServer",
             "-AUTH_PASSWORD=Core", "-AUTH_TYPE=epic", "-SkipPatchCheck", "-nullrhi", "-nosplash", "-nosound",
-            "-CoreBackend=http://127.0.0.1:5595", "-unattended",
+            "-CoreBackend=http://127.0.0.1:5595", "-unattended", "-McpRegion=NA",
         ];
         Assert.Equal(expected.Order(), Split("x.exe " + arguments).Skip(1).Order());
     }
@@ -87,6 +87,7 @@ public sealed partial class CommandLineTests
         var client = LaunchArguments.Client(Cert(), 5595, "Player");
         Assert.DoesNotContain("-nullrhi", client);
         Assert.DoesNotContain("-unattended", client);
+        Assert.DoesNotContain("-McpRegion", client);
 
         build.ServerArguments += " -NullRHI -Unattended";
         server = Split("x.exe " + LaunchArguments.Server(build, 5595, "CoreServer1"));

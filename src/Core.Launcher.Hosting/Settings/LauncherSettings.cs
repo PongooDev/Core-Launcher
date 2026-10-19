@@ -33,6 +33,9 @@ public sealed class BuildSettings
     /// <summary>The build's root folder, the one holding Engine and FortniteGame.</summary>
     public string Path { get; set; } = "";
 
+    /// <summary>From Engine\Build\Build.version when the build was added; 0 when unknown.</summary>
+    public int Changelist { get; set; }
+
     public string Executable { get; set; } = @"FortniteGame\Binaries\Win64\FortniteClient-Win64-Shipping.exe";
 
     public string ClientArguments { get; set; } = "";

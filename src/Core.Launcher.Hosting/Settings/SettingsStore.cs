@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Core.Launcher.Hosting.Builds;
 
 namespace Core.Launcher.Hosting.Settings;
 
@@ -12,8 +13,9 @@ public sealed class SettingsStore
     /// it can deadlock the game before its first log line: every line's Flush() holds FAsyncWriter's buffer lock and
     /// waits for the writer thread, which can be waiting for that lock in its periodic flush (CoreV2 session,
     /// 2026-10-19: about 2 runs in 3 stalled with it, 4 in 4 started without it). Core's own logs flush themselves.
+    /// 2: every build records its changelist, and Cert servers get -McpRegion=NA (<see cref="KnownBuilds.CertServerRegion"/>).
     /// </summary>
-    public const int CurrentVersion = 1;
+    public const int CurrentVersion = 2;
 
     private static readonly JsonSerializerOptions Options = new()
     {
@@ -40,7 +42,7 @@ public sealed class SettingsStore
         var settings = JsonSerializer.Deserialize<LauncherSettings>(File.ReadAllText(_path), Options) ?? new LauncherSettings();
         if (settings.Version < CurrentVersion)
         {
-            Migrate(settings);
+            Migrate(settings, settings.Version);
             Save(settings);
         }
 
@@ -48,12 +50,31 @@ public sealed class SettingsStore
         return settings;
     }
 
-    private static void Migrate(LauncherSettings settings)
+    private static void Migrate(LauncherSettings settings, int from)
     {
         foreach (var build in settings.Builds ?? [])
         {
-            build.ClientArguments = WithoutSwitch(build.ClientArguments ?? "", "-FORCELOGFLUSH");
-            build.ServerArguments = WithoutSwitch(build.ServerArguments ?? "", "-FORCELOGFLUSH");
+            build.ClientArguments ??= "";
+            build.ServerArguments ??= "";
+            if (from < 1)
+            {
+                build.ClientArguments = WithoutSwitch(build.ClientArguments, "-FORCELOGFLUSH");
+                build.ServerArguments = WithoutSwitch(build.ServerArguments, "-FORCELOGFLUSH");
+            }
+
+            if (from < 2)
+            {
+                if (build.Changelist == 0)
+                {
+                    build.Changelist = BuildVersion.Read(build.Path ?? "")?.Changelist
+                        ?? (build.Name?.Contains($"CL-{KnownBuilds.Cert}", StringComparison.OrdinalIgnoreCase) == true ? KnownBuilds.Cert : 0);
+                }
+
+                if (build.Changelist == KnownBuilds.Cert && !build.ServerArguments.Contains("-McpRegion=", StringComparison.OrdinalIgnoreCase))
+                {
+                    build.ServerArguments = (build.ServerArguments + " " + KnownBuilds.CertServerRegion).Trim();
+                }
+            }
         }
     }
 

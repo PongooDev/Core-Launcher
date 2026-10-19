@@ -71,12 +71,42 @@ public sealed class SettingsAndBuildTests
         var migrated = store.Load();
         Assert.Equal(SettingsStore.CurrentVersion, migrated.Version);
         Assert.Equal("-epicapp=Fortnite -SkipPatchCheck", migrated.Builds[0].ClientArguments);
-        Assert.Equal("-epicapp=Fortnite -nullrhi", migrated.Builds[0].ServerArguments);
+        Assert.Equal("-epicapp=Fortnite -nullrhi -McpRegion=NA", migrated.Builds[0].ServerArguments);
         Assert.DoesNotContain("FORCELOGFLUSH", File.ReadAllText(path), StringComparison.OrdinalIgnoreCase);
 
         migrated.Builds[0].ClientArguments += " -FORCELOGFLUSH";
         store.Save(migrated);
         Assert.EndsWith("-FORCELOGFLUSH", store.Load().Builds[0].ClientArguments);
+    }
+
+    [Fact]
+    public void SavedCertServersGetTheirRegionOnce()
+    {
+        using var folder = new TempFolder();
+        var certFolder = folder.Combine("Cert");
+        Directory.CreateDirectory(Path.Combine(certFolder, "Engine", "Build"));
+        File.WriteAllText(Path.Combine(certFolder, BuildVersion.RelativePath), CertBuildVersion);
+        var path = folder.Combine("settings.json");
+        File.WriteAllText(path, $$"""
+            {
+              "Version": 1,
+              "Builds": [
+                { "Name": "My Cert", "Path": {{System.Text.Json.JsonSerializer.Serialize(certFolder)}}, "ClientArguments": "-epicportal", "ServerArguments": "-epicportal -nullrhi" },
+                { "Name": "Cert CL-3532353 (2)", "Path": "Z:\\gone", "ServerArguments": "-epicportal -mcpregion=EU" },
+                { "Name": "Other CL-3700114", "Path": "Z:\\gone", "ServerArguments": "-epicportal" }
+              ]
+            }
+            """);
+
+        var builds = new SettingsStore(path).Load().Builds;
+
+        Assert.Equal(KnownBuilds.Cert, builds[0].Changelist);
+        Assert.Equal("-epicportal -nullrhi -McpRegion=NA", builds[0].ServerArguments);
+        Assert.Equal("-epicportal", builds[0].ClientArguments);
+        Assert.Equal(KnownBuilds.Cert, builds[1].Changelist);
+        Assert.Equal("-epicportal -mcpregion=EU", builds[1].ServerArguments);
+        Assert.Equal(0, builds[2].Changelist);
+        Assert.Equal("-epicportal", builds[2].ServerArguments);
     }
 
     [Fact]
@@ -121,6 +151,8 @@ public sealed class SettingsAndBuildTests
         Assert.Contains("-nullrhi", build.ServerArguments);
         Assert.DoesNotContain("-nullrhi", build.ClientArguments);
         Assert.DoesNotContain("FORCELOGFLUSH", build.ClientArguments + build.ServerArguments);
+        Assert.EndsWith("-McpRegion=NA", build.ServerArguments);
+        Assert.Equal(3532353, build.Changelist);
         Assert.Equal(@"F:\Builds\++Fortnite+Cert-CL-3532353\Fortnite\FortniteGame\Binaries\Win64\FortniteClient-Win64-Shipping.exe", build.ExecutablePath);
     }
 
