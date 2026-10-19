@@ -70,9 +70,20 @@ public sealed partial class CommandLineTests
         [
             "-epicapp=Fortnite", "-epicenv=Prod", "-epicportal", "-httpproxy=127.0.0.1:5595", "-AUTH_LOGIN=CoreServer",
             "-AUTH_PASSWORD=Core", "-AUTH_TYPE=epic", "-SkipPatchCheck", "-FORCELOGFLUSH", "-nullrhi", "-nosplash", "-nosound",
-            "-CoreBackend=http://127.0.0.1:5595",
+            "-CoreBackend=http://127.0.0.1:5595", "-unattended",
         ];
         Assert.Equal(expected.Order(), Split("x.exe " + arguments).Skip(1).Order());
+    }
+
+    [Fact]
+    public void ServersRunUnattendedAndClientsNever()
+    {
+        var build = Cert();
+        Assert.EndsWith(" -unattended", LaunchArguments.Server(build, 5595, "CoreServer1"));
+        Assert.DoesNotContain("-unattended", LaunchArguments.Client(build, 5595, "Player"));
+
+        build.ServerArguments += " -Unattended";
+        Assert.Single(Split("x.exe " + LaunchArguments.Server(build, 5595, "CoreServer1")), argument => argument.Equals("-unattended", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

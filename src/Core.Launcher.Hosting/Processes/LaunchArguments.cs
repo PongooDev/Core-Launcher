@@ -11,8 +11,16 @@ public static class LaunchArguments
     public static string Client(BuildSettings build, int backendPort, string playerName) =>
         CommandLine.Join([build.ClientArguments, .. Common(build, build.ClientDlls, backendPort, playerName)]);
 
+    /// <summary>
+    /// Servers always run -unattended, as Epic's dedicated servers do: FMessageDialog::Open then logs the message and
+    /// answers OK instead of opening a modal window that blocks startup. FApp::IsUnattended() reads it once, so it has to
+    /// be on the original command line. Clients never get it.
+    /// </summary>
     public static string Server(BuildSettings build, int backendPort, string login) =>
-        CommandLine.Join([build.ServerArguments, .. Common(build, build.ServerDlls, backendPort, login)]);
+        CommandLine.Join([build.ServerArguments, .. Common(build, build.ServerDlls, backendPort, login), HasSwitch(build.ServerArguments, "unattended") ? "" : "-unattended"]);
+
+    private static bool HasSwitch(string arguments, string name) =>
+        arguments.Split(' ', StringSplitOptions.RemoveEmptyEntries).Any(argument => argument.Equals("-" + name, StringComparison.OrdinalIgnoreCase));
 
     private static IEnumerable<string> Common(BuildSettings build, IReadOnlyList<DllRole> dlls, int backendPort, string login)
     {

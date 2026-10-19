@@ -52,7 +52,7 @@
                                 <TextBlock Text="Server arguments" Style="{StaticResource Label}" />
                                 <TextBox Text="{Binding ServerArguments, UpdateSourceTrigger=PropertyChanged}" />
                                 <TextBlock Style="{StaticResource Hint}"
-                                           Text="The launcher adds -AUTH_LOGIN, -AUTH_PASSWORD and -AUTH_TYPE=epic itself, and -CoreBackend=http://127.0.0.1:&lt;port&gt; when CoreRedirect.dll is loaded." />
+                                           Text="The launcher adds -AUTH_LOGIN, -AUTH_PASSWORD and -AUTH_TYPE=epic itself, -CoreBackend=http://127.0.0.1:&lt;port&gt; when CoreRedirect.dll is loaded, and -unattended for servers." />
                                 <CheckBox Content="Send HTTP through the backend with -httpproxy=127.0.0.1:&lt;port&gt;" IsChecked="{Binding UseHttpProxy}" Margin="0,12,0,0" />
                                 <TextBlock Text="Client DLLs" Style="{StaticResource Label}" />
                                 <StackPanel Orientation="Horizontal">
