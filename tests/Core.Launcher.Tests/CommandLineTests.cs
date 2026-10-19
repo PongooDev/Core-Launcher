@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Core.Launcher.Hosting.Builds;
 using Core.Launcher.Hosting.Dlls;
 using Core.Launcher.Hosting.Processes;
 using Core.Launcher.Hosting.Settings;
@@ -56,40 +57,33 @@ public sealed partial class CommandLineTests
         Assert.Throws<ArgumentException>(() => CommandLine.Switch("AUTH_LOGIN", "bad\"name"));
     }
 
-    private static BuildSettings Cert() => new()
-    {
-        Name = "Cert CL-3532353",
-        Path = @"F:\Builds\++Fortnite+Cert-CL-3532353\Fortnite",
-        ClientArguments = "-epicapp=Fortnite -epicenv=Prod -epicportal -SkipPatchCheck -FORCELOGFLUSH",
-        ServerArguments = "-epicapp=Fortnite -epicenv=Prod -epicportal -SkipPatchCheck -FORCELOGFLUSH -nullrhi -nosplash -nosound",
-        UseHttpProxy = true,
-        ClientDlls = [DllRole.Redirect, DllRole.Client],
-        ServerDlls = [DllRole.Server],
-    };
+    private static BuildSettings Cert() =>
+        KnownBuilds.Create(@"F:\Builds\++Fortnite+Cert-CL-3532353\Fortnite", new BuildVersion(4, 16, 0, 3532353, "++Fortnite+Release-Cert"));
 
     [Fact]
-    public void ServerArgumentsHaveEveryRunServerSwitch()
+    public void ServerArgumentsHaveEveryRunServerSwitchAndTheRedirectsBackend()
     {
         var arguments = LaunchArguments.Server(Cert(), 5595, "CoreServer");
 
-        // Core-Docs/Tools/run_server.py ARGS
-        string[] runServer =
+        // Core-Docs/Tools/run_server.py ARGS, plus CoreRedirect's backend since servers load it first.
+        string[] expected =
         [
             "-epicapp=Fortnite", "-epicenv=Prod", "-epicportal", "-httpproxy=127.0.0.1:5595", "-AUTH_LOGIN=CoreServer",
             "-AUTH_PASSWORD=Core", "-AUTH_TYPE=epic", "-SkipPatchCheck", "-FORCELOGFLUSH", "-nullrhi", "-nosplash", "-nosound",
+            "-CoreBackend=http://127.0.0.1:5595",
         ];
-        Assert.Equal(runServer.Order(), Split("x.exe " + arguments).Skip(1).Order());
+        Assert.Equal(expected.Order(), Split("x.exe " + arguments).Skip(1).Order());
     }
 
     [Fact]
-    public void ARedirectedProcessIsToldTheBackendUrl()
+    public void OnlyARedirectedProcessIsToldTheBackendUrl()
     {
         var build = Cert();
         Assert.Contains("-CoreBackend=http://127.0.0.1:6000", LaunchArguments.Client(build, 6000, "Player"));
-        Assert.DoesNotContain("-CoreBackend", LaunchArguments.Server(build, 6000, "CoreServer1"));
-
-        build.ServerDlls = [DllRole.Redirect, DllRole.Server];
         Assert.Contains("-CoreBackend=http://127.0.0.1:6000", LaunchArguments.Server(build, 6000, "CoreServer1"));
+
+        build.ServerDlls = [DllRole.Server];
+        Assert.DoesNotContain("-CoreBackend", LaunchArguments.Server(build, 6000, "CoreServer1"));
     }
 
     [Fact]

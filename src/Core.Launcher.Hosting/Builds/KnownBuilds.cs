@@ -8,7 +8,7 @@ public static class KnownBuilds
 {
     private const string CertClientArguments = "-epicapp=Fortnite -epicenv=Prod -epicportal -SkipPatchCheck -FORCELOGFLUSH";
 
-    // Core-Docs/Tools/run_server.py and Backend-Evidence-3532353.md (launch line).
+    // Core-Docs/Tools/run_server.py and Backend-Evidence-3532353.md (launch line); DLL order from CoreV2 (redirect first).
     private static readonly Dictionary<int, Func<BuildSettings>> Builds = new()
     {
         [3532353] = () => new BuildSettings
@@ -18,7 +18,7 @@ public static class KnownBuilds
             ServerArguments = CertClientArguments + " -nullrhi -nosplash -nosound",
             UseHttpProxy = true,
             ClientDlls = [DllRole.Redirect, DllRole.Client],
-            ServerDlls = [DllRole.Server],
+            ServerDlls = [DllRole.Redirect, DllRole.Server],
         },
     };
 

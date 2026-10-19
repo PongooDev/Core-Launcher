@@ -90,7 +90,7 @@ public sealed class SettingsAndBuildTests
         Assert.Equal("Cert CL-3532353", build.Name);
         Assert.True(build.UseHttpProxy);
         Assert.Equal([DllRole.Redirect, DllRole.Client], build.ClientDlls);
-        Assert.Equal([DllRole.Server], build.ServerDlls);
+        Assert.Equal([DllRole.Redirect, DllRole.Server], build.ServerDlls);
         Assert.Contains("-nullrhi", build.ServerArguments);
         Assert.DoesNotContain("-nullrhi", build.ClientArguments);
         Assert.Equal(@"F:\Builds\++Fortnite+Cert-CL-3532353\Fortnite\FortniteGame\Binaries\Win64\FortniteClient-Win64-Shipping.exe", build.ExecutablePath);
