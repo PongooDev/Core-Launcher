@@ -184,8 +184,94 @@ public sealed class ServerPoolTests
         Assert.Equal([1, 2], pool.Slots.Select(slot => slot.Instance));
     }
 
+    [Fact]
+    public void ServerReadyWaitsForTheMatchmakingSessionBeforeTheNextBoot()
+    {
+        _starter.Sessions = SessionCheck.Pending;
+        using var pool = Pool();
+        _time.Advance(TimeSpan.FromSeconds(15));
+        _starter.Started[0].SetReady();
+        pool.Tick();
+
+        Assert.Equal([ServerState.Registering, ServerState.Waiting], pool.Slots.Select(slot => slot.State));
+        Assert.Equal("registering its matchmaking session, 0 s", pool.Slots[0].Note);
+        Assert.Equal("waiting for the booting server", pool.Slots[1].Note);
+        var asked = _starter.Asked[^1];
+        Assert.Equal(1, asked.Instance);
+        Assert.Equal(_time.GetUtcNow() - TimeSpan.FromSeconds(15), asked.StartedAt);
+        Assert.Equal([7777], asked.Ports);
+
+        Advance(pool, 50);
+        Assert.Single(_starter.Started);
+        Assert.Equal(ServerState.Registering, pool.Slots[0].State);
+
+        _starter.Sessions = SessionCheck.Listed;
+        pool.Tick();
+        Assert.Equal([ServerState.Ready, ServerState.Starting], pool.Slots.Select(slot => slot.State));
+        Assert.Equal("UDP 7777", pool.Slots[0].Note);
+        Assert.Equal(2, _starter.Started.Count);
+        Assert.Contains(_log.Snapshot(), line => line.Contains("Server 1: ready after 65 s on UDP 7777 (matchmaking session registered 50 s after \"Server ready\")", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ABackendWithoutASessionListingCountsServerReady()
+    {
+        _starter.Sessions = SessionCheck.Unsupported;
+        using var pool = Pool(instances: 1);
+        _starter.Started[0].SetReady();
+        pool.Tick();
+
+        Assert.Equal(ServerState.Ready, pool.Slots[0].State);
+        Assert.Contains(_log.Snapshot(), line => line.Contains("the backend doesn't list matchmaking sessions", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ASessionThatNeverShowsUpCountsAsReadyAfterTheSessionTimeout()
+    {
+        _starter.Sessions = SessionCheck.Pending;
+        using var pool = Pool(readyTimeoutSeconds: 60);
+        _starter.Started[0].SetReady();
+        pool.Tick();
+
+        // The ready timeout is only about "Server ready": a registering server isn't restarted by it.
+        Advance(pool, (int)ServerPool.SessionTimeout.TotalSeconds - 1);
+        Assert.Equal(ServerState.Registering, pool.Slots[0].State);
+        Assert.False(_starter.Started[0].Terminated);
+        Assert.Single(_starter.Started);
+
+        Advance(pool, 1);
+        Assert.Equal([ServerState.Ready, ServerState.Starting], pool.Slots.Select(slot => slot.State));
+        Assert.Contains(_log.Snapshot(), line => line.Contains("no matchmaking session listed 180 s after \"Server ready\", counting it as ready anyway", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AServerThatExitsWhileRegisteringIsRestarted()
+    {
+        _starter.Sessions = SessionCheck.Pending;
+        using var pool = Pool(instances: 1);
+        _starter.Started[0].SetReady();
+        pool.Tick();
+
+        _starter.Started[0].Exit(0xC0000005);
+        pool.Tick();
+        Assert.Equal(ServerState.Waiting, pool.Slots[0].State);
+        Advance(pool, 5);
+        Assert.Equal(2, _starter.Started.Count);
+        Assert.Equal(ServerState.Starting, pool.Slots[0].State);
+    }
+
     private sealed class FakeStarter : IServerStarter
     {
+        public SessionCheck Sessions { get; set; } = SessionCheck.Listed;
+
+        public List<(int Instance, DateTimeOffset StartedAt, int[] Ports)> Asked { get; } = [];
+
+        public SessionCheck Session(int instance, DateTimeOffset startedAt, IReadOnlyList<int> ports)
+        {
+            Asked.Add((instance, startedAt, [.. ports]));
+            return Sessions;
+        }
+
         public List<FakeServer> Started { get; } = [];
 
         public string? Blocked { get; set; }

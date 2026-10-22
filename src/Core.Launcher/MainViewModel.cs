@@ -299,6 +299,7 @@ public sealed partial class MainViewModel : ObservableObject
         ServersSummary = _host.Servers.Enabled ? $"{ready} / {slots.Count} ready" : "Off";
         ServersDetail = !_host.Servers.Enabled ? "Hosting is off"
             : slots.FirstOrDefault(slot => slot.State == ServerState.Starting) is { } booting ? $"Server {booting.Instance} is booting"
+            : slots.FirstOrDefault(slot => slot.State == ServerState.Registering) is { } registering ? $"Server {registering.Instance} is registering its matchmaking session"
             : slots.FirstOrDefault(slot => slot.ProcessId is null) is { } waiting ? Capitalize(waiting.Note)
             : "All servers are up";
         ServersBrush = Brush(!_host.Servers.Enabled ? "IdleBrush" : slots.Count > 0 && ready == slots.Count ? "GoodBrush" : "BusyBrush");
@@ -824,10 +825,11 @@ public sealed partial class ServerRowViewModel(ServerPool pool, Action<int> show
         {
             ServerState.Ready => ("Ready", MainViewModel.Brush("GoodBrush")),
             ServerState.Starting => ("Booting", MainViewModel.Brush("BusyBrush")),
+            ServerState.Registering => ("Registering", MainViewModel.Brush("BusyBrush")),
             ServerState.Stopping => ("Stopping", MainViewModel.Brush("BusyBrush")),
             _ => ("Waiting", MainViewModel.Brush("IdleBrush")),
         };
-        Booting = slot.State == ServerState.Starting;
+        Booting = slot.State is ServerState.Starting or ServerState.Registering;
         Headline = slot.State switch
         {
             ServerState.Ready => slot.Ports.Count > 0 ? $"Ready on UDP {string.Join(", ", slot.Ports)}" : "Ready",

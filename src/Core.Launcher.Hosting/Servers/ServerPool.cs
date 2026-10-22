@@ -24,12 +24,21 @@ public interface IServerStarter
     string? Blocker();
 
     IServerInstance Start(int instance);
+
+    /// <summary>
+    /// Whether the backend lists the matchmaking session of the server started at <paramref name="startedAt"/> in this
+    /// slot (it may use the UDP <paramref name="ports"/> it bound). Must not block: the pool asks every tick.
+    /// </summary>
+    SessionCheck Session(int instance, DateTimeOffset startedAt, IReadOnlyList<int> ports);
 }
 
 public enum ServerState
 {
     Waiting,
     Starting,
+
+    /// <summary>Logged "Server ready" but its matchmaking session isn't listed yet, so clients can't find it.</summary>
+    Registering,
     Ready,
     Stopping,
 }
@@ -38,12 +47,18 @@ public sealed record ServerSlotView(int Instance, ServerState State, int? Proces
 
 /// <summary>
 /// Keeps <see cref="Instances"/> servers running while hosting is on: one boots at a time, a server that hasn't logged
-/// "Server ready" within the ready timeout is restarted, and every exit is restarted after a backoff.
+/// "Server ready" within the ready timeout is restarted, and every exit is restarted after a backoff. After "Server ready"
+/// (it has bound its UDP port) a server still has to log in and register its matchmaking session before clients can
+/// find it, so it only counts as ready, and the next one only boots, once the backend lists that session; a backend
+/// without a session listing, or one that doesn't list it within <see cref="SessionTimeout"/>, counts it ready anyway.
 /// </summary>
 public sealed class ServerPool : IDisposable
 {
     private static readonly TimeSpan TickInterval = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan PortRefresh = TimeSpan.FromSeconds(5);
+
+    /// <summary>How long after "Server ready" to wait for the server's matchmaking session (it usually takes 35–75 s).</summary>
+    public static readonly TimeSpan SessionTimeout = TimeSpan.FromSeconds(180);
 
     private readonly IServerStarter _starter;
     private readonly LogChannel _log;
@@ -152,7 +167,7 @@ public sealed class ServerPool : IDisposable
 
         _slots.RemoveAll(slot => slot.Removed);
 
-        if (_slots.Any(slot => slot.State == ServerState.Starting))
+        if (_slots.Any(slot => slot.State is ServerState.Starting or ServerState.Registering))
         {
             foreach (var slot in _slots.Where(slot => slot.Server is null))
             {
@@ -241,12 +256,11 @@ public sealed class ServerPool : IDisposable
         {
             if (server.Ready.IsCompleted)
             {
-                slot.State = ServerState.Ready;
-                slot.Since = now;
-                slot.Failures = 0;
+                slot.State = ServerState.Registering;
+                slot.ServerReadyAt = now;
                 slot.RefreshPorts(now);
-                slot.SetNote(slot.Ports.Count > 0 ? $"UDP {string.Join(", ", slot.Ports)}" : "");
-                _log.Write($"Server {slot.Instance}: ready after {(now - slot.StartedAt).TotalSeconds:0} s{(slot.Ports.Count > 0 ? $" on UDP {string.Join(", ", slot.Ports)}" : "")}");
+                _log.Write($"Server {slot.Instance}: \"Server ready\" after {(now - slot.StartedAt).TotalSeconds:0} s{OnPorts(slot)}; waiting for its matchmaking session");
+                Register(slot, now);
                 return true;
             }
 
@@ -260,6 +274,16 @@ public sealed class ServerPool : IDisposable
             return slot.SetNote($"booting, {(now - slot.StartedAt).TotalSeconds:0} s");
         }
 
+        if (slot.State == ServerState.Registering)
+        {
+            if (now - slot.PortsCheckedAt >= PortRefresh)
+            {
+                slot.RefreshPorts(now);
+            }
+
+            return Register(slot, now);
+        }
+
         if (slot.State == ServerState.Ready && now - slot.PortsCheckedAt >= PortRefresh)
         {
             var before = string.Join(",", slot.Ports);
@@ -269,6 +293,40 @@ public sealed class ServerPool : IDisposable
 
         return false;
     }
+
+    /// <summary>Makes a registering server ready once its session is listed, or when there is no point waiting any longer.</summary>
+    private bool Register(Slot slot, DateTimeOffset now)
+    {
+        var waited = now - slot.ServerReadyAt;
+        switch (_starter.Session(slot.Instance, slot.StartedAt, slot.Ports))
+        {
+            case SessionCheck.Listed:
+                MakeReady(slot, now, $"matchmaking session registered {waited.TotalSeconds:0} s after \"Server ready\"");
+                return true;
+            case SessionCheck.Unsupported:
+                MakeReady(slot, now, "the backend doesn't list matchmaking sessions, so it counts as ready at \"Server ready\"");
+                return true;
+        }
+
+        if (waited >= SessionTimeout)
+        {
+            MakeReady(slot, now, $"no matchmaking session listed {SessionTimeout.TotalSeconds:0} s after \"Server ready\", counting it as ready anyway");
+            return true;
+        }
+
+        return slot.SetNote($"registering its matchmaking session, {waited.TotalSeconds:0} s");
+    }
+
+    private void MakeReady(Slot slot, DateTimeOffset now, string how)
+    {
+        slot.State = ServerState.Ready;
+        slot.Since = now;
+        slot.Failures = 0;
+        slot.SetNote(slot.Ports.Count > 0 ? $"UDP {string.Join(", ", slot.Ports)}" : "");
+        _log.Write($"Server {slot.Instance}: ready after {(now - slot.StartedAt).TotalSeconds:0} s{OnPorts(slot)} ({how})");
+    }
+
+    private static string OnPorts(Slot slot) => slot.Ports.Count > 0 ? $" on UDP {string.Join(", ", slot.Ports)}" : "";
 
     private void Finish(Slot slot, IServerInstance server, DateTimeOffset now)
     {
@@ -350,6 +408,8 @@ public sealed class ServerPool : IDisposable
         public DateTimeOffset? Since { get; set; }
 
         public DateTimeOffset NextStart { get; set; }
+
+        public DateTimeOffset ServerReadyAt { get; set; }
 
         public DateTimeOffset PortsCheckedAt { get; private set; }
 

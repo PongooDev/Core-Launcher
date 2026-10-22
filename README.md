@@ -49,7 +49,7 @@ Everything goes in `%LOCALAPPDATA%\Core-Launcher`; nothing is installed system-w
 
 - **Backend:** installs Core-Backend from its latest release (or its main branch until it has one) with a private Node.js, and runs it on port 5595. It restarts the backend if it exits, and stops it cleanly when you close the launcher. Accounts are kept in `Backend\data` across updates.
 - **Game processes:** the client and every server are created suspended. Each DLL's `LoadLibraryW` is queued on the main thread, so the DLLs load at process start, before `WinMain`; then the process resumes. Every process sits in a job object, so nothing outlives the launcher.
-- **Servers:** keeps the configured number running and boots one at a time. A server that hasn't logged `Server ready` within the ready timeout (180 s) is restarted. A server that exits is restarted after 5 s, doubling up to 60 s while it keeps failing. Each ready server shows the UDP port it bound.
+- **Servers:** keeps the configured number running and boots one at a time. A server that hasn't logged `Server ready` within the ready timeout (180 s) is restarted. After `Server ready` it still logs in and registers its matchmaking session (usually 35–75 s later), so it shows as *Registering* and only counts as ready, and the next server only boots, once Core-Backend lists that session (`/core/api/sessions`); a backend without that listing counts it ready at `Server ready`, and one that doesn't list it within 180 s counts it ready anyway (both are logged). A server that exits is restarted after 5 s, doubling up to 60 s while it keeps failing. Each ready server shows the UDP port it bound.
 
 ## Updates
 

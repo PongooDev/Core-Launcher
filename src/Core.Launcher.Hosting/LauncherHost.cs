@@ -30,6 +30,7 @@ public sealed class LauncherHost : IAsyncDisposable
     private readonly SettingsStore _store;
     private readonly JobObject _job = new();
     private readonly HttpClient _http = GitHubClient.CreateHttpClient();
+    private readonly BackendSessions _sessions = new(BackendSessions.CreateHttpClient(), TimeProvider.System);
     private readonly GameLauncher _launcher;
     private readonly Dictionary<int, LogChannel> _serverLogs = [];
     private readonly Dictionary<string, LogChannel> _clientLogs = new(StringComparer.OrdinalIgnoreCase);
@@ -428,6 +429,7 @@ public sealed class LauncherHost : IAsyncDisposable
 
         await Backend.StopAsync();
         Servers.Dispose();
+        _sessions.Dispose();
         _http.Dispose();
         _job.Dispose();
         Log.Write("Stopped");
@@ -470,5 +472,10 @@ public sealed class LauncherHost : IAsyncDisposable
             output.Write($"(launcher) --- {DateTime.Now:yyyy-MM-dd HH:mm:ss} ---");
             return host._launcher.Start(new GameStart($"Server {instance}", build, build.ServerDlls, arguments, true, output));
         }
+
+        public SessionCheck Session(int instance, DateTimeOffset startedAt, IReadOnlyList<int> ports) =>
+            host.Backend.State == BackendState.Ready && host.Backend.Port is { } port
+                ? host._sessions.Check(port, host.Settings.Servers.LoginFor(instance), startedAt, ports)
+                : SessionCheck.Pending;
     }
 }
