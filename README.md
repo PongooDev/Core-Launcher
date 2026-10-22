@@ -37,6 +37,8 @@ This repository does NOT include Fortnite game files. Core-Backend, a Node.js ru
 3. Press **Install**. The launcher downloads Node.js, Core-Backend and the Core DLLs, then **Continue**.
 4. Press **Play**.
 
+Once a client is running, **Launch another client** on Home starts one more with a username you choose (same build and DLLs, its own login and log); **Running clients** lists them with View log and Close.
+
 The sidebar's **Admin panel** opens Core-Backend's admin panel in your browser (while the backend is running).
 
 **Home** says in one line whether you can play, and when something is wrong it offers the fix (for example "Use the running backend" when another program has the backend's port). **Servers** shows each hosted server and lets you change how many run, **Logs** has every log with Copy and Open logs folder, and **Settings** holds the rest.

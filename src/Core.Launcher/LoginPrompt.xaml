@@ -1,0 +1,23 @@
+<Window x:Class="Core.Launcher.LoginPrompt"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Launch another client" Width="440" SizeToContent="Height" ResizeMode="NoResize"
+        Style="{StaticResource WindowStyle}" WindowStartupLocation="CenterOwner" ShowInTaskbar="False" Icon="Assets/Core.ico">
+    <StackPanel Margin="24,22,24,20">
+        <TextBlock Text="Launch another client" FontFamily="{StaticResource DisplayFont}" FontSize="20" FontWeight="SemiBold" />
+        <TextBlock Text="It starts the same build with its own login. Core-Backend creates the account the first time it's used."
+                   Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,6,0,0" />
+        <TextBlock Text="Username" Style="{StaticResource Muted}" Margin="0,18,0,5" />
+        <TextBox x:Name="Login" FontSize="14" />
+        <TextBlock x:Name="Error" Foreground="{StaticResource BadBrush}" TextWrapping="Wrap" Margin="0,8,0,0" />
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+            <Button Content="Cancel" IsCancel="True" />
+            <Button Margin="8,0,0,0" MinWidth="110" Style="{StaticResource PrimaryButton}" IsDefault="True" Click="OnLaunch">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE768;" Style="{StaticResource Icon}" Foreground="White" FontSize="12" Margin="0,0,8,0" />
+                    <TextBlock Text="Launch" Foreground="White" FontWeight="SemiBold" />
+                </StackPanel>
+            </Button>
+        </StackPanel>
+    </StackPanel>
+</Window>

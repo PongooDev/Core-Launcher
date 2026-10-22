@@ -48,7 +48,6 @@ public sealed partial class MainViewModel : ObservableObject
         _host = host;
         Logs.Add(new LogTabViewModel(host.Log));
         Logs.Add(new LogTabViewModel(host.BackendLog));
-        Logs.Add(new LogTabViewModel(host.ClientLog));
         SelectedLog = Logs[0];
         PlayerName = host.Settings.PlayerName;
         foreach (var line in host.Log.Snapshot().TakeLast(ActivityLines))
@@ -68,6 +67,11 @@ public sealed partial class MainViewModel : ObservableObject
     public string Version => $"v{_host.Updater.Current.ToString(3)}";
 
     public Func<string, string?>? PickFolder { get; set; }
+
+    /// <summary>Asks for the login of another client: (suggested name, validation returning an error or null) → name, or null when cancelled.</summary>
+    public Func<string, Func<string, string?>, string?>? PromptLogin { get; set; }
+
+    public ObservableCollection<ClientRowViewModel> Clients { get; } = [];
 
     public ObservableCollection<BuildSettings> Builds { get; } = [];
 
@@ -100,8 +104,12 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     public partial int Instances { get; set; }
 
+    /// <summary>The player's own client (their player name) is running.</summary>
     [ObservableProperty]
     public partial bool ClientRunning { get; set; }
+
+    [ObservableProperty]
+    public partial bool AnyClientRunning { get; set; }
 
     [ObservableProperty]
     public partial bool CanChangeBuild { get; set; }
@@ -216,7 +224,8 @@ public sealed partial class MainViewModel : ObservableObject
                 }.Where(part => part is not null));
             Hosting = _host.Servers.Enabled;
             Instances = settings.Servers.Instances;
-            ClientRunning = _host.Client is not null;
+            ClientRunning = _host.ClientFor(settings.PlayerName) is not null;
+            RefreshClients();
             CanChangeBuild = !_host.GamesRunning;
             CanCheckForUpdates = !_host.CheckingForUpdates;
             OnPropertyChanged(nameof(PlayLabel));
@@ -230,6 +239,27 @@ public sealed partial class MainViewModel : ObservableObject
         finally
         {
             _syncing = false;
+        }
+    }
+
+    private void RefreshClients()
+    {
+        var clients = _host.Clients;
+        AnyClientRunning = clients.Count > 0;
+        while (Clients.Count > clients.Count)
+        {
+            Clients.RemoveAt(Clients.Count - 1);
+        }
+
+        for (var index = 0; index < clients.Count; ++index)
+        {
+            if (index == Clients.Count)
+            {
+                Clients.Add(new ClientRowViewModel(_host, ShowClientLog));
+            }
+
+            Clients[index].Update(clients[index]);
+            EnsureLog(_host.ClientLog(clients[index].Login));
         }
     }
 
@@ -351,9 +381,11 @@ public sealed partial class MainViewModel : ObservableObject
         string text;
         string brush;
 
-        if (_host.Client is { } client)
+        if (_host.Clients is { Count: > 0 } clients)
         {
-            (text, brush) = ($"In game · {Elapsed(client.StartedAt)}", "GoodBrush");
+            (text, brush) = (clients.Count == 1
+                ? $"In game as {clients[0].Login} · {Elapsed(clients[0].Game.StartedAt)}"
+                : $"{clients.Count} clients in game: {string.Join(", ", clients.Select(client => client.Login))}", "GoodBrush");
         }
         else if (build is null)
         {
@@ -425,13 +457,21 @@ public sealed partial class MainViewModel : ObservableObject
         _statusAction = action;
     }
 
-    private void EnsureServerLog(int instance)
+    private void EnsureServerLog(int instance) => EnsureLog(_host.ServerLog(instance));
+
+    private void EnsureLog(LogChannel channel)
     {
-        var channel = _host.ServerLog(instance);
         if (Logs.All(tab => tab.Channel != channel))
         {
             Logs.Add(new LogTabViewModel(channel));
         }
+    }
+
+    private void ShowClientLog(string login)
+    {
+        var channel = _host.ClientLog(login);
+        SelectedLog = Logs.FirstOrDefault(tab => tab.Channel == channel) ?? SelectedLog;
+        CurrentPage = LauncherPage.Logs;
     }
 
     private void ShowServerLog(int instance)
@@ -536,7 +576,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
         if (ClientRunning)
         {
-            _host.StopClient();
+            _host.StopClient(_host.Settings.PlayerName);
             return;
         }
 
@@ -562,6 +602,38 @@ public sealed partial class MainViewModel : ObservableObject
             Refresh();
         }
     }
+
+    [RelayCommand]
+    private async Task LaunchAnotherClientAsync()
+    {
+        var suggestion = Enumerable.Range(2, 99).Select(number => $"{_host.Settings.PlayerName}{number}").First(name => _host.ClientFor(name) is null);
+        if (PromptLogin?.Invoke(suggestion, ValidateLogin) is not { } login)
+        {
+            return;
+        }
+
+        Message = "";
+        try
+        {
+            await _host.PlayAsync(login);
+            Toast($"Starting a client as {login}", "GoodBrush");
+        }
+        catch (Exception exception)
+        {
+            Message = exception.Message;
+            _host.Log.Write($"Play as {login}: {exception.Message}");
+        }
+        finally
+        {
+            Refresh();
+        }
+    }
+
+    private string? ValidateLogin(string login) =>
+        login.Trim().Length == 0 ? "Enter a username"
+        : login.Contains('"') ? "A username can't contain quotes"
+        : _host.ClientFor(login.Trim()) is not null ? $"{login.Trim()} is already in the game"
+        : null;
 
     [RelayCommand]
     private void RunStatusAction() => _statusAction?.Invoke();
@@ -783,6 +855,27 @@ public sealed partial class ServerRowViewModel(ServerPool pool, Action<int> show
 
     [RelayCommand]
     private void ViewLog() => showLog(Instance);
+}
+
+public sealed partial class ClientRowViewModel(LauncherHost host, Action<string> showLog) : ObservableObject
+{
+    [ObservableProperty]
+    public partial string Login { get; set; } = "";
+
+    [ObservableProperty]
+    public partial string Details { get; set; } = "";
+
+    public void Update(ClientSession session)
+    {
+        Login = session.Login;
+        Details = $"pid {session.Game.Id} · up {MainViewModel.Elapsed(session.Game.StartedAt)}";
+    }
+
+    [RelayCommand]
+    private void Close() => host.StopClient(Login);
+
+    [RelayCommand]
+    private void ViewLog() => showLog(Login);
 }
 
 public sealed class LogTabViewModel(LogChannel channel)

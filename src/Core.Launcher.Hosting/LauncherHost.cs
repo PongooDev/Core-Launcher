@@ -11,6 +11,9 @@ using Core.Launcher.Hosting.Settings;
 
 namespace Core.Launcher.Hosting;
 
+/// <summary>A running game client and the account it logged in with.</summary>
+public sealed record ClientSession(string Login, RunningGame Game);
+
 /// <summary>One line of setup or update progress: which component, and what is happening to it.</summary>
 public sealed record ComponentProgress(string Component, string Status, bool Failed = false);
 
@@ -29,6 +32,8 @@ public sealed class LauncherHost : IAsyncDisposable
     private readonly HttpClient _http = GitHubClient.CreateHttpClient();
     private readonly GameLauncher _launcher;
     private readonly Dictionary<int, LogChannel> _serverLogs = [];
+    private readonly Dictionary<string, LogChannel> _clientLogs = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<ClientSession> _clients = [];
     private readonly Lock _gate = new();
     private readonly SemaphoreSlim _updating = new(1, 1);
     private readonly CancellationTokenSource _shutdown = new();
@@ -41,7 +46,6 @@ public sealed class LauncherHost : IAsyncDisposable
         _store = new SettingsStore(paths.Settings);
         Log = new LogChannel("Launcher", Path.Combine(paths.Logs, "Launcher.log"), timestamp: true);
         BackendLog = new LogChannel("Backend", Path.Combine(paths.Logs, "Backend.log"));
-        ClientLog = new LogChannel("Client");
 
         try
         {
@@ -74,8 +78,6 @@ public sealed class LauncherHost : IAsyncDisposable
 
     public LogChannel BackendLog { get; }
 
-    public LogChannel ClientLog { get; }
-
     public DllStore Dlls { get; }
 
     public NodeRuntime Node { get; }
@@ -88,18 +90,43 @@ public sealed class LauncherHost : IAsyncDisposable
 
     public ServerPool Servers { get; }
 
-    public RunningGame? Client { get; private set; }
+    public IReadOnlyList<ClientSession> Clients
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return [.. _clients];
+            }
+        }
+    }
+
+    public ClientSession? ClientFor(string login) => Clients.FirstOrDefault(client => string.Equals(client.Login, login, StringComparison.OrdinalIgnoreCase));
 
     public bool CheckingForUpdates => !_updates.IsCompleted;
 
     /// <summary>A newer managed Core-Backend installed while the old one runs; it is used from the backend's next start.</summary>
     public string? BackendUpdateReady { get; private set; }
 
-    public bool GamesRunning => Client is not null || Servers.Slots.Any(slot => slot.ProcessId is not null);
+    public bool GamesRunning => Clients.Count > 0 || Servers.Slots.Any(slot => slot.ProcessId is not null);
 
     public bool AnythingRunning => GamesRunning || Backend.ProcessId is not null;
 
     public event Action? Changed;
+
+    public LogChannel ClientLog(string login)
+    {
+        lock (_gate)
+        {
+            if (!_clientLogs.TryGetValue(login, out var channel))
+            {
+                channel = new LogChannel($"Client {login}");
+                _clientLogs[login] = channel;
+            }
+
+            return channel;
+        }
+    }
 
     public LogChannel ServerLog(int instance)
     {
@@ -306,22 +333,32 @@ public sealed class LauncherHost : IAsyncDisposable
         SaveSettings(updated);
     }
 
-    /// <summary>Starts the client; throws with a message for the user when it can't.</summary>
-    public async Task PlayAsync()
+    /// <summary>
+    /// Starts a client logged in as <paramref name="login"/> (the player's name when null), beside any already running;
+    /// throws with a message for the user when it can't. One client per account: a second login would end the first
+    /// one's session.
+    /// </summary>
+    public async Task PlayAsync(string? login = null)
     {
-        if (Client is not null)
+        var settings = Settings;
+        login = (login ?? settings.PlayerName).Trim();
+        if (ClientFor(login) is not null)
         {
-            return;
+            throw new InvalidOperationException($"{login} is already in the game");
         }
 
-        var settings = Settings;
+        if (login.Contains('"'))
+        {
+            throw new InvalidOperationException("A player name can't contain quotes");
+        }
+
         var build = settings.FindSelectedBuild() ?? throw new InvalidOperationException("Add a build first (Settings → Builds)");
         if (!KnownBuilds.CanPlay(build))
         {
             throw new InvalidOperationException(KnownBuilds.NotSupported(build));
         }
 
-        if (settings.PlayerName.Length == 0)
+        if (login.Length == 0)
         {
             throw new InvalidOperationException("Enter a player name");
         }
@@ -337,19 +374,28 @@ public sealed class LauncherHost : IAsyncDisposable
             throw new InvalidOperationException($"Core-Backend isn't ready: {Backend.Error ?? Backend.State.ToString()}");
         }
 
-        ClientLog.Write($"(launcher) --- {DateTime.Now:yyyy-MM-dd HH:mm:ss} ---");
-        var client = _launcher.Start(new GameStart("Client", build, build.ClientDlls, LaunchArguments.Client(build, port, settings.PlayerName), false, ClientLog));
-        Client = client;
-        OnChanged();
-        _ = client.Finished.ContinueWith(_ =>
+        var output = ClientLog(login);
+        output.Write($"(launcher) --- {DateTime.Now:yyyy-MM-dd HH:mm:ss} ---");
+        var session = new ClientSession(login, _launcher.Start(new GameStart($"Client {login}", build, build.ClientDlls, LaunchArguments.Client(build, port, login), false, output)));
+        lock (_gate)
         {
-            client.Dispose();
-            Client = null;
+            _clients.Add(session);
+        }
+
+        OnChanged();
+        _ = session.Game.Finished.ContinueWith(_ =>
+        {
+            session.Game.Dispose();
+            lock (_gate)
+            {
+                _clients.Remove(session);
+            }
+
             OnChanged();
         }, TaskScheduler.Default);
     }
 
-    public void StopClient() => Client?.Terminate();
+    public void StopClient(string login) => ClientFor(login)?.Game.Terminate();
 
     public async ValueTask DisposeAsync()
     {
@@ -357,11 +403,13 @@ public sealed class LauncherHost : IAsyncDisposable
         _shutdown.Cancel();
         await _updates;
         await Servers.StopAllAsync(ShutdownTimeout);
-        if (Client is { } client)
+        var clients = Clients;
+        foreach (var client in clients)
         {
-            client.Terminate();
-            await Task.WhenAny(client.Finished, Task.Delay(ShutdownTimeout));
+            client.Game.Terminate();
         }
+
+        await Task.WhenAny(Task.WhenAll(clients.Select(client => client.Game.Finished)), Task.Delay(ShutdownTimeout));
 
         await Backend.StopAsync();
         Servers.Dispose();

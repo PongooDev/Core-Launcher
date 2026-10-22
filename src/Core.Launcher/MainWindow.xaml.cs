@@ -17,6 +17,7 @@ public partial class MainWindow : Window
         _model = model;
         DataContext = model;
         model.PickFolder = PickFolder;
+        model.PromptLogin = (suggestion, validate) => LoginPrompt.Ask(this, suggestion, validate);
     }
 
     private string? PickFolder(string title)
