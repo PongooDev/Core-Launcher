@@ -281,9 +281,20 @@ public sealed class LauncherHost : IAsyncDisposable
     public async Task RestartBackendAsync()
     {
         await Backend.StopAsync();
-        if (Settings.Backend.Source == BackendSource.Managed && BackendPackage.Installed is null)
+        if (Settings.Backend.Source == BackendSource.Managed)
         {
-            await UpdateComponentsAsync(null, checkLauncher: false, CancellationToken.None);
+            try
+            {
+                await UpdateComponentsAsync(null, checkLauncher: false, _shutdown.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch (Exception exception)
+            {
+                Log.Write($"Checking for updates failed: {exception}");
+            }
         }
 
         BackendUpdateReady = null;
