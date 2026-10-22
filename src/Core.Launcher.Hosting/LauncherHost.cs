@@ -421,6 +421,10 @@ public sealed class LauncherHost : IAsyncDisposable
         }
 
         await Task.WhenAny(Task.WhenAll(clients.Select(client => client.Game.Finished)), Task.Delay(ShutdownTimeout));
+        lock (_gate)
+        {
+            _clients.RemoveAll(client => client.Game.Finished.IsCompleted);
+        }
 
         await Backend.StopAsync();
         Servers.Dispose();
