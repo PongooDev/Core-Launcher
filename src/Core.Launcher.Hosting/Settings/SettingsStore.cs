@@ -104,6 +104,14 @@ public sealed class SettingsStore
         settings.Servers.Instances = Math.Clamp(settings.Servers.Instances, 0, MaxInstances);
         settings.Servers.ReadyTimeoutSeconds = Math.Max(0, settings.Servers.ReadyTimeoutSeconds);
         settings.Backend.Port = Math.Clamp(settings.Backend.Port, 0, 65535);
+        settings.Backend.Remote ??= new RemoteBackend();
+        settings.Backend.SavedRemotes ??= [];
+        settings.Backend.SavedRemotes.RemoveAll(remote => remote is null);
+        foreach (var remote in settings.Backend.SavedRemotes.Append(settings.Backend.Remote))
+        {
+            remote.Name = remote.Name?.Trim() ?? "";
+            remote.Address = remote.Address?.Trim() ?? "";
+        }
         foreach (var build in settings.Builds)
         {
             build.ClientDlls ??= [];

@@ -31,6 +31,7 @@ public sealed class LauncherHost : IAsyncDisposable
     private readonly JobObject _job = new();
     private readonly HttpClient _http = GitHubClient.CreateHttpClient();
     private readonly BackendSessions _sessions = new(BackendSessions.CreateHttpClient(), TimeProvider.System);
+    private readonly HttpClient _remoteCheck = RemoteBackendCheck.CreateHttpClient();
     private readonly GameLauncher _launcher;
     private readonly Dictionary<int, LogChannel> _serverLogs = [];
     private readonly Dictionary<string, LogChannel> _clientLogs = new(StringComparer.OrdinalIgnoreCase);
@@ -112,6 +113,12 @@ public sealed class LauncherHost : IAsyncDisposable
     public bool GamesRunning => Clients.Count > 0 || Servers.Slots.Any(slot => slot.ProcessId is not null);
 
     public bool AnythingRunning => GamesRunning || Backend.ProcessId is not null;
+
+    /// <summary>Playing on a friend's backend: nothing is hosted here.</summary>
+    public bool UsingRemote => Settings.Backend.UseRemote;
+
+    /// <summary>The launcher installs and runs Core-Backend itself (not a folder, an outside one or a friend's).</summary>
+    private static bool ManagesBackend(BackendSettings settings) => !settings.UseRemote && settings.Source == BackendSource.Managed;
 
     public event Action? Changed;
 
@@ -218,7 +225,7 @@ public sealed class LauncherHost : IAsyncDisposable
             Dlls.Configure(settings.Dlls);
             await Dlls.RefreshAsync(Report(progress, DllComponent), cancellation);
 
-            if (settings.Backend.Source != BackendSource.Managed)
+            if (!ManagesBackend(settings.Backend))
             {
                 return true;
             }
@@ -255,23 +262,45 @@ public sealed class LauncherHost : IAsyncDisposable
         progress is null ? null : new Progress<string>(status => progress.Report(new ComponentProgress(component, status)));
 
     /// <summary>What the backend settings point at right now.</summary>
-    public BackendTarget TargetFor(BackendSettings settings) => settings.Source switch
+    public BackendTarget TargetFor(BackendSettings settings)
     {
-        BackendSource.External => BackendTarget.Running(settings.Port),
-        BackendSource.Folder => new(true, settings.Node, settings.Folder, settings.DataFolder.Length > 0 ? settings.DataFolder : Path.Combine(settings.Folder, "data"), settings.Port),
-        _ => BackendPackage.Installed is { } installed && Node.Executable is { } node
-            ? new(true, node, installed.Folder, settings.DataFolder.Length > 0 ? settings.DataFolder : Paths.BackendData, settings.Port)
-            : new(true, "", "", "", settings.Port, "Core-Backend isn't installed yet; Check for updates installs it"),
-    };
+        if (settings.UseRemote)
+        {
+            return BackendEndpoint.TryParse(settings.Remote.Address, out var friend, out var problem)
+                ? BackendTarget.Friend(friend, settings.Remote.Name)
+                : BackendTarget.FriendProblem(settings.Remote.Address.Length == 0 ? "Enter your friend's backend address (Settings → Backend)" : problem, settings.Remote.Name);
+        }
 
-    public string BackendDescription => Settings.Backend.Source switch
+        return settings.Source switch
+        {
+            BackendSource.External => BackendTarget.Running(settings.Port),
+            BackendSource.Folder => new(true, settings.Node, settings.Folder, settings.DataFolder.Length > 0 ? settings.DataFolder : Path.Combine(settings.Folder, "data"), settings.Port),
+            _ => BackendPackage.Installed is { } installed && Node.Executable is { } node
+                ? new(true, node, installed.Folder, settings.DataFolder.Length > 0 ? settings.DataFolder : Paths.BackendData, settings.Port)
+                : new(true, "", "", "", settings.Port, "Core-Backend isn't installed yet; Check for updates installs it"),
+        };
+    }
+
+    public string BackendDescription
     {
-        BackendSource.External => $"Already running on port {Settings.Backend.Port}",
-        BackendSource.Folder => $"Folder: {Settings.Backend.Folder}",
-        _ => BackendPackage.Installed is { } installed
-            ? $"Core-Backend {installed.Id}, Node.js {Node.Version}{(BackendUpdateReady is { } ready ? $" ({ready} installed, restart the backend to use it)" : "")}"
-            : "Core-Backend not installed yet",
-    };
+        get
+        {
+            var backend = Settings.Backend;
+            if (backend.UseRemote)
+            {
+                return $"{(backend.Remote.Name.Length > 0 ? backend.Remote.Name + "'s backend" : "a friend's backend")} at {backend.Remote.Address}";
+            }
+
+            return backend.Source switch
+            {
+                BackendSource.External => $"Already running on port {backend.Port}",
+                BackendSource.Folder => $"Folder: {backend.Folder}",
+                _ => BackendPackage.Installed is { } installed
+                    ? $"Core-Backend {installed.Id}, Node.js {Node.Version}{(BackendUpdateReady is { } ready ? $" ({ready} installed, restart the backend to use it)" : "")}"
+                    : "Core-Backend not installed yet",
+            };
+        }
+    }
 
     public void StartBackend()
     {
@@ -282,7 +311,7 @@ public sealed class LauncherHost : IAsyncDisposable
     public async Task RestartBackendAsync()
     {
         await Backend.StopAsync();
-        if (Settings.Backend.Source == BackendSource.Managed)
+        if (ManagesBackend(Settings.Backend))
         {
             try
             {
@@ -335,7 +364,22 @@ public sealed class LauncherHost : IAsyncDisposable
         }
 
         Servers.Configure(settings.Servers.Instances, TimeSpan.FromSeconds(settings.Servers.ReadyTimeoutSeconds));
-        Servers.SetEnabled(settings.Servers.Enabled);
+        // On a friend's backend their servers host the matches: servers here would log in to it with the same accounts
+        // as theirs (CoreServer1, ...) and take over their sessions.
+        Servers.SetEnabled(settings.Servers.Enabled && !settings.Backend.UseRemote);
+    }
+
+    /// <summary>Checks a friend's backend address without switching to it (Settings → Test connection).</summary>
+    public async Task<RemoteBackendStatus> CheckRemoteAsync(string address, CancellationToken cancellation = default)
+    {
+        if (!BackendEndpoint.TryParse(address, out var endpoint, out var problem))
+        {
+            return new RemoteBackendStatus(false, problem);
+        }
+
+        var status = await RemoteBackendCheck.CheckAsync(_remoteCheck, endpoint, cancellation);
+        Log.Write($"Checked {endpoint}: {status.Message}");
+        return status;
     }
 
     public void SetHosting(bool enabled)
@@ -381,14 +425,21 @@ public sealed class LauncherHost : IAsyncDisposable
             StartBackend();
         }
 
-        if (!await Backend.WaitReadyAsync(BackendReadyTimeout) || Backend.Port is not { } port)
+        if (!await Backend.WaitReadyAsync(BackendReadyTimeout) || Backend.Endpoint is not { } backend)
         {
-            throw new InvalidOperationException($"Core-Backend isn't ready: {Backend.Error ?? Backend.State.ToString()}");
+            throw new InvalidOperationException(settings.Backend.UseRemote
+                ? $"Can't play on {BackendDescription}: {Backend.Error ?? Backend.State.ToString()}"
+                : $"Core-Backend isn't ready: {Backend.Error ?? Backend.State.ToString()}");
         }
 
         var output = ClientLog(login);
         output.Write($"(launcher) --- {DateTime.Now:yyyy-MM-dd HH:mm:ss} ---");
-        var session = new ClientSession(login, _launcher.Start(new GameStart($"Client {login}", build, build.ClientDlls, LaunchArguments.Client(build, port, login), false, output)));
+        if (settings.Backend.UseRemote)
+        {
+            output.Write($"(launcher) Playing on {BackendDescription} ({backend.Url})");
+        }
+
+        var session = new ClientSession(login, _launcher.Start(new GameStart($"Client {login}", build, build.ClientDlls, LaunchArguments.Client(build, backend, login), false, output)));
         lock (_gate)
         {
             _clients.Add(session);
@@ -427,9 +478,10 @@ public sealed class LauncherHost : IAsyncDisposable
             _clients.RemoveAll(client => client.Game.Finished.IsCompleted);
         }
 
-        await Backend.StopAsync();
+        await Backend.DisposeAsync();
         Servers.Dispose();
         _sessions.Dispose();
+        _remoteCheck.Dispose();
         _http.Dispose();
         _job.Dispose();
         Log.Write("Stopped");
@@ -455,12 +507,17 @@ public sealed class LauncherHost : IAsyncDisposable
                 return KnownBuilds.NotSupported(build);
             }
 
+            if (host.Settings.Backend.UseRemote)
+            {
+                return "playing on a friend's backend";
+            }
+
             if (host.CheckingForUpdates)
             {
                 return "checking for updates";
             }
 
-            return host.Backend.State == BackendState.Ready && host.Backend.Port is not null ? null : "waiting for the backend";
+            return host.Backend.State == BackendState.Ready && host.Backend.Port is not null && !host.Backend.Target.Remote ? null : "waiting for the backend";
         }
 
         public IServerInstance Start(int instance)
@@ -474,7 +531,7 @@ public sealed class LauncherHost : IAsyncDisposable
         }
 
         public SessionCheck Session(int instance, DateTimeOffset startedAt, IReadOnlyList<int> ports) =>
-            host.Backend.State == BackendState.Ready && host.Backend.Port is { } port
+            host.Backend.State == BackendState.Ready && host.Backend.Port is { } port && !host.Backend.Target.Remote
                 ? host._sessions.Check(port, host.Settings.Servers.LoginFor(instance), startedAt, ports)
                 : SessionCheck.Pending;
     }

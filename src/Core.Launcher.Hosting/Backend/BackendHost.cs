@@ -8,10 +8,28 @@ using Core.Launcher.Hosting.Native;
 
 namespace Core.Launcher.Hosting.Backend;
 
-/// <summary>What the backend host runs. With <see cref="Start"/> false it only watches a backend already running on <see cref="Port"/>.</summary>
+/// <summary>
+/// What the backend host runs. With <see cref="Start"/> false it only watches a backend already running on <see cref="Port"/>:
+/// this PC's, or with <see cref="Remote"/> a friend's at <see cref="Host"/>.
+/// </summary>
 public sealed record BackendTarget(bool Start, string Node, string Folder, string DataFolder, int Port, string? Problem = null)
 {
+    public string Host { get; init; } = "127.0.0.1";
+
+    /// <summary>A friend's backend: checked with GET /core/api/status, and it has no admin panel for this PC.</summary>
+    public bool Remote { get; init; }
+
+    /// <summary>The friend's name for it, for messages.</summary>
+    public string RemoteName { get; init; } = "";
+
+    public BackendEndpoint Endpoint => new(Host, Port);
+
     public static BackendTarget Running(int port) => new(false, "", "", "", port);
+
+    public static BackendTarget Friend(BackendEndpoint endpoint, string name) =>
+        new(false, "", "", "", endpoint.Port) { Host = endpoint.Host, Remote = true, RemoteName = name };
+
+    public static BackendTarget FriendProblem(string problem, string name) => new(false, "", "", "", 0, problem) { Remote = true, RemoteName = name };
 }
 
 public enum BackendState
@@ -33,25 +51,38 @@ public sealed partial class BackendHost : IAsyncDisposable
     private static readonly TimeSpan StopTimeout = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan ProbeInterval = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan StableAfter = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan RemoteProbeInterval = TimeSpan.FromSeconds(5);
 
     private readonly JobObject _job;
     private readonly LogChannel _output;
     private readonly LogChannel _log;
     private readonly Lock _gate = new();
+    private readonly HttpClient _http;
     private BackendTarget _target = BackendTarget.Running(5595);
     private CancellationTokenSource? _stop;
     private Task _run = Task.CompletedTask;
 
-    public BackendHost(JobObject job, LogChannel output, LogChannel log)
+    /// <param name="http">Checks a friend's backend; null makes one (tests pass their own handler).</param>
+    public BackendHost(JobObject job, LogChannel output, LogChannel log, HttpClient? http = null)
     {
         _job = job;
         _output = output;
         _log = log;
+        _http = http ?? RemoteBackendCheck.CreateHttpClient();
     }
 
     public BackendState State { get; private set; } = BackendState.Stopped;
 
     public int? Port { get; private set; }
+
+    /// <summary>The host the backend in use answers on: 127.0.0.1, or a friend's.</summary>
+    public string Host { get; private set; } = "127.0.0.1";
+
+    /// <summary>Where clients reach the backend in use, while it is ready.</summary>
+    public BackendEndpoint? Endpoint => State == BackendState.Ready && Port is { } port ? new BackendEndpoint(Host, port) : null;
+
+    /// <summary>The friend's backend's last check, while one is in use.</summary>
+    public RemoteBackendStatus? RemoteStatus { get; private set; }
 
     public string? Error { get; private set; }
 
@@ -61,7 +92,7 @@ public sealed partial class BackendHost : IAsyncDisposable
     public const string AdminPath = "/admin";
 
     /// <summary>The admin panel of the backend in use (started here or already running), or null while it isn't reachable.</summary>
-    public string? AdminPanelUrl => State == BackendState.Ready && Port is { } port ? $"http://127.0.0.1:{port}{AdminPath}" : null;
+    public string? AdminPanelUrl => State == BackendState.Ready && Port is { } port && !Target.Remote ? $"http://127.0.0.1:{port}{AdminPath}" : null;
 
     public bool Running => !_run.IsCompleted;
 
@@ -202,6 +233,7 @@ public sealed partial class BackendHost : IAsyncDisposable
         info.ArgumentList.Add(target.DataFolder);
 
         Port = null;
+        Host = "127.0.0.1";
         Set(BackendState.Starting, null);
         _log.Write($"Backend: starting {target.Node} {string.Join(' ', info.ArgumentList.Select(Processes.CommandLine.Quote))} in {target.Folder}");
 
@@ -296,6 +328,13 @@ public sealed partial class BackendHost : IAsyncDisposable
 
     private async Task WatchAsync(BackendTarget target, CancellationToken stop)
     {
+        if (target.Remote)
+        {
+            await WatchFriendAsync(target, stop);
+            return;
+        }
+
+        Host = "127.0.0.1";
         Port = target.Port;
         _log.Write($"Backend: using the one already running on port {target.Port}");
         while (!stop.IsCancellationRequested)
@@ -313,6 +352,56 @@ public sealed partial class BackendHost : IAsyncDisposable
         }
 
         Port = null;
+        Set(BackendState.Stopped, null);
+    }
+
+    /// <summary>Checks a friend's backend now and then, so Home can say whether it is up before the game starts.</summary>
+    private async Task WatchFriendAsync(BackendTarget target, CancellationToken stop)
+    {
+        RemoteStatus = null;
+        if (target.Problem is { } problem)
+        {
+            Fail(problem);
+            return;
+        }
+
+        Host = target.Host;
+        Port = target.Port;
+        _log.Write($"Backend: using {(target.RemoteName.Length > 0 ? target.RemoteName + "'s" : "a friend's")} backend at {target.Endpoint}");
+        Set(BackendState.Starting, null);
+        string? reported = null;
+        while (!stop.IsCancellationRequested)
+        {
+            RemoteBackendStatus status;
+            try
+            {
+                status = await RemoteBackendCheck.CheckAsync(_http, target.Endpoint, stop);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+
+            RemoteStatus = status;
+            if (status.Message != reported)
+            {
+                reported = status.Message;
+                _log.Write($"Backend: {status.Message}");
+            }
+
+            Set(status.Reachable ? BackendState.Ready : BackendState.Unreachable, status.Reachable ? null : status.Message);
+            try
+            {
+                await Task.Delay(RemoteProbeInterval, stop);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+        }
+
+        Port = null;
+        RemoteStatus = null;
         Set(BackendState.Stopped, null);
     }
 
@@ -375,7 +464,11 @@ public sealed partial class BackendHost : IAsyncDisposable
         Changed?.Invoke();
     }
 
-    public async ValueTask DisposeAsync() => await StopAsync();
+    public async ValueTask DisposeAsync()
+    {
+        await StopAsync();
+        _http.Dispose();
+    }
 
     [GeneratedRegex(@"Listening on port (\d+)")]
     private static partial Regex ListeningLine();

@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Core.Launcher.Hosting.Dlls;
 
 namespace Core.Launcher.Hosting.Settings;
@@ -99,6 +100,32 @@ public sealed class BackendSettings
 
     /// <summary>Empty uses the launcher's Backend\data for the managed backend, or &lt;Folder&gt;\data (the folder npm start uses).</summary>
     public string DataFolder { get; set; } = "";
+
+    /// <summary>
+    /// Play on a friend's backend (<see cref="Remote"/>) instead of this PC's: no backend runs here, clients are sent to
+    /// theirs, and this PC hosts no servers. <see cref="Source"/> stays what "my own backend" means.
+    /// </summary>
+    public bool UseRemote { get; set; }
+
+    /// <summary>The friend's backend in use when <see cref="UseRemote"/> is on.</summary>
+    public RemoteBackend Remote { get; set; } = new();
+
+    /// <summary>Friends' backends the player has saved, to switch between on Home.</summary>
+    public List<RemoteBackend> SavedRemotes { get; set; } = [];
+}
+
+/// <summary>A friend's Core-Backend: a name for it and its address, host or IP with an optional :port (5595 when left out).</summary>
+public sealed class RemoteBackend
+{
+    public string Name { get; set; } = "";
+
+    public string Address { get; set; } = "";
+
+    /// <summary>The name, or the address when it has none.</summary>
+    [JsonIgnore]
+    public string DisplayName => Name.Length > 0 ? Name : Address;
+
+    public RemoteBackend Copy() => new() { Name = Name, Address = Address };
 }
 
 public sealed class ServerSettings

@@ -107,6 +107,14 @@ public sealed class BackendHostTests
             Assert.True(panel.IsSuccessStatusCode, $"GET {host.AdminPanelUrl} answered {(int)panel.StatusCode}");
         }
 
+        // What a friend's launcher checks before playing on it.
+        using (var http = RemoteBackendCheck.CreateHttpClient())
+        {
+            var status = await RemoteBackendCheck.CheckAsync(http, BackendEndpoint.Local(host.Port!.Value), TestContext.Current.CancellationToken);
+            Assert.True(status.Reachable, status.Message);
+            Assert.NotNull(status.Version);
+        }
+
         await host.StopAsync();
         Assert.Equal(BackendState.Stopped, host.State);
         Assert.Null(host.ProcessId);
