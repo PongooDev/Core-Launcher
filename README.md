@@ -17,6 +17,7 @@ This repository does NOT include Fortnite game files. Core-Backend, a Node.js ru
 ## Contents
 
 - [Getting started](#getting-started)
+- [Play with friends](#play-with-friends)
 - [What it does](#what-it-does)
 - [Updates](#updates)
 - [Settings](#settings)
@@ -44,6 +45,38 @@ The sidebar's **Admin panel** opens Core-Backend's admin panel in your browser (
 **Home** says in one line whether you can play, and when something is wrong it offers the fix (for example "Use the running backend" when another program has the backend's port). **Servers** shows each hosted server and lets you change how many run, **Logs** has every log with Copy and Open logs folder, and **Settings** holds the rest.
 
 Everything goes in `%LOCALAPPDATA%\Core-Launcher`; nothing is installed system-wide.
+
+## Play with friends
+
+One of you hosts: their launcher runs Core-Backend and the gameservers as usual. Everyone else joins the host's
+backend instead of running their own.
+
+**The host:**
+
+1. Open the **Admin panel** (sidebar) → **Friends** and press **Turn on remote access**. Core-Backend only accepts
+   connections from your own PC until you do. Allow Node.js through Windows Firewall if it asks, and Fortnite when your
+   servers start.
+2. For friends on the internet, forward these ports on your router to your PC (same numbers on both sides):
+   TCP `5595` (the backend), UDP `7777` and up (one game port per server) and UDP `15000` and up (one beacon port per
+   server). The Friends page lists the exact ports your running servers use. Friends on your network or on a VPN
+   (Tailscale, ZeroTier, Hamachi, Radmin) need no forwarding.
+3. Give your friends your address: your public IP for the internet, or the network/VPN address the Friends page shows,
+   e.g. `203.0.113.7` (add `:port` if your backend doesn't use 5595).
+
+**A friend:**
+
+1. Settings → Backend → **A friend's backend**. Enter a name and the host's address, press **Test connection**, then
+   **Save to list** and **Save**. (Or pick a saved friend under **Play on** on Home; **Join a friend** goes to the same
+   settings.)
+2. Press **Play**. You log in to the host's backend with your player name (a new account there the first time), and
+   matchmaking sends you to the host's servers.
+
+While you play on a friend's backend the launcher runs no backend and hosts no servers (they would log in with the same
+server accounts as the host's), and the admin panel stays on the host's PC. You need the same Fortnite build as the
+host. Choose **My own backend** to go back.
+
+Core doesn't check passwords, so anyone who can reach a host's backend can log in with any name: hosts should only
+share the address with people they trust.
 
 ## What it does
 
@@ -74,6 +107,7 @@ Settings are saved in `%LOCALAPPDATA%\Core-Launcher\settings.json`.
 | Builds | | Folder, executable, client and server arguments, `-httpproxy`, and which DLLs the client and servers load |
 | DLLs | Latest `PongooDev/CoreV2` release | Or a local folder with `Core.dll`, `CoreClient.dll`, `CoreRedirect.dll` |
 | Backend | Installed by the launcher | Or your own Core-Backend folder, or one that is already running |
+| Play on | My own backend | Or a friend's backend: a name and an address (`host` or `host:port`, port 5595 by default), with a saved list |
 | Port | `5595` | `0` lets the backend pick a free port |
 | Data folder | `Backend\data` | Your own folder uses its `data` folder, the one `npm start` uses |
 | Host servers | On | Autohost on or off |
@@ -81,7 +115,7 @@ Settings are saved in `%LOCALAPPDATA%\Core-Launcher\settings.json`.
 | Ready timeout | `180` s | `0` waits forever |
 | Server login | `CoreServer{n}` | `{n}` is the server's number, so each server has its own account |
 
-The launcher adds `-AUTH_LOGIN`, `-AUTH_PASSWORD` and `-AUTH_TYPE=epic` itself. It adds `-httpproxy=127.0.0.1:<port>` when the build uses it, `-CoreBackend=http://127.0.0.1:<port>` for processes that load `CoreRedirect.dll`, and `-nullrhi -unattended` for servers (no renderer, and engine message boxes are logged instead of waiting for a click, as dedicated servers run).
+The launcher adds `-AUTH_LOGIN`, `-AUTH_PASSWORD` and `-AUTH_TYPE=epic` itself. It adds `-httpproxy=127.0.0.1:<port>` when the build uses it, `-CoreBackend=http://127.0.0.1:<port>` for processes that load `CoreRedirect.dll` (both with the friend's address instead when you play on a friend's backend), and `-nullrhi -unattended` for servers (no renderer, and engine message boxes are logged instead of waiting for a click, as dedicated servers run).
 
 ## Logs
 
