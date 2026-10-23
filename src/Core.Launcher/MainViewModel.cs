@@ -83,6 +83,22 @@ public sealed partial class MainViewModel : ObservableObject
 
     public ObservableCollection<ToastViewModel> Toasts { get; } = [];
 
+    /// <summary>Home's "Play on" list: this PC's backend, then each saved friend's.</summary>
+    public ObservableCollection<BackendChoice> BackendChoices { get; } = [];
+
+    [ObservableProperty]
+    public partial BackendChoice? SelectedBackendChoice { get; set; }
+
+    /// <summary>Playing on a friend's backend: no backend or servers run here.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanHost))]
+    public partial bool UsingRemote { get; set; }
+
+    public bool CanHost => !UsingRemote;
+
+    [ObservableProperty]
+    public partial string HostingOffText { get; set; } = "";
+
     [ObservableProperty]
     public partial LauncherPage CurrentPage { get; set; }
 
@@ -224,6 +240,11 @@ public sealed partial class MainViewModel : ObservableObject
                 }.Where(part => part is not null));
             Hosting = _host.Servers.Enabled;
             Instances = settings.Servers.Instances;
+            UsingRemote = settings.Backend.UseRemote;
+            HostingOffText = UsingRemote
+                ? $"You're playing on {_host.BackendDescription}: its servers host the matches. Switch to your own backend to host here."
+                : "Turn on Host servers to keep game servers ready for matches.";
+            RefreshBackendChoices(settings.Backend);
             ClientRunning = _host.ClientFor(settings.PlayerName) is not null;
             RefreshClients();
             CanChangeBuild = !_host.GamesRunning;
@@ -297,7 +318,8 @@ public sealed partial class MainViewModel : ObservableObject
 
         var ready = slots.Count(slot => slot.State == ServerState.Ready);
         ServersSummary = _host.Servers.Enabled ? $"{ready} / {slots.Count} ready" : "Off";
-        ServersDetail = !_host.Servers.Enabled ? "Hosting is off"
+        ServersDetail = UsingRemote ? "Off while you play on a friend's backend"
+            : !_host.Servers.Enabled ? "Hosting is off"
             : slots.FirstOrDefault(slot => slot.State == ServerState.Starting) is { } booting ? $"Server {booting.Instance} is booting"
             : slots.FirstOrDefault(slot => slot.State == ServerState.Registering) is { } registering ? $"Server {registering.Instance} is registering its matchmaking session"
             : slots.FirstOrDefault(slot => slot.ProcessId is null) is { } waiting ? Capitalize(waiting.Note)
@@ -310,17 +332,24 @@ public sealed partial class MainViewModel : ObservableObject
         var backend = _host.Backend;
         BackendRunning = backend.Running;
         CanOpenAdminPanel = backend.AdminPanelUrl is not null;
-        AdminPanelHint = backend.AdminPanelUrl is { } url ? $"Open Core-Backend's admin panel ({url})" : "The admin panel opens once Core-Backend is running";
-        (BackendSummary, BackendBrush) = backend.State switch
+        AdminPanelHint = backend.AdminPanelUrl is { } url ? $"Open Core-Backend's admin panel ({url})"
+            : _host.Settings.Backend.UseRemote ? "A friend's admin panel only opens on their PC"
+            : "The admin panel opens once Core-Backend is running";
+        var remote = _host.Settings.Backend.UseRemote;
+        (BackendSummary, BackendBrush) = (remote, backend.State) switch
         {
-            BackendState.Ready => ("Running", Brush("GoodBrush")),
-            BackendState.Starting => ("Starting…", Brush("BusyBrush")),
-            BackendState.Restarting => ("Restarting…", Brush("BusyBrush")),
-            BackendState.Unreachable => ("Not reachable", Brush("BadBrush")),
-            BackendState.Failed => ("Needs attention", Brush("BadBrush")),
+            (true, BackendState.Ready) => ("Connected", Brush("GoodBrush")),
+            (true, BackendState.Starting) => ("Connecting…", Brush("BusyBrush")),
+            (_, BackendState.Ready) => ("Running", Brush("GoodBrush")),
+            (_, BackendState.Starting) => ("Starting…", Brush("BusyBrush")),
+            (_, BackendState.Restarting) => ("Restarting…", Brush("BusyBrush")),
+            (_, BackendState.Unreachable) => ("Not reachable", Brush("BadBrush")),
+            (_, BackendState.Failed) => ("Needs attention", Brush("BadBrush")),
             _ => (_host.CheckingForUpdates ? "Installing…" : "Stopped", Brush(_host.CheckingForUpdates ? "BusyBrush" : "IdleBrush")),
         };
-        BackendDetail = backend.State == BackendState.Ready && _host.Settings.Backend.Source != BackendSource.External
+        BackendDetail = remote
+            ? backend.RemoteStatus?.Version is { } version ? $"{_host.BackendDescription} · Core-Backend {version}" : _host.BackendDescription
+            : backend.State == BackendState.Ready && _host.Settings.Backend.Source != BackendSource.External
             ? $"Port {backend.Port} · {_host.BackendDescription}"
             : _host.BackendDescription;
 
@@ -328,7 +357,7 @@ public sealed partial class MainViewModel : ObservableObject
         {
             if (backend.State == BackendState.Ready)
             {
-                Toast("Core-Backend is running", "GoodBrush");
+                Toast(remote ? $"Connected to {_host.BackendDescription}" : "Core-Backend is running", "GoodBrush");
             }
             else if (backend.State is BackendState.Failed or BackendState.Unreachable)
             {
@@ -403,6 +432,17 @@ public sealed partial class MainViewModel : ObservableObject
             (text, brush) = (KnownBuilds.NotSupported(build), "BusyBrush");
             (actionText, action) = ("Choose another build", ChooseBuildFolder);
         }
+        else if (settings.Backend.UseRemote && backend.State is BackendState.Failed or BackendState.Unreachable)
+        {
+            (text, brush) = (backend.Error ?? $"{_host.BackendDescription} isn't reachable", "BadBrush");
+            (actionText, action) = backend.State == BackendState.Failed
+                ? ("Change address", () => OpenSettingsTab("2"))
+                : ("Use my own backend", new Action(UseOwnBackend));
+        }
+        else if (settings.Backend.UseRemote && backend.State != BackendState.Ready)
+        {
+            (text, brush) = ($"Connecting to {_host.BackendDescription}…", "BusyBrush");
+        }
         else if (backend.State == BackendState.Failed && backend.Error is { } error)
         {
             (text, brush) = (error, "BadBrush");
@@ -441,6 +481,10 @@ public sealed partial class MainViewModel : ObservableObject
         else if (PlayerName.Trim().Length == 0)
         {
             (text, brush) = ("Enter a player name to play", "BusyBrush");
+        }
+        else if (settings.Backend.UseRemote)
+        {
+            (text, brush) = ($"Ready to play on {_host.BackendDescription}", "GoodBrush");
         }
         else if (_host.Servers.Enabled && !_host.Servers.Slots.Any(slot => slot.State == ServerState.Ready))
         {
@@ -531,6 +575,60 @@ public sealed partial class MainViewModel : ObservableObject
 
         var updated = SettingsStore.Clone(_host.Settings);
         updated.SelectedBuild = value.Name;
+        _host.SaveSettings(updated);
+    }
+
+    private void RefreshBackendChoices(BackendSettings backend)
+    {
+        var choices = new List<BackendChoice> { new("My own backend", null) };
+        choices.AddRange(backend.SavedRemotes.Select(remote => new BackendChoice(remote.DisplayName, remote)));
+        if (backend.UseRemote && !backend.SavedRemotes.Any(remote => BackendChoice.Same(remote, backend.Remote)))
+        {
+            choices.Add(new BackendChoice(backend.Remote.DisplayName, backend.Remote));
+        }
+
+        if (!BackendChoices.SequenceEqual(choices))
+        {
+            BackendChoices.Clear();
+            foreach (var choice in choices)
+            {
+                BackendChoices.Add(choice);
+            }
+        }
+
+        SelectedBackendChoice = backend.UseRemote
+            ? BackendChoices.Skip(1).FirstOrDefault(choice => BackendChoice.Same(choice.Remote!, backend.Remote))
+            : BackendChoices[0];
+    }
+
+    partial void OnSelectedBackendChoiceChanged(BackendChoice? value)
+    {
+        if (_syncing || value is null)
+        {
+            return;
+        }
+
+        var current = _host.Settings.Backend;
+        if (value.Remote is null ? !current.UseRemote : current.UseRemote && BackendChoice.Same(value.Remote, current.Remote))
+        {
+            return;
+        }
+
+        var updated = SettingsStore.Clone(_host.Settings);
+        updated.Backend.UseRemote = value.Remote is not null;
+        if (value.Remote is not null)
+        {
+            updated.Backend.Remote = value.Remote.Copy();
+        }
+
+        _host.SaveSettings(updated);
+        Toast(value.Remote is null ? "Playing on your own backend" : $"Playing on {value.Label}", "AccentBrush");
+    }
+
+    private void UseOwnBackend()
+    {
+        var updated = SettingsStore.Clone(_host.Settings);
+        updated.Backend.UseRemote = false;
         _host.SaveSettings(updated);
     }
 
@@ -771,6 +869,7 @@ public sealed partial class MainViewModel : ObservableObject
     private void UseRunningBackend()
     {
         var updated = SettingsStore.Clone(_host.Settings);
+        updated.Backend.UseRemote = false;
         updated.Backend.Source = BackendSource.External;
         _host.SaveSettings(updated);
     }
@@ -778,6 +877,7 @@ public sealed partial class MainViewModel : ObservableObject
     private void UseManagedBackend()
     {
         var updated = SettingsStore.Clone(_host.Settings);
+        updated.Backend.UseRemote = false;
         updated.Backend.Source = BackendSource.Managed;
         _host.SaveSettings(updated);
     }
@@ -888,3 +988,15 @@ public sealed class LogTabViewModel(LogChannel channel)
 }
 
 public sealed record ToastViewModel(string Text, Brush Brush);
+
+/// <summary>One entry of Home's "Play on" list: this PC's backend (no <see cref="Remote"/>) or a friend's.</summary>
+public sealed record BackendChoice(string Label, RemoteBackend? Remote)
+{
+    public static bool Same(RemoteBackend left, RemoteBackend right) =>
+        string.Equals(left.Name, right.Name, StringComparison.OrdinalIgnoreCase) && string.Equals(left.Address, right.Address, StringComparison.OrdinalIgnoreCase);
+
+    public bool Equals(BackendChoice? other) =>
+        other is not null && Label == other.Label && (Remote is null ? other.Remote is null : other.Remote is not null && Same(Remote, other.Remote));
+
+    public override int GetHashCode() => HashCode.Combine(Label, Remote?.Address);
+}

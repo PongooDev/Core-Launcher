@@ -26,6 +26,20 @@
                             <TextBlock Text="{Binding BuildDetail}" Style="{StaticResource Muted}" Margin="14,0,0,0" VerticalAlignment="Center" />
                         </StackPanel>
 
+                        <TextBlock Text="PLAY ON" Style="{StaticResource Heading}" Margin="0,22,0,6" />
+                        <StackPanel Orientation="Horizontal">
+                            <ComboBox Width="260" ItemsSource="{Binding BackendChoices}" DisplayMemberPath="Label" SelectedItem="{Binding SelectedBackendChoice}"
+                                      IsEnabled="{Binding AnyClientRunning, Converter={StaticResource Not}}"
+                                      ToolTip="Your own backend, or a friend's you saved in Settings → Backend. Close the game to switch." />
+                            <Button Style="{StaticResource GhostButton}" Margin="10,0,0,0" Command="{Binding OpenSettingsTabCommand}" CommandParameter="2"
+                                    ToolTip="Add a friend's backend (Settings → Backend)">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE716;" Style="{StaticResource Icon}" FontSize="12" Margin="0,0,6,0" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                    <TextBlock Text="Join a friend" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+
                         <TextBlock Text="PLAYING AS" Style="{StaticResource Heading}" Margin="0,22,0,6" />
                         <TextBox x:Name="PlayerName" Width="260" HorizontalAlignment="Left" FontSize="15"
                                  Text="{Binding PlayerName, UpdateSourceTrigger=PropertyChanged}"

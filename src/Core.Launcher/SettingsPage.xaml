@@ -86,7 +86,7 @@
                                         <TextBlock Text="Server arguments" Style="{StaticResource Label}" />
                                         <TextBox Text="{Binding ServerArguments, UpdateSourceTrigger=PropertyChanged}" />
                                         <TextBlock Style="{StaticResource Hint}"
-                                                   Text="The launcher adds -AUTH_LOGIN, -AUTH_PASSWORD and -AUTH_TYPE=epic itself, -CoreBackend=http://127.0.0.1:&lt;port&gt; when CoreRedirect.dll is loaded, and -nullrhi -unattended for servers." />
+                                                   Text="The launcher adds -AUTH_LOGIN, -AUTH_PASSWORD and -AUTH_TYPE=epic itself, -CoreBackend=http://127.0.0.1:&lt;port&gt; (or your friend's address) when CoreRedirect.dll is loaded, and -nullrhi -unattended for servers." />
                                         <CheckBox Style="{StaticResource Switch}" Content="Send HTTP through the backend (-httpproxy)" IsChecked="{Binding UseHttpProxy}" Margin="0,16,0,0" />
                                     </StackPanel>
                                 </Border>
@@ -175,6 +175,49 @@
                         </Border>
                         <Border Style="{StaticResource Section}">
                             <StackPanel>
+                                <TextBlock Text="PLAY ON" Style="{StaticResource Heading}" />
+                                <RadioButton Content="My own backend (this PC runs Core-Backend and hosts the servers)" IsChecked="{Binding BackendOwn}" GroupName="BackendWhere" FontSize="14" Margin="0,8,0,0" />
+                                <RadioButton Content="A friend's backend (join a friend)" IsChecked="{Binding BackendRemote}" GroupName="BackendWhere" FontSize="14" Margin="0,10,0,0" />
+                                <StackPanel Margin="28,0,0,0" IsEnabled="{Binding BackendRemote}">
+                                    <TextBlock Style="{StaticResource Hint}" Margin="0,4,0,0"
+                                               Text="Your friend turns on remote access in their admin panel (Friends) and gives you its address. You log in to their backend with your player name, and their servers host the matches, so this PC runs no backend or servers meanwhile. You need the same Fortnite build as them." />
+                                    <TextBlock Text="Saved friends" Style="{StaticResource Label}" />
+                                    <DockPanel>
+                                        <Button Content="Remove" DockPanel.Dock="Right" Margin="6,0,0,0" Command="{Binding RemoveSavedRemoteCommand}" />
+                                        <ComboBox ItemsSource="{Binding SavedRemotes}" SelectedItem="{Binding SelectedSavedRemote}" DisplayMemberPath="DisplayName" />
+                                    </DockPanel>
+                                    <TextBlock Text="Name (optional)" Style="{StaticResource Label}" />
+                                    <TextBox Text="{Binding RemoteName, UpdateSourceTrigger=PropertyChanged}" Width="260" HorizontalAlignment="Left" />
+                                    <TextBlock Text="Address (IP or host name, with :port if it isn't 5595)" Style="{StaticResource Label}" />
+                                    <TextBox Text="{Binding RemoteAddress, UpdateSourceTrigger=PropertyChanged}" />
+                                    <WrapPanel Margin="0,10,0,0">
+                                        <Button Margin="0,0,8,0" Command="{Binding TestRemoteCommand}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="&#xE703;" Style="{StaticResource Icon}" FontSize="12" Margin="0,0,8,0" />
+                                                <TextBlock Text="Test connection" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Content="Save to list" Command="{Binding SaveRemoteToListCommand}" />
+                                    </WrapPanel>
+                                    <TextBlock Text="{Binding RemoteCheckMessage}" TextWrapping="Wrap" Margin="0,8,0,0">
+                                        <TextBlock.Style>
+                                            <Style TargetType="{x:Type TextBlock}">
+                                                <Setter Property="Foreground" Value="{StaticResource GoodBrush}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding RemoteCheckFailed}" Value="True">
+                                                        <Setter Property="Foreground" Value="{StaticResource BadBrush}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                        <TextBlock Text="MY OWN BACKEND" Style="{StaticResource Heading}" Margin="0,8,0,8" />
+                        <StackPanel IsEnabled="{Binding BackendOwn}">
+                        <Border Style="{StaticResource Section}">
+                            <StackPanel>
                                 <RadioButton Content="Installed and updated by the launcher (recommended)" IsChecked="{Binding BackendManaged}" GroupName="BackendSource" FontSize="14" />
                                 <TextBlock Style="{StaticResource Hint}" Margin="28,4,0,0"
                                            Text="Core-Backend from its latest release (or its main branch until it has one), with its own Node.js. Accounts are kept across updates." />
@@ -215,6 +258,7 @@
                                 <TextBlock Style="{StaticResource Hint}" Text="Empty uses the launcher's Backend\data, or for your own folder its data folder (the one npm start uses)." />
                             </StackPanel>
                         </Border>
+                        </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>

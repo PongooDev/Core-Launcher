@@ -3,6 +3,7 @@ using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Core.Launcher.Hosting;
+using Core.Launcher.Hosting.Backend;
 using Core.Launcher.Hosting.Builds;
 using Core.Launcher.Hosting.Dlls;
 using Core.Launcher.Hosting.Settings;
@@ -26,6 +27,145 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
 
         SelectedBuild = Builds.FirstOrDefault(build => build.Settings.Name == Settings.SelectedBuild) ?? Builds.FirstOrDefault();
+        foreach (var remote in Settings.Backend.SavedRemotes)
+        {
+            SavedRemotes.Add(remote);
+        }
+    }
+
+    /// <summary>Friends' backends saved in the settings (the same objects, so edits and removals save with the rest).</summary>
+    public ObservableCollection<RemoteBackend> SavedRemotes { get; } = [];
+
+    [ObservableProperty]
+    public partial RemoteBackend? SelectedSavedRemote { get; set; }
+
+    [ObservableProperty]
+    public partial string RemoteCheckMessage { get; set; } = "";
+
+    [ObservableProperty]
+    public partial bool RemoteCheckFailed { get; set; }
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(TestRemoteCommand))]
+    public partial bool TestingRemote { get; set; }
+
+    public bool BackendOwn
+    {
+        get => !Settings.Backend.UseRemote;
+        set => SetUseRemote(!value);
+    }
+
+    public bool BackendRemote
+    {
+        get => Settings.Backend.UseRemote;
+        set => SetUseRemote(value);
+    }
+
+    private void SetUseRemote(bool remote)
+    {
+        if (Settings.Backend.UseRemote == remote)
+        {
+            return;
+        }
+
+        Settings.Backend.UseRemote = remote;
+        OnPropertyChanged(nameof(BackendOwn));
+        OnPropertyChanged(nameof(BackendRemote));
+    }
+
+    public string RemoteName
+    {
+        get => Settings.Backend.Remote.Name;
+        set
+        {
+            Settings.Backend.Remote.Name = value.Trim();
+            OnPropertyChanged();
+        }
+    }
+
+    public string RemoteAddress
+    {
+        get => Settings.Backend.Remote.Address;
+        set
+        {
+            Settings.Backend.Remote.Address = value.Trim();
+            OnPropertyChanged();
+            RemoteCheckMessage = "";
+        }
+    }
+
+    partial void OnSelectedSavedRemoteChanged(RemoteBackend? value)
+    {
+        if (value is null)
+        {
+            return;
+        }
+
+        RemoteName = value.Name;
+        RemoteAddress = value.Address;
+        BackendRemote = true;
+    }
+
+    [RelayCommand(CanExecute = nameof(CanTestRemote))]
+    private async Task TestRemoteAsync()
+    {
+        TestingRemote = true;
+        RemoteCheckFailed = false;
+        RemoteCheckMessage = "Checking…";
+        try
+        {
+            var status = await _host.CheckRemoteAsync(RemoteAddress);
+            RemoteCheckFailed = !status.Reachable;
+            RemoteCheckMessage = status.Reachable ? $"{status.Message}. You can play on it." : status.Message;
+        }
+        finally
+        {
+            TestingRemote = false;
+        }
+    }
+
+    private bool CanTestRemote() => !TestingRemote;
+
+    /// <summary>Adds the friend's backend being edited to the saved list, or updates the saved one with its name.</summary>
+    [RelayCommand]
+    private void SaveRemoteToList()
+    {
+        if (!BackendEndpoint.TryParse(RemoteAddress, out _, out var problem))
+        {
+            RemoteCheckFailed = true;
+            RemoteCheckMessage = problem;
+            return;
+        }
+
+        var key = RemoteName.Length > 0 ? RemoteName : RemoteAddress;
+        var saved = SavedRemotes.FirstOrDefault(remote => string.Equals(remote.DisplayName, key, StringComparison.OrdinalIgnoreCase));
+        if (saved is null)
+        {
+            saved = Settings.Backend.Remote.Copy();
+            Settings.Backend.SavedRemotes.Add(saved);
+            SavedRemotes.Add(saved);
+        }
+        else
+        {
+            saved.Name = RemoteName;
+            saved.Address = RemoteAddress;
+        }
+
+        RemoteCheckFailed = false;
+        RemoteCheckMessage = $"{saved.DisplayName} is in your list; pick it on Home to switch to it. Save to keep it.";
+    }
+
+    [RelayCommand]
+    private void RemoveSavedRemote()
+    {
+        if (SelectedSavedRemote is not { } remote)
+        {
+            return;
+        }
+
+        Settings.Backend.SavedRemotes.Remove(remote);
+        SavedRemotes.Remove(remote);
+        SelectedSavedRemote = null;
     }
 
     public LauncherSettings Settings { get; }
@@ -209,6 +349,13 @@ public sealed partial class SettingsViewModel : ObservableObject
         if (Settings.Dlls.Source == DllSource.Local && !Directory.Exists(Settings.Dlls.LocalFolder))
         {
             Message = "The local DLL folder doesn't exist";
+            return;
+        }
+
+        if (Settings.Backend.UseRemote && !BackendEndpoint.TryParse(Settings.Backend.Remote.Address, out _, out var remoteProblem))
+        {
+            Message = $"Friend's backend: {remoteProblem}";
+            SelectedTab = 2;
             return;
         }
 

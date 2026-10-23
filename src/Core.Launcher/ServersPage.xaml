@@ -9,7 +9,8 @@
 
     <DockPanel>
         <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
-            <CheckBox DockPanel.Dock="Right" Style="{StaticResource Switch}" Content="Host servers" IsChecked="{Binding Hosting}" VerticalAlignment="Center" />
+            <CheckBox DockPanel.Dock="Right" Style="{StaticResource Switch}" Content="Host servers" IsChecked="{Binding Hosting}" VerticalAlignment="Center"
+                      IsEnabled="{Binding CanHost}" ToolTip="Off while you play on a friend's backend" ToolTipService.ShowOnDisabled="True" ToolTipService.IsEnabled="{Binding UsingRemote}" />
             <TextBlock Text="Servers" Style="{StaticResource PageTitle}" />
         </DockPanel>
         <TextBlock DockPanel.Dock="Top" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,0,0,18" MaxWidth="760" HorizontalAlignment="Left"
@@ -38,7 +39,7 @@
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Visibility="{Binding Hosting, Converter={StaticResource Not}, ConverterParameter=Visibility}">
                 <TextBlock Text="&#xE968;" Style="{StaticResource Icon}" FontSize="40" Foreground="{StaticResource SubtleBrush}" HorizontalAlignment="Center" />
                 <TextBlock Text="Hosting is off" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,14,0,4" />
-                <TextBlock Text="Turn on Host servers to keep game servers ready for matches." Style="{StaticResource Muted}" HorizontalAlignment="Center" />
+                <TextBlock Text="{Binding HostingOffText}" Style="{StaticResource Muted}" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="520" />
             </StackPanel>
 
             <ScrollViewer VerticalScrollBarVisibility="Auto" Visibility="{Binding Hosting, Converter={StaticResource Visible}}">
