@@ -18,11 +18,18 @@ internal static partial class DarkTitleBar
 
     public static void Apply(Window window)
     {
-        var handle = new WindowInteropHelper(window).Handle;
-        DwmSetWindowAttribute(handle, DWMWA_USE_IMMERSIVE_DARK_MODE, 1, sizeof(int));
-        DwmSetWindowAttribute(handle, DWMWA_CAPTION_COLOR, ColorRef("BackgroundColor"), sizeof(int));
-        DwmSetWindowAttribute(handle, DWMWA_TEXT_COLOR, ColorRef("TextColor"), sizeof(int));
-        DwmSetWindowAttribute(handle, DWMWA_BORDER_COLOR, ColorRef("BorderColor"), sizeof(int));
+        try
+        {
+            var handle = new WindowInteropHelper(window).Handle;
+            DwmSetWindowAttribute(handle, DWMWA_USE_IMMERSIVE_DARK_MODE, 1, sizeof(int));
+            DwmSetWindowAttribute(handle, DWMWA_CAPTION_COLOR, ColorRef("BackgroundColor"), sizeof(int));
+            DwmSetWindowAttribute(handle, DWMWA_TEXT_COLOR, ColorRef("TextColor"), sizeof(int));
+            DwmSetWindowAttribute(handle, DWMWA_BORDER_COLOR, ColorRef("BorderColor"), sizeof(int));
+        }
+        catch
+        {
+            // Ignore on environments like Wine where DWM attributes are unavailable.
+        }
     }
 
     // COLORREF is 0x00BBGGRR.
