@@ -1,6 +1,9 @@
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Interop;
+using System.Windows.Media;
 using System.Windows.Threading;
 using Core.Launcher.Hosting;
 
@@ -16,8 +19,13 @@ public partial class App : Application
 
     protected override async void OnStartup(StartupEventArgs e)
     {
-        base.OnStartup(e);
         _args = e.Args;
+        if (ShouldUseSoftwareRendering(_args))
+        {
+            RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
+        }
+
+        base.OnStartup(e);
         DispatcherUnhandledException += OnUnhandledException;
 
         _single = new Mutex(true, @"Local\Core-Launcher", out var first);
@@ -31,6 +39,11 @@ public partial class App : Application
         await WaitForPreviousAsync();
         var host = new LauncherHost(Option("--data") is { } folder ? new LauncherPaths(Path.GetFullPath(folder)) : LauncherPaths.Default);
         _host = host;
+
+        if (IsWine())
+        {
+            host.Log.Write("Running under Wine: software rendering active");
+        }
 
         if (!host.Settings.SetupComplete && new SetupWindow(new SetupViewModel(host)).ShowDialog() != true)
         {
@@ -105,6 +118,34 @@ public partial class App : Application
 
             yield return args[index];
         }
+    }
+
+    private static bool ShouldUseSoftwareRendering(string[] args)
+    {
+        if (Array.Exists(args, arg => arg.Equals("--software-rendering", StringComparison.OrdinalIgnoreCase)) ||
+            Environment.GetEnvironmentVariable("CORE_LAUNCHER_SOFTWARE_RENDERING") == "1")
+        {
+            return true;
+        }
+
+        return IsWine();
+    }
+
+    private static bool IsWine()
+    {
+        if (NativeLibrary.TryLoad("ntdll.dll", out var handle))
+        {
+            try
+            {
+                return NativeLibrary.TryGetExport(handle, "wine_get_version", out _);
+            }
+            finally
+            {
+                NativeLibrary.Free(handle);
+            }
+        }
+
+        return false;
     }
 
     private void OnUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
