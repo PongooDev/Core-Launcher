@@ -1,18 +1,42 @@
+using System.Text.RegularExpressions;
 using Core.Launcher.Hosting.Dlls;
 using Core.Launcher.Hosting.Settings;
 
 namespace Core.Launcher.Hosting.Builds;
 
+/// <summary>How far Core supports a build (<see cref="KnownBuilds.SupportOf"/>).</summary>
+public enum BuildSupport
+{
+    /// <summary>Not a build Core knows: turned away unless <see cref="LauncherSettings.AllowUnsupportedBuilds"/> is on.</summary>
+    Unsupported,
+
+    /// <summary>Core knows the build and is working on it: it plays and hosts like a supported build, marked as in progress.</summary>
+    InProgress,
+
+    /// <summary>Supported: Core is tested on it.</summary>
+    Full,
+}
+
 /// <summary>
 /// Per-build launch settings, keyed by changelist. A build missing here gets the same shape with no DLLs, or Core's
 /// defaults when <see cref="LauncherSettings.AllowUnsupportedBuilds"/> is on.
 /// </summary>
-public static class KnownBuilds
+public static partial class KnownBuilds
 {
+    /// <summary>Fortnite 1.1, ++Fortnite+Release-Cert (its files carry no version number; players call it 1.1).</summary>
     public const int Cert = 3532353;
+
+    /// <summary>
+    /// Fortnite 1.2, also ++Fortnite+Release-Cert on UE 4.16.0. Same layout and launch line as 1.1: its exe takes the same
+    /// switches (-httpproxy, -McpRegion, -SkipPatchCheck, -nullrhi, -nosound, -AUTH_*).
+    /// </summary>
+    public const int Fortnite12 = 3541083;
 
     /// <summary>The Settings → Builds switch that lets unsupported builds use Core, by its label.</summary>
     public const string AllowUnsupportedSetting = "Allow unsupported builds";
+
+    /// <summary>What Home shows next to an in-progress build.</summary>
+    public const string InProgressNote = "support in progress, some things may not work yet";
 
     // No -FORCELOGFLUSH: it can deadlock the game at start-up (see SettingsStore's version 1 migration).
     private const string ClientArguments = "-epicapp=Fortnite -epicenv=Prod -epicportal -SkipPatchCheck";
@@ -25,15 +49,22 @@ public static class KnownBuilds
     /// </summary>
     public const string CertServerRegion = "-McpRegion=NA";
 
+    /// <param name="FormerNames">Names earlier launchers gave this build, which <see cref="CurrentName"/> renames.</param>
+    private sealed record KnownBuild(int Changelist, string Name, BuildSupport Support, string[] FormerNames);
+
     // Core-Docs/Tools/run_server.py and Backend-Evidence-3532353.md (launch line); DLL order from CoreV2 (redirect first).
-    private static readonly Dictionary<int, Func<BuildSettings>> Builds = new()
-    {
-        [Cert] = () => WithCore("Cert CL-3532353"),
-    };
+    // Every known build uses Core's launch settings (WithCore).
+    private static readonly KnownBuild[] Builds =
+    [
+        new(Cert, "Fortnite 1.1 (Cert CL-3532353)", BuildSupport.Full, ["Cert CL-3532353"]),
+        new(Fortnite12, "Fortnite 1.2 (CL-3541083)", BuildSupport.InProgress, []),
+    ];
+
+    private static KnownBuild? Find(int changelist) => Array.Find(Builds, build => build.Changelist == changelist);
 
     /// <summary>
-    /// Core's launch settings: what every supported build gets, and what <see cref="AllowUnsupportedSetting"/> gives
-    /// the others.
+    /// Core's launch settings: what every known build gets, and what <see cref="AllowUnsupportedSetting"/> gives the
+    /// others.
     /// </summary>
     private static BuildSettings WithCore(string name) => new()
     {
@@ -53,13 +84,32 @@ public static class KnownBuilds
         ServerArguments = ServerArguments,
     };
 
-    public static bool IsKnown(int changelist) => Builds.ContainsKey(changelist);
+    /// <summary>A build Core supports fully or is working on: it plays and hosts without <see cref="AllowUnsupportedSetting"/>.</summary>
+    public static bool IsKnown(int changelist) => Find(changelist) is not null;
 
-    /// <summary>"Cert CL-3532353" (every supported build, for messages).</summary>
-    public static string SupportedNames => string.Join(", ", Builds.Values.Select(create => create().Name));
+    public static BuildSupport SupportOf(int changelist) => Find(changelist)?.Support ?? BuildSupport.Unsupported;
+
+    /// <summary>The known build's name ("Fortnite 1.2 (CL-3541083)"), or null for an unsupported changelist.</summary>
+    public static string? NameOf(int changelist) => Find(changelist)?.Name;
+
+    /// <summary>"Fortnite 1.1 (Cert CL-3532353)" (the fully supported builds, for messages).</summary>
+    public static string SupportedNames => Names(BuildSupport.Full);
+
+    /// <summary>"Fortnite 1.2 (CL-3541083)" (the builds whose support is in progress, for messages), or "" when none is.</summary>
+    public static string InProgressNames => Names(BuildSupport.InProgress);
+
+    /// <summary>"Fortnite 1.1 (Cert CL-3532353), and support for Fortnite 1.2 (CL-3541083) is in progress".</summary>
+    public static string SupportSummary =>
+        InProgressNames.Length == 0 ? SupportedNames : $"{SupportedNames}, and support for {InProgressNames} is in progress";
+
+    private static string Names(BuildSupport support)
+    {
+        var names = Builds.Where(build => build.Support == support).Select(build => build.Name).ToArray();
+        return names.Length <= 1 ? string.Concat(names) : $"{string.Join(", ", names[..^1])} and {names[^1]}";
+    }
 
     /// <summary>
-    /// Whether Core can run this build as set up: it is a supported build, or it has the Core DLLs (by hand, or from
+    /// Whether Core can run this build as set up: it is a known build, or it has the Core DLLs (by hand, or from
     /// <see cref="AllowUnsupportedSetting"/>). An unsupported build left as added would start the client against Epic's
     /// own services and "servers" without Core.dll.
     /// </summary>
@@ -75,18 +125,30 @@ public static class KnownBuilds
 
     /// <summary>The message for an unsupported build while <see cref="AllowUnsupportedSetting"/> is off.</summary>
     private static string NotSupportedYet(string name) =>
-        $"Core doesn't support {name} yet. It supports {SupportedNames}; turn on {AllowUnsupportedSetting} in Settings → Builds to try it.";
+        $"Core doesn't support {name} yet. It supports {SupportSummary}. Turn on {AllowUnsupportedSetting} in Settings → Builds to try it.";
 
     /// <summary>The warning for an unsupported build while <see cref="AllowUnsupportedSetting"/> is on.</summary>
     public static string UnsupportedWarning(string name) =>
-        $"{name} isn't supported and may not work: Core is only tested on {SupportedNames}.";
+        $"{name} isn't supported and may not work: Core is only tested on {SupportSummary}.";
+
+    /// <summary>The note for a build whose support is in progress (<see cref="BuildSupport.InProgress"/>).</summary>
+    public static string InProgressWarning(int changelist) =>
+        $"Core's support for {NameOf(changelist) ?? $"CL-{changelist}"} is in progress: some things may not work yet.";
+
+    /// <summary>What a game's log starts with about its build: null for a fully supported one.</summary>
+    public static string? SupportWarning(BuildSettings build) => SupportOf(build.Changelist) switch
+    {
+        BuildSupport.Full => null,
+        BuildSupport.InProgress => InProgressWarning(build.Changelist),
+        _ => UnsupportedWarning(build.Name),
+    };
 
     public static BuildSettings Create(string folder, BuildVersion version, bool allowUnsupported)
     {
         BuildSettings build;
-        if (Builds.TryGetValue(version.Changelist, out var known))
+        if (Find(version.Changelist) is { } known)
         {
-            build = known();
+            build = WithCore(known.Name);
         }
         else
         {
@@ -102,13 +164,58 @@ public static class KnownBuilds
         return build;
     }
 
+    /// <summary>
+    /// Makes a saved build of a known changelist that was added while Core didn't know it the known build. It keeps its
+    /// name, path and options, but is no longer marked as given Core's defaults by <see cref="AllowUnsupportedSetting"/>
+    /// (so turning that off leaves it alone); one that still has every Core option off, as it was added with the switch
+    /// off, gets Core's; and its servers get <see cref="CertServerRegion"/> unless they set a region.
+    /// </summary>
+    public static void MakeKnown(BuildSettings build)
+    {
+        if (Find(build.Changelist) is not { } known)
+        {
+            return;
+        }
+
+        var core = WithCore(known.Name);
+        build.CoreDefaultsAdded = false;
+        if (HasCoreOff(build))
+        {
+            build.UseHttpProxy = core.UseHttpProxy;
+            build.ClientDlls = core.ClientDlls;
+            build.ServerDlls = core.ServerDlls;
+        }
+
+        build.ServerArguments = WithArguments(build.ServerArguments, CertServerRegion);
+    }
+
+    /// <summary>
+    /// The known build's name for a build saved under a name an earlier launcher made up for it: a former known name
+    /// ("Cert CL-3532353") or an unsupported build's ("Fortnite Cert CL-3541083"), keeping Add build's " (2)". Null for
+    /// a name set by hand, a current name, or an unsupported changelist.
+    /// </summary>
+    public static string? CurrentName(string name, int changelist)
+    {
+        if (Find(changelist) is not { } known)
+        {
+            return null;
+        }
+
+        var match = CopySuffix().Match(name);
+        var baseName = match.Groups["name"].Value;
+        var generated = known.FormerNames.Contains(baseName, StringComparer.OrdinalIgnoreCase)
+            || Regex.IsMatch(baseName, $@"^Fortnite (?:\S+ )?CL-{changelist}$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        return generated ? known.Name + match.Groups["copy"].Value : null;
+    }
+
     /// <summary>Whether every Core option (-httpproxy and the DLLs) is off, as for an unsupported build when it was added.</summary>
     public static bool HasCoreOff(BuildSettings build) => !build.UseHttpProxy && build.ClientDlls.Count == 0 && build.ServerDlls.Count == 0;
 
     /// <summary>
     /// Turns <see cref="LauncherSettings.AllowUnsupportedBuilds"/> on or off. On, every unsupported build that still has
     /// every Core option off gets Core's defaults; off, the ones that got them that way and still have them unchanged go
-    /// back to how they were. Builds set up by hand are left alone. Returns the builds it changed.
+    /// back to how they were. Known builds (supported or in progress) and builds set up by hand are left alone. Returns
+    /// the builds it changed.
     /// </summary>
     public static IReadOnlyList<BuildSettings> SetAllowUnsupported(LauncherSettings settings, bool allow)
     {
@@ -174,4 +281,8 @@ public static class KnownBuilds
     private static string[] Split(string arguments) => arguments.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
     private static string SwitchName(string argument) => argument.Split('=', 2)[0];
+
+    /// <summary>A build name and the " (2)" Add build gives a second build of the same name.</summary>
+    [GeneratedRegex(@"^(?<name>.*?)(?<copy> \(\d+\))?$", RegexOptions.CultureInvariant)]
+    private static partial Regex CopySuffix();
 }

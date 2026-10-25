@@ -20,7 +20,7 @@ public sealed class LauncherSettings
     /// <summary>
     /// Lets builds Core doesn't support use it anyway: they get Core's defaults (<see cref="Core.Launcher.Hosting.Builds.KnownBuilds.SetAllowUnsupported"/>)
     /// and play and host with a warning instead of being turned away. Off by default; Core is only tested on the
-    /// supported builds.
+    /// supported builds. Known builds whose support is in progress don't need it.
     /// </summary>
     public bool AllowUnsupportedBuilds { get; set; }
 

@@ -10,11 +10,14 @@ This repository does NOT include Fortnite game files. Core-Backend, a Node.js ru
 
 ## Version support
 
-| Fortnite version | Status |
-| --- | --- |
-| Cert CL-3532353 (UE 4.16) | In progress 🚧 |
+| Fortnite version | Build | Status |
+| --- | --- | --- |
+| 1.1 | Cert CL-3532353 (UE 4.16) | Supported ✅ |
+| 1.2 | Release-Cert CL-3541083 (UE 4.16) | In progress 🚧 |
 
-Other builds are turned away unless you turn on **Allow unsupported builds** (Settings → Builds): they then get the same Core DLLs, `-httpproxy` and server arguments as Cert and can play and host, but Core is only tested on the builds above, so they may not work.
+**Supported** builds are the ones Core is tested on. **In progress** builds play and host the same way (same Core DLLs, `-httpproxy` and server arguments), without any switch, but Core's support for them isn't finished, so some things may not work yet: Home shows "support in progress" next to the build, and each client and server log starts with a note saying so.
+
+Other builds are turned away unless you turn on **Allow unsupported builds** (Settings → Builds): they then get the same Core DLLs, `-httpproxy` and server arguments as 1.1 and can play and host, but Core is only tested on the builds above, so they may not work.
 
 ## Contents
 
@@ -107,7 +110,7 @@ Settings are saved in `%LOCALAPPDATA%\Core-Launcher\settings.json`.
 | --- | --- | --- |
 | Player name | | Client login (`-AUTH_LOGIN`) |
 | Builds | | Folder, executable, client and server arguments, `-httpproxy`, and which DLLs the client and servers load |
-| Allow unsupported builds | Off | Gives builds Core doesn't support Core's defaults and lets them play and host (with a warning); builds whose Core options you set by hand are left alone |
+| Allow unsupported builds | Off | Gives builds Core doesn't support Core's defaults and lets them play and host (with a warning); builds whose Core options you set by hand are left alone. Supported and in-progress builds don't need it |
 | DLLs | Latest `PongooDev/CoreV2` release | Or a local folder with `Core.dll`, `CoreClient.dll`, `CoreRedirect.dll` |
 | Backend | Installed by the launcher | Or your own Core-Backend folder, or one that is already running |
 | Play on | My own backend | Or a friend's backend: a name and an address (`host` or `host:port`, port 5595 by default), with a saved list |

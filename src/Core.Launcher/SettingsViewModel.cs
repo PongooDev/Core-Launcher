@@ -186,7 +186,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     public bool HasBuild => SelectedBuild is not null;
 
     public static string UnsupportedBuildsHint =>
-        $"Core is only tested on the supported builds ({KnownBuilds.SupportedNames}). With this on, other builds get Core's defaults (the Core DLLs and -httpproxy) and can play and host, but they may not work. Builds whose Core options you've set yourself keep them.";
+        $"Core supports {KnownBuilds.SupportSummary}; those play and host without this. With this on, other builds get Core's defaults (the Core DLLs and -httpproxy) and can play and host, but they may not work. Builds whose Core options you've set yourself keep them.";
 
     /// <summary>
     /// Turning it on gives every unsupported build that still has every Core option off Core's defaults; turning it off
@@ -323,9 +323,13 @@ public sealed partial class SettingsViewModel : ObservableObject
         var editor = new BuildEditor(build);
         Builds.Add(editor);
         SelectedBuild = editor;
-        Message = KnownBuilds.IsKnown(detected.Version.Changelist) ? $"Added {build.Name}"
-            : AllowUnsupportedBuilds ? $"Added {build.Name} with Core's defaults. {KnownBuilds.UnsupportedWarning(build.Name)}"
-            : $"Added {build.Name}. Core doesn't support it yet: its DLLs stay off until you turn them on, or turn on {KnownBuilds.AllowUnsupportedSetting} to try it.";
+        Message = KnownBuilds.SupportOf(build.Changelist) switch
+        {
+            BuildSupport.Full => $"Added {build.Name}",
+            BuildSupport.InProgress => $"Added {build.Name}. {KnownBuilds.InProgressWarning(build.Changelist)}",
+            _ => AllowUnsupportedBuilds ? $"Added {build.Name} with Core's defaults. {KnownBuilds.UnsupportedWarning(build.Name)}"
+                : $"Added {build.Name}. Core doesn't support it yet: its DLLs stay off until you turn them on, or turn on {KnownBuilds.AllowUnsupportedSetting} to try it.",
+        };
     }
 
     [RelayCommand]
@@ -463,6 +467,14 @@ public sealed partial class BuildEditor : ObservableObject
     }
 
     public string ExecutableStatus => PeImage.CheckX64(Settings.ExecutablePath, dll: false) ?? "x64 executable found";
+
+    /// <summary>How far Core supports the build, from the changelist it was added with.</summary>
+    public string Support => KnownBuilds.SupportOf(Settings.Changelist) switch
+    {
+        BuildSupport.Full => $"{KnownBuilds.NameOf(Settings.Changelist)}: supported",
+        BuildSupport.InProgress => $"{KnownBuilds.NameOf(Settings.Changelist)}: {KnownBuilds.InProgressNote}",
+        _ => Settings.Changelist > 0 ? $"CL {Settings.Changelist}: not a build Core supports" : "Unknown version: not a build Core supports",
+    };
 
     public string ClientArguments
     {

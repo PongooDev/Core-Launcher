@@ -439,7 +439,7 @@ public sealed class LauncherHost : IAsyncDisposable
             output.Write($"(launcher) Playing on {BackendDescription} ({backend.Url})");
         }
 
-        WarnIfUnsupported(build, output);
+        WarnAboutSupport(build, output);
 
         var session = new ClientSession(login, _launcher.Start(new GameStart($"Client {login}", build, build.ClientDlls, LaunchArguments.Client(build, backend, login), false, output)));
         lock (_gate)
@@ -460,12 +460,15 @@ public sealed class LauncherHost : IAsyncDisposable
         }, TaskScheduler.Default);
     }
 
-    /// <summary>An unsupported build only gets this far with Allow unsupported builds on (or the Core DLLs turned on by hand).</summary>
-    private static void WarnIfUnsupported(BuildSettings build, LogChannel output)
+    /// <summary>
+    /// Starts the log with a note when Core doesn't fully support the build: its support is in progress, or it is
+    /// unsupported (which only gets this far with Allow unsupported builds on, or the Core DLLs turned on by hand).
+    /// </summary>
+    private static void WarnAboutSupport(BuildSettings build, LogChannel output)
     {
-        if (!KnownBuilds.IsKnown(build.Changelist))
+        if (KnownBuilds.SupportWarning(build) is { } warning)
         {
-            output.Write($"(launcher) {KnownBuilds.UnsupportedWarning(build.Name)}");
+            output.Write($"(launcher) {warning}");
         }
     }
 
@@ -538,7 +541,7 @@ public sealed class LauncherHost : IAsyncDisposable
             var arguments = LaunchArguments.Server(build, host.Backend.Port!.Value, settings.Servers.LoginFor(instance));
             var output = host.ServerLog(instance);
             output.Write($"(launcher) --- {DateTime.Now:yyyy-MM-dd HH:mm:ss} ---");
-            WarnIfUnsupported(build, output);
+            WarnAboutSupport(build, output);
             return host._launcher.Start(new GameStart($"Server {instance}", build, build.ServerDlls, arguments, true, output));
         }
 

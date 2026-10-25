@@ -66,6 +66,7 @@
                                         <TextBlock Text="BUILD" Style="{StaticResource Heading}" />
                                         <TextBlock Text="Name" Style="{StaticResource Label}" Margin="0,4,0,5" />
                                         <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" />
+                                        <TextBlock Text="{Binding Support}" Style="{StaticResource Hint}" />
                                         <TextBlock Text="Build folder (holds Engine and FortniteGame)" Style="{StaticResource Label}" />
                                         <DockPanel>
                                             <Button DockPanel.Dock="Right" Margin="6,0,0,0" ToolTip="Open the folder"

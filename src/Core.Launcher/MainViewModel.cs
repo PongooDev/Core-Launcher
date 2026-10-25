@@ -236,9 +236,12 @@ public sealed partial class MainViewModel : ObservableObject
                 {
                     BuildVersion.Read(selected.Path)?.Engine,
                     selected.Changelist > 0 ? $"CL {selected.Changelist}" : null,
-                    KnownBuilds.IsKnown(selected.Changelist) ? null
-                        : settings.AllowUnsupportedBuilds ? "unsupported, may not work"
-                        : "not supported yet",
+                    KnownBuilds.SupportOf(selected.Changelist) switch
+                    {
+                        BuildSupport.Full => null,
+                        BuildSupport.InProgress => KnownBuilds.InProgressNote,
+                        _ => settings.AllowUnsupportedBuilds ? "unsupported, may not work" : "not supported yet",
+                    },
                 }.Where(part => part is not null));
             Hosting = _host.Servers.Enabled;
             Instances = settings.Servers.Instances;
@@ -866,7 +869,12 @@ public sealed partial class MainViewModel : ObservableObject
 
         updated.SelectedBuild = build.Name;
         _host.SaveSettings(updated);
-        Toast(KnownBuilds.IsKnown(build.Changelist) ? $"Using {build.Name}" : description, brush);
+        Toast(KnownBuilds.SupportOf(build.Changelist) switch
+        {
+            BuildSupport.Full => $"Using {build.Name}",
+            BuildSupport.InProgress => $"Using {build.Name}: {KnownBuilds.InProgressNote}",
+            _ => description,
+        }, brush);
     }
 
     private void UseRunningBackend()

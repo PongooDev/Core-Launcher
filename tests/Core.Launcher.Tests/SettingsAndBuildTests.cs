@@ -144,7 +144,7 @@ public sealed class SettingsAndBuildTests
     {
         var build = KnownBuilds.Create(@"F:\Builds\++Fortnite+Cert-CL-3532353\Fortnite", BuildVersion.Parse(CertBuildVersion), allowUnsupported: false);
 
-        Assert.Equal("Cert CL-3532353", build.Name);
+        Assert.Equal("Fortnite 1.1 (Cert CL-3532353)", build.Name);
         Assert.True(build.UseHttpProxy);
         Assert.Equal([DllRole.Redirect, DllRole.Client], build.ClientDlls);
         Assert.Equal([DllRole.Redirect, DllRole.Server], build.ServerDlls);
@@ -244,7 +244,7 @@ public sealed class SettingsAndBuildTests
         Assert.False(KnownBuilds.CanPlay(build));
         Assert.False(KnownBuilds.CanHost(build));
         Assert.Contains("doesn't support Fortnite 1.8 CL-3700114 yet", KnownBuilds.NotSupported(build, allowUnsupported: false));
-        Assert.Contains("turn on Allow unsupported builds", KnownBuilds.NotSupported(build, allowUnsupported: false));
+        Assert.Contains("Turn on Allow unsupported builds", KnownBuilds.NotSupported(build, allowUnsupported: false));
 
         var settings = new LauncherSettings { Builds = [build] };
         KnownBuilds.SetAllowUnsupported(settings, true);
@@ -266,7 +266,7 @@ public sealed class SettingsAndBuildTests
         Assert.Contains("Core DLLs turned off", KnownBuilds.NotSupported(build, allowUnsupported: true));
         Assert.DoesNotContain("doesn't support", KnownBuilds.NotSupported(build, allowUnsupported: true));
         Assert.Equal(
-            "Fortnite 1.8 CL-3700114 isn't supported and may not work: Core is only tested on Cert CL-3532353.",
+            "Fortnite 1.8 CL-3700114 isn't supported and may not work: Core is only tested on Fortnite 1.1 (Cert CL-3532353), and support for Fortnite 1.2 (CL-3541083) is in progress.",
             KnownBuilds.UnsupportedWarning(build.Name));
     }
 
