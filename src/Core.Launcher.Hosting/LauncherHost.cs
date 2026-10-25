@@ -411,7 +411,7 @@ public sealed class LauncherHost : IAsyncDisposable
         var build = settings.FindSelectedBuild() ?? throw new InvalidOperationException("Add a build first (Settings → Builds)");
         if (!KnownBuilds.CanPlay(build))
         {
-            throw new InvalidOperationException(KnownBuilds.NotSupported(build));
+            throw new InvalidOperationException(KnownBuilds.NotSupported(build, settings.AllowUnsupportedBuilds));
         }
 
         if (login.Length == 0)
@@ -439,6 +439,8 @@ public sealed class LauncherHost : IAsyncDisposable
             output.Write($"(launcher) Playing on {BackendDescription} ({backend.Url})");
         }
 
+        WarnIfUnsupported(build, output);
+
         var session = new ClientSession(login, _launcher.Start(new GameStart($"Client {login}", build, build.ClientDlls, LaunchArguments.Client(build, backend, login), false, output)));
         lock (_gate)
         {
@@ -456,6 +458,15 @@ public sealed class LauncherHost : IAsyncDisposable
 
             OnChanged();
         }, TaskScheduler.Default);
+    }
+
+    /// <summary>An unsupported build only gets this far with Allow unsupported builds on (or the Core DLLs turned on by hand).</summary>
+    private static void WarnIfUnsupported(BuildSettings build, LogChannel output)
+    {
+        if (!KnownBuilds.IsKnown(build.Changelist))
+        {
+            output.Write($"(launcher) {KnownBuilds.UnsupportedWarning(build.Name)}");
+        }
     }
 
     public void StopClient(string login) => ClientFor(login)?.Game.Terminate();
@@ -504,7 +515,7 @@ public sealed class LauncherHost : IAsyncDisposable
 
             if (!KnownBuilds.CanHost(build))
             {
-                return KnownBuilds.NotSupported(build);
+                return KnownBuilds.NotSupported(build, host.Settings.AllowUnsupportedBuilds);
             }
 
             if (host.Settings.Backend.UseRemote)
@@ -527,6 +538,7 @@ public sealed class LauncherHost : IAsyncDisposable
             var arguments = LaunchArguments.Server(build, host.Backend.Port!.Value, settings.Servers.LoginFor(instance));
             var output = host.ServerLog(instance);
             output.Write($"(launcher) --- {DateTime.Now:yyyy-MM-dd HH:mm:ss} ---");
+            WarnIfUnsupported(build, output);
             return host._launcher.Start(new GameStart($"Server {instance}", build, build.ServerDlls, arguments, true, output));
         }
 

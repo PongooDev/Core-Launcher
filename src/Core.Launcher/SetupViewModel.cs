@@ -100,7 +100,7 @@ public sealed partial class SetupViewModel : ObservableObject
         }
 
         _detected = build;
-        var (text, brush) = BuildMessages.Describe(build);
+        var (text, brush) = BuildMessages.Describe(build, _host.Settings.AllowUnsupportedBuilds);
         BuildStatus = text;
         BuildStatusBrush = MainViewModel.Brush(brush);
     }
@@ -166,7 +166,7 @@ public sealed partial class SetupViewModel : ObservableObject
         var buildSettings = settings.Builds.FirstOrDefault(existing => string.Equals(existing.Path, build.Folder, StringComparison.OrdinalIgnoreCase));
         if (buildSettings is null)
         {
-            buildSettings = KnownBuilds.Create(build.Folder, build.Version);
+            buildSettings = KnownBuilds.Create(build.Folder, build.Version, settings.AllowUnsupportedBuilds);
             settings.Builds.Add(buildSettings);
         }
 

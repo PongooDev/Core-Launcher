@@ -17,6 +17,13 @@ public sealed class LauncherSettings
 
     public List<BuildSettings> Builds { get; set; } = [];
 
+    /// <summary>
+    /// Lets builds Core doesn't support use it anyway: they get Core's defaults (<see cref="Core.Launcher.Hosting.Builds.KnownBuilds.SetAllowUnsupported"/>)
+    /// and play and host with a warning instead of being turned away. Off by default; Core is only tested on the
+    /// supported builds.
+    /// </summary>
+    public bool AllowUnsupportedBuilds { get; set; }
+
     public DllSettings Dlls { get; set; } = new();
 
     public BackendSettings Backend { get; set; } = new();
@@ -49,6 +56,12 @@ public sealed class BuildSettings
     public List<DllRole> ClientDlls { get; set; } = [];
 
     public List<DllRole> ServerDlls { get; set; } = [];
+
+    /// <summary>
+    /// True when <see cref="LauncherSettings.AllowUnsupportedBuilds"/> gave this unsupported build Core's defaults;
+    /// turning it off takes them back off unless they've been changed since.
+    /// </summary>
+    public bool CoreDefaultsAdded { get; set; }
 
     public string ExecutablePath => System.IO.Path.Combine(Path, Executable);
 }

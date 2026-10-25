@@ -236,7 +236,9 @@ public sealed partial class MainViewModel : ObservableObject
                 {
                     BuildVersion.Read(selected.Path)?.Engine,
                     selected.Changelist > 0 ? $"CL {selected.Changelist}" : null,
-                    KnownBuilds.IsKnown(selected.Changelist) ? null : "not supported yet",
+                    KnownBuilds.IsKnown(selected.Changelist) ? null
+                        : settings.AllowUnsupportedBuilds ? "unsupported, may not work"
+                        : "not supported yet",
                 }.Where(part => part is not null));
             Hosting = _host.Servers.Enabled;
             Instances = settings.Servers.Instances;
@@ -429,7 +431,7 @@ public sealed partial class MainViewModel : ObservableObject
         }
         else if (!KnownBuilds.CanPlay(build))
         {
-            (text, brush) = (KnownBuilds.NotSupported(build), "BusyBrush");
+            (text, brush) = (KnownBuilds.NotSupported(build, settings.AllowUnsupportedBuilds), "BusyBrush");
             (actionText, action) = ("Choose another build", ChooseBuildFolder);
         }
         else if (settings.Backend.UseRemote && backend.State is BackendState.Failed or BackendState.Unreachable)
@@ -839,7 +841,8 @@ public sealed partial class MainViewModel : ObservableObject
         }
 
         var detected = await Task.Run(() => BuildDetector.Detect(folder));
-        var (description, brush) = BuildMessages.Describe(detected);
+        var allowUnsupported = _host.Settings.AllowUnsupportedBuilds;
+        var (description, brush) = BuildMessages.Describe(detected, allowUnsupported);
         if (detected is null)
         {
             Toast(description, brush);
@@ -848,13 +851,13 @@ public sealed partial class MainViewModel : ObservableObject
 
         var updated = SettingsStore.Clone(_host.Settings);
         var build = updated.FindSelectedBuild();
-        if (build is not null && !File.Exists(build.ExecutablePath) && KnownBuilds.Create(detected.Folder, detected.Version).Name == build.Name)
+        if (build is not null && !File.Exists(build.ExecutablePath) && KnownBuilds.Create(detected.Folder, detected.Version, allowUnsupported).Name == build.Name)
         {
             build.Path = detected.Folder;
         }
         else
         {
-            build = KnownBuilds.Create(detected.Folder, detected.Version);
+            build = KnownBuilds.Create(detected.Folder, detected.Version, allowUnsupported);
             if (updated.Builds.All(existing => !string.Equals(existing.Name, build.Name, StringComparison.OrdinalIgnoreCase)))
             {
                 updated.Builds.Add(build);

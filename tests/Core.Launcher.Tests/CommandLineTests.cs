@@ -58,7 +58,7 @@ public sealed partial class CommandLineTests
     }
 
     private static BuildSettings Cert() =>
-        KnownBuilds.Create(@"F:\Builds\++Fortnite+Cert-CL-3532353\Fortnite", new BuildVersion(4, 16, 0, 3532353, "++Fortnite+Release-Cert"));
+        KnownBuilds.Create(@"F:\Builds\++Fortnite+Cert-CL-3532353\Fortnite", new BuildVersion(4, 16, 0, 3532353, "++Fortnite+Release-Cert"), allowUnsupported: false);
 
     [Fact]
     public void ServerArgumentsHaveEveryRunServerSwitchAndTheRedirectsBackend()

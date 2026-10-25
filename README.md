@@ -14,6 +14,8 @@ This repository does NOT include Fortnite game files. Core-Backend, a Node.js ru
 | --- | --- |
 | Cert CL-3532353 (UE 4.16) | In progress 🚧 |
 
+Other builds are turned away unless you turn on **Allow unsupported builds** (Settings → Builds): they then get the same Core DLLs, `-httpproxy` and server arguments as Cert and can play and host, but Core is only tested on the builds above, so they may not work.
+
 ## Contents
 
 - [Getting started](#getting-started)
@@ -105,6 +107,7 @@ Settings are saved in `%LOCALAPPDATA%\Core-Launcher\settings.json`.
 | --- | --- | --- |
 | Player name | | Client login (`-AUTH_LOGIN`) |
 | Builds | | Folder, executable, client and server arguments, `-httpproxy`, and which DLLs the client and servers load |
+| Allow unsupported builds | Off | Gives builds Core doesn't support Core's defaults and lets them play and host (with a warning); builds whose Core options you set by hand are left alone |
 | DLLs | Latest `PongooDev/CoreV2` release | Or a local folder with `Core.dll`, `CoreClient.dll`, `CoreRedirect.dll` |
 | Backend | Installed by the launcher | Or your own Core-Backend folder, or one that is already running |
 | Play on | My own backend | Or a friend's backend: a name and an address (`host` or `host:port`, port 5595 by default), with a saved list |
