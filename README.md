@@ -10,10 +10,21 @@ This repository does NOT include Fortnite game files. Core-Backend, a Node.js ru
 
 ## Version support
 
+| Status | Fortnite versions |
+| --- | --- |
+| Supported ✅ | 1.1 – 1.2 |
+
+Core moves forward one build at a time and skips builds nobody has a copy of, so the supported builds are always one range: every build from the first version to the last one listed. The build Core V2 is being developed on ([Version support](https://github.com/PongooDev/CoreV2#version-support)) is added here as **in progress** once Core runs on it.
+
+<details>
+<summary>Every build by changelist</summary>
+
 | Fortnite version | Build | Status |
 | --- | --- | --- |
 | 1.1 | Cert CL-3532353 (UE 4.16) | Supported ✅ |
-| 1.2 | Release-Cert CL-3541083 (UE 4.16) | In progress 🚧 |
+| 1.2 | Release-Cert CL-3541083 (UE 4.16) | Supported ✅ |
+
+</details>
 
 **Supported** builds are the ones Core is tested on. **In progress** builds play and host the same way (same Core DLLs, `-httpproxy` and server arguments), without any switch, but Core's support for them isn't finished, so some things may not work yet: Home shows "support in progress" next to the build, and each client and server log starts with a note saying so.
 

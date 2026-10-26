@@ -49,15 +49,16 @@ public static partial class KnownBuilds
     /// </summary>
     public const string CertServerRegion = "-McpRegion=NA";
 
+    /// <param name="Version">The Fortnite version players call it, for <see cref="SupportSummary"/>.</param>
     /// <param name="FormerNames">Names earlier launchers gave this build, which <see cref="CurrentName"/> renames.</param>
-    private sealed record KnownBuild(int Changelist, string Name, BuildSupport Support, string[] FormerNames);
+    private sealed record KnownBuild(int Changelist, string Version, string Name, BuildSupport Support, string[] FormerNames);
 
     // Core-Docs/Tools/run_server.py and Backend-Evidence-3532353.md (launch line); DLL order from CoreV2 (redirect first).
-    // Every known build uses Core's launch settings (WithCore).
+    // Every known build uses Core's launch settings (WithCore). Oldest first, as Core supports them.
     private static readonly KnownBuild[] Builds =
     [
-        new(Cert, "Fortnite 1.1 (Cert CL-3532353)", BuildSupport.Full, ["Cert CL-3532353"]),
-        new(Fortnite12, "Fortnite 1.2 (CL-3541083)", BuildSupport.InProgress, []),
+        new(Cert, "1.1", "Fortnite 1.1 (Cert CL-3532353)", BuildSupport.Full, ["Cert CL-3532353"]),
+        new(Fortnite12, "1.2", "Fortnite 1.2 (CL-3541083)", BuildSupport.Full, []),
     ];
 
     private static KnownBuild? Find(int changelist) => Array.Find(Builds, build => build.Changelist == changelist);
@@ -92,20 +93,29 @@ public static partial class KnownBuilds
     /// <summary>The known build's name ("Fortnite 1.2 (CL-3541083)"), or null for an unsupported changelist.</summary>
     public static string? NameOf(int changelist) => Find(changelist)?.Name;
 
-    /// <summary>"Fortnite 1.1 (Cert CL-3532353)" (the fully supported builds, for messages).</summary>
-    public static string SupportedNames => Names(BuildSupport.Full);
+    /// <summary>"Fortnite 1.1 to 1.2" (the fully supported builds, for messages).</summary>
+    public static string SupportedNames => Versions(BuildSupport.Full);
 
-    /// <summary>"Fortnite 1.2 (CL-3541083)" (the builds whose support is in progress, for messages), or "" when none is.</summary>
-    public static string InProgressNames => Names(BuildSupport.InProgress);
+    /// <summary>"Fortnite 1.7.2" (the builds whose support is in progress, for messages), or "" when none is.</summary>
+    public static string InProgressNames => Versions(BuildSupport.InProgress);
 
-    /// <summary>"Fortnite 1.1 (Cert CL-3532353), and support for Fortnite 1.2 (CL-3541083) is in progress".</summary>
+    /// <summary>"Fortnite 1.1 to 1.2, and support for Fortnite 1.7.2 is in progress".</summary>
     public static string SupportSummary =>
         InProgressNames.Length == 0 ? SupportedNames : $"{SupportedNames}, and support for {InProgressNames} is in progress";
 
-    private static string Names(BuildSupport support)
+    /// <summary>
+    /// The builds with this support as one range of versions, so the messages stay short however many there are. Core
+    /// moves forward one build at a time and skips builds nobody has a copy of, so they are every build in it.
+    /// </summary>
+    private static string Versions(BuildSupport support)
     {
-        var names = Builds.Where(build => build.Support == support).Select(build => build.Name).ToArray();
-        return names.Length <= 1 ? string.Concat(names) : $"{string.Join(", ", names[..^1])} and {names[^1]}";
+        var versions = Builds.Where(build => build.Support == support).Select(build => build.Version).ToArray();
+        return versions.Length switch
+        {
+            0 => "",
+            1 => $"Fortnite {versions[0]}",
+            _ => $"Fortnite {versions[0]} to {versions[^1]}",
+        };
     }
 
     /// <summary>
