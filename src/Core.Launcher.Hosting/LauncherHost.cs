@@ -363,7 +363,7 @@ public sealed class LauncherHost : IAsyncDisposable
             _ = RestartBackendAsync();
         }
 
-        Servers.Configure(settings.Servers.Instances, TimeSpan.FromSeconds(settings.Servers.ReadyTimeoutSeconds));
+        Servers.Configure(KnownBuilds.ServerCount(settings.Servers, settings.FindSelectedBuild()), TimeSpan.FromSeconds(settings.Servers.ReadyTimeoutSeconds));
         // On a friend's backend their servers host the matches: servers here would log in to it with the same accounts
         // as theirs (CoreServer1, ...) and take over their sessions.
         Servers.SetEnabled(settings.Servers.Enabled && !settings.Backend.UseRemote);

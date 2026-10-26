@@ -68,16 +68,15 @@ public sealed partial class CommandLineTests
         Assert.True(KnownBuilds.HasBattleRoyale(build.Changelist));
         Assert.False(KnownBuilds.HasBattleRoyale(Cert().Changelist));
 
-        var server = Split("x.exe " + LaunchArguments.Server(build, 5595, "CoreServer2", battleRoyale: true));
-        Assert.Contains("-CoreMap=/Game/Athena/Maps/Athena_Terrain?playlistId=2", server);
-        Assert.Contains("-EnableMMS", server);
-        Assert.DoesNotContain("-EnableMMS", Split("x.exe " + LaunchArguments.Server(build, 5595, "CoreServer1")));
+        Assert.Contains("-CoreMode=BattleRoyale", Split("x.exe " + LaunchArguments.Server(build, 5595, "CoreServer3", battleRoyale: true)));
+        Assert.DoesNotContain("-CoreMode=BattleRoyale", Split("x.exe " + LaunchArguments.Server(build, 5595, "CoreServer1")));
 
-        // With two servers and one for Battle Royale, the second hosts it.
-        var servers = new ServerSettings { Instances = 2, BattleRoyaleInstances = 1 };
-        Assert.False(servers.HostsBattleRoyale(1));
-        Assert.True(servers.HostsBattleRoyale(2));
-        Assert.False(new ServerSettings { Instances = 2, BattleRoyaleInstances = 0 }.HostsBattleRoyale(2));
+        // By default 1.7.2 keeps two Save the World servers and two Battle Royale ones, which come after them; 1.2 two.
+        var servers = new ServerSettings();
+        Assert.Equal(4, KnownBuilds.ServerCount(servers, build));
+        Assert.Equal(2, KnownBuilds.ServerCount(servers, Cert()));
+        Assert.False(servers.HostsBattleRoyale(2));
+        Assert.True(servers.HostsBattleRoyale(3));
     }
 
     [Fact]

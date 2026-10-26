@@ -284,7 +284,7 @@
                                 <TextBox Text="{Binding Settings.Servers.Instances, UpdateSourceTrigger=PropertyChanged}" Width="110" HorizontalAlignment="Left" />
                                 <TextBlock Text="Battle Royale servers" Style="{StaticResource Label}" />
                                 <TextBox Text="{Binding Settings.Servers.BattleRoyaleInstances, UpdateSourceTrigger=PropertyChanged}" Width="110" HorizontalAlignment="Left" />
-                                <TextBlock Style="{StaticResource Hint}" Text="On builds with Battle Royale (1.7.2 on), how many of those servers host it. The others host Save the World." />
+                                <TextBlock Style="{StaticResource Hint}" Text="On builds with Battle Royale (1.7.2 on), these run on top of the servers above, which host Save the World. Each match takes a server of its own." />
                                 <TextBlock Text="Ready timeout (seconds)" Style="{StaticResource Label}" />
                                 <TextBox Text="{Binding Settings.Servers.ReadyTimeoutSeconds, UpdateSourceTrigger=PropertyChanged}" Width="110" HorizontalAlignment="Left" />
                                 <TextBlock Style="{StaticResource Hint}" Text="A server that hasn't logged &quot;Server ready&quot; by then is restarted. 0 waits forever." />

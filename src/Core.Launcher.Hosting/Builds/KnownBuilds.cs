@@ -36,11 +36,12 @@ public static partial class KnownBuilds
     public const int Fortnite172 = 3700114;
 
     /// <summary>
-    /// What a Battle Royale server gets: CoreV2's -CoreMap starts it on Athena_Terrain with the solo playlist (the match's
-    /// own playlist comes with its assignment), and -EnableMMS registers it with the matchmaking service that Battle
-    /// Royale's players queue on. Core-Docs/Athena-Boot-1.7.2.md.
+    /// What a Battle Royale server gets. Core takes the map and playlist from the build's own data (on 1.7.2 the Battle
+    /// Royale zone theme's Athena_Terrain and solo playlist; the match's playlist comes with its assignment) and
+    /// registers the server with the matchmaking service that Battle Royale's players queue on, so the launcher needs no
+    /// per-build map. Core-Docs/Athena-Plan.md.
     /// </summary>
-    public const string BattleRoyaleServerArguments = "-CoreMap=/Game/Athena/Maps/Athena_Terrain?playlistId=2 -EnableMMS";
+    public const string BattleRoyaleServerArguments = "-CoreMode=BattleRoyale";
 
     /// <summary>The Settings → Builds switch that lets unsupported builds use Core, by its label.</summary>
     public const string AllowUnsupportedSetting = "Allow unsupported builds";
@@ -104,6 +105,10 @@ public static partial class KnownBuilds
 
     /// <summary>Whether Core hosts Battle Royale on this build (<see cref="ServerSettings.BattleRoyaleInstances"/>).</summary>
     public static bool HasBattleRoyale(int changelist) => Find(changelist)?.BattleRoyale ?? false;
+
+    /// <summary>How many servers the launcher keeps running for this build: Battle Royale's come on top of the others.</summary>
+    public static int ServerCount(ServerSettings servers, BuildSettings? build) =>
+        servers.Instances + (build is not null && HasBattleRoyale(build.Changelist) ? servers.BattleRoyaleInstances : 0);
 
     /// <summary>The known build's name ("Fortnite 1.2 (CL-3541083)"), or null for an unsupported changelist.</summary>
     public static string? NameOf(int changelist) => Find(changelist)?.Name;
