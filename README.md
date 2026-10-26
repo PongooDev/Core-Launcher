@@ -13,6 +13,7 @@ This repository does NOT include Fortnite game files. Core-Backend, a Node.js ru
 | Status | Fortnite versions |
 | --- | --- |
 | Supported ✅ | 1.1 – 1.2 |
+| In progress 🚧 | 1.7.2 |
 
 Core moves forward one build at a time and skips builds nobody has a copy of, so the supported builds are always one range: every build from the first version to the last one listed. The build Core V2 is being developed on ([Version support](https://github.com/PongooDev/CoreV2#version-support)) is added here as **in progress** once Core runs on it.
 
@@ -23,6 +24,7 @@ Core moves forward one build at a time and skips builds nobody has a copy of, so
 | --- | --- | --- |
 | 1.1 | Cert CL-3532353 (UE 4.16) | Supported ✅ |
 | 1.2 | Release-Cert CL-3541083 (UE 4.16) | Supported ✅ |
+| 1.7.2 | Release-Cert CL-3700114 (UE 4.16) | In progress 🚧 |
 
 </details>
 
@@ -128,11 +130,12 @@ Settings are saved in `%LOCALAPPDATA%\Core-Launcher\settings.json`.
 | Port | `5595` | `0` lets the backend pick a free port |
 | Data folder | `Backend\data` | Your own folder uses its `data` folder, the one `npm start` uses |
 | Host servers | On | Autohost on or off |
-| Servers to keep running | `2` | |
+| Servers to keep running | `2` | Save the World's on a build with Battle Royale |
+| Battle Royale servers | `2` | On a build with Battle Royale (1.7.2 on), on top of the servers above; each match takes a server of its own |
 | Ready timeout | `180` s | `0` waits forever |
 | Server login | `CoreServer{n}` | `{n}` is the server's number, so each server has its own account |
 
-The launcher adds `-AUTH_LOGIN`, `-AUTH_PASSWORD` and `-AUTH_TYPE=epic` itself. It adds `-httpproxy=127.0.0.1:<port>` when the build uses it, `-CoreBackend=http://127.0.0.1:<port>` for processes that load `CoreRedirect.dll` (both with the friend's address instead when you play on a friend's backend), and `-nullrhi -unattended` for servers (no renderer, and engine message boxes are logged instead of waiting for a click, as dedicated servers run).
+The launcher adds `-AUTH_LOGIN`, `-AUTH_PASSWORD` and `-AUTH_TYPE=epic` itself. It adds `-httpproxy=127.0.0.1:<port>` when the build uses it, `-CoreBackend=http://127.0.0.1:<port>` for processes that load `CoreRedirect.dll` (both with the friend's address instead when you play on a friend's backend), and `-nullrhi -unattended` for servers (no renderer, and engine message boxes are logged instead of waiting for a click, as dedicated servers run). Battle Royale servers also get `-CoreMode=BattleRoyale`: Core takes the map and playlist from the build itself and registers the server with Core-Backend's matchmaking.
 
 ## Logs
 
