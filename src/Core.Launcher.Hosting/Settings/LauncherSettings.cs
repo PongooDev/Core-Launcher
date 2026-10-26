@@ -147,6 +147,11 @@ public sealed class ServerSettings
 
     public int Instances { get; set; } = 2;
 
+    /// <summary>
+    /// On a build with Battle Royale, how many of the servers host it (the last ones); the others host Save the World.
+    /// </summary>
+    public int BattleRoyaleInstances { get; set; } = 1;
+
     /// <summary>A server that hasn't logged "Server ready" by then is restarted; 0 waits forever.</summary>
     public int ReadyTimeoutSeconds { get; set; } = 180;
 
@@ -154,4 +159,7 @@ public sealed class ServerSettings
     public string Login { get; set; } = "CoreServer{n}";
 
     public string LoginFor(int instance) => Login.Replace("{n}", instance.ToString(), StringComparison.Ordinal);
+
+    /// <summary>Whether server <paramref name="instance"/> (from 1) hosts Battle Royale on a build that has it.</summary>
+    public bool HostsBattleRoyale(int instance) => instance > Instances - BattleRoyaleInstances;
 }

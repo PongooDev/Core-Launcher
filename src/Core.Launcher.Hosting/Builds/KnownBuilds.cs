@@ -32,6 +32,16 @@ public static partial class KnownBuilds
     /// </summary>
     public const int Fortnite12 = 3541083;
 
+    /// <summary>Fortnite 1.7.2, ++Fortnite+Release-Cert CL-3700114 on UE 4.16.0: the first build with Battle Royale.</summary>
+    public const int Fortnite172 = 3700114;
+
+    /// <summary>
+    /// What a Battle Royale server gets: CoreV2's -CoreMap starts it on Athena_Terrain with the solo playlist (the match's
+    /// own playlist comes with its assignment), and -EnableMMS registers it with the matchmaking service that Battle
+    /// Royale's players queue on. Core-Docs/Athena-Boot-1.7.2.md.
+    /// </summary>
+    public const string BattleRoyaleServerArguments = "-CoreMap=/Game/Athena/Maps/Athena_Terrain?playlistId=2 -EnableMMS";
+
     /// <summary>The Settings → Builds switch that lets unsupported builds use Core, by its label.</summary>
     public const string AllowUnsupportedSetting = "Allow unsupported builds";
 
@@ -51,7 +61,8 @@ public static partial class KnownBuilds
 
     /// <param name="Version">The Fortnite version players call it, for <see cref="SupportSummary"/>.</param>
     /// <param name="FormerNames">Names earlier launchers gave this build, which <see cref="CurrentName"/> renames.</param>
-    private sealed record KnownBuild(int Changelist, string Version, string Name, BuildSupport Support, string[] FormerNames);
+    /// <param name="BattleRoyale">Whether the build has Battle Royale, which some of its servers host.</param>
+    private sealed record KnownBuild(int Changelist, string Version, string Name, BuildSupport Support, string[] FormerNames, bool BattleRoyale = false);
 
     // Core-Docs/Tools/run_server.py and Backend-Evidence-3532353.md (launch line); DLL order from CoreV2 (redirect first).
     // Every known build uses Core's launch settings (WithCore). Oldest first, as Core supports them.
@@ -59,6 +70,7 @@ public static partial class KnownBuilds
     [
         new(Cert, "1.1", "Fortnite 1.1 (Cert CL-3532353)", BuildSupport.Full, ["Cert CL-3532353"]),
         new(Fortnite12, "1.2", "Fortnite 1.2 (CL-3541083)", BuildSupport.Full, []),
+        new(Fortnite172, "1.7.2", "Fortnite 1.7.2 (CL-3700114)", BuildSupport.InProgress, [], BattleRoyale: true),
     ];
 
     private static KnownBuild? Find(int changelist) => Array.Find(Builds, build => build.Changelist == changelist);
@@ -89,6 +101,9 @@ public static partial class KnownBuilds
     public static bool IsKnown(int changelist) => Find(changelist) is not null;
 
     public static BuildSupport SupportOf(int changelist) => Find(changelist)?.Support ?? BuildSupport.Unsupported;
+
+    /// <summary>Whether Core hosts Battle Royale on this build (<see cref="ServerSettings.BattleRoyaleInstances"/>).</summary>
+    public static bool HasBattleRoyale(int changelist) => Find(changelist)?.BattleRoyale ?? false;
 
     /// <summary>The known build's name ("Fortnite 1.2 (CL-3541083)"), or null for an unsupported changelist.</summary>
     public static string? NameOf(int changelist) => Find(changelist)?.Name;

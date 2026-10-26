@@ -282,6 +282,9 @@
                                 <CheckBox Style="{StaticResource Switch}" Content="Host servers" IsChecked="{Binding Settings.Servers.Enabled}" FontSize="14" />
                                 <TextBlock Text="Servers to keep running" Style="{StaticResource Label}" Margin="0,16,0,5" />
                                 <TextBox Text="{Binding Settings.Servers.Instances, UpdateSourceTrigger=PropertyChanged}" Width="110" HorizontalAlignment="Left" />
+                                <TextBlock Text="Battle Royale servers" Style="{StaticResource Label}" />
+                                <TextBox Text="{Binding Settings.Servers.BattleRoyaleInstances, UpdateSourceTrigger=PropertyChanged}" Width="110" HorizontalAlignment="Left" />
+                                <TextBlock Style="{StaticResource Hint}" Text="On builds with Battle Royale (1.7.2 on), how many of those servers host it. The others host Save the World." />
                                 <TextBlock Text="Ready timeout (seconds)" Style="{StaticResource Label}" />
                                 <TextBox Text="{Binding Settings.Servers.ReadyTimeoutSeconds, UpdateSourceTrigger=PropertyChanged}" Width="110" HorizontalAlignment="Left" />
                                 <TextBlock Style="{StaticResource Hint}" Text="A server that hasn't logged &quot;Server ready&quot; by then is restarted. 0 waits forever." />

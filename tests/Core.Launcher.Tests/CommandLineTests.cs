@@ -61,6 +61,26 @@ public sealed partial class CommandLineTests
         KnownBuilds.Create(@"F:\Builds\++Fortnite+Cert-CL-3532353\Fortnite", new BuildVersion(4, 16, 0, 3532353, "++Fortnite+Release-Cert"), allowUnsupported: false);
 
     [Fact]
+    public void BattleRoyaleServersStartOnAthenaAndRegisterForMatchmaking()
+    {
+        var build = KnownBuilds.Create(@"F:\Builds.7.2", new BuildVersion(4, 16, 0, KnownBuilds.Fortnite172, "++Fortnite+Release-Cert"), allowUnsupported: false);
+        Assert.Equal(BuildSupport.InProgress, KnownBuilds.SupportOf(build.Changelist));
+        Assert.True(KnownBuilds.HasBattleRoyale(build.Changelist));
+        Assert.False(KnownBuilds.HasBattleRoyale(Cert().Changelist));
+
+        var server = Split("x.exe " + LaunchArguments.Server(build, 5595, "CoreServer2", battleRoyale: true));
+        Assert.Contains("-CoreMap=/Game/Athena/Maps/Athena_Terrain?playlistId=2", server);
+        Assert.Contains("-EnableMMS", server);
+        Assert.DoesNotContain("-EnableMMS", Split("x.exe " + LaunchArguments.Server(build, 5595, "CoreServer1")));
+
+        // With two servers and one for Battle Royale, the second hosts it.
+        var servers = new ServerSettings { Instances = 2, BattleRoyaleInstances = 1 };
+        Assert.False(servers.HostsBattleRoyale(1));
+        Assert.True(servers.HostsBattleRoyale(2));
+        Assert.False(new ServerSettings { Instances = 2, BattleRoyaleInstances = 0 }.HostsBattleRoyale(2));
+    }
+
+    [Fact]
     public void ServerArgumentsHaveEveryRunServerSwitchAndTheRedirectsBackend()
     {
         var arguments = LaunchArguments.Server(Cert(), 5595, "CoreServer");

@@ -144,6 +144,7 @@ public sealed class SettingsStore
         settings.Servers ??= new ServerSettings();
         settings.PlayerName = settings.PlayerName?.Trim() ?? "";
         settings.Servers.Instances = Math.Clamp(settings.Servers.Instances, 0, MaxInstances);
+        settings.Servers.BattleRoyaleInstances = Math.Clamp(settings.Servers.BattleRoyaleInstances, 0, MaxInstances);
         settings.Servers.ReadyTimeoutSeconds = Math.Max(0, settings.Servers.ReadyTimeoutSeconds);
         settings.Backend.Port = Math.Clamp(settings.Backend.Port, 0, 65535);
         settings.Backend.Remote ??= new RemoteBackend();

@@ -1,4 +1,5 @@
 using Core.Launcher.Hosting.Backend;
+using Core.Launcher.Hosting.Builds;
 using Core.Launcher.Hosting.Dlls;
 using Core.Launcher.Hosting.Settings;
 
@@ -23,8 +24,10 @@ public static class LaunchArguments
     /// </summary>
     public static IReadOnlyList<string> ServerSwitches { get; } = ["-nullrhi", "-unattended"];
 
-    public static string Server(BuildSettings build, int backendPort, string login) =>
-        CommandLine.Join([build.ServerArguments, .. Common(build, build.ServerDlls, BackendEndpoint.Local(backendPort), login), .. ServerSwitches.Where(name => !HasSwitch(build.ServerArguments, name))]);
+    /// <param name="battleRoyale">A Battle Royale server (<see cref="KnownBuilds.BattleRoyaleServerArguments"/>).</param>
+    public static string Server(BuildSettings build, int backendPort, string login, bool battleRoyale = false) =>
+        CommandLine.Join([build.ServerArguments, .. Common(build, build.ServerDlls, BackendEndpoint.Local(backendPort), login),
+            .. ServerSwitches.Where(name => !HasSwitch(build.ServerArguments, name)), .. battleRoyale ? [KnownBuilds.BattleRoyaleServerArguments] : Array.Empty<string>()]);
 
     private static bool HasSwitch(string arguments, string name) =>
         arguments.Split(' ', StringSplitOptions.RemoveEmptyEntries).Any(argument => argument.Equals(name, StringComparison.OrdinalIgnoreCase));
