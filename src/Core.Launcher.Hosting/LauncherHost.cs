@@ -505,6 +505,12 @@ public sealed class LauncherHost : IAsyncDisposable
 
     private void OnChanged() => Changed?.Invoke();
 
+    /// <summary>Whether the selected build has Battle Royale, so some servers host it.</summary>
+    public bool BuildHasBattleRoyale => Settings.FindSelectedBuild() is { } build && KnownBuilds.HasBattleRoyale(build.Changelist);
+
+    /// <summary>Whether server <paramref name="instance"/> hosts Battle Royale (<see cref="ServerSettings.BattleRoyaleInstances"/>).</summary>
+    public bool HostsBattleRoyale(int instance) => BuildHasBattleRoyale && Settings.Servers.HostsBattleRoyale(instance);
+
     private static bool SameJson<T>(T left, T right) => JsonSerializer.Serialize(left) == JsonSerializer.Serialize(right);
 
     private sealed class ServerStarter(LauncherHost host) : IServerStarter
@@ -538,7 +544,7 @@ public sealed class LauncherHost : IAsyncDisposable
         {
             var settings = host.Settings;
             var build = settings.FindSelectedBuild()!;
-            var battleRoyale = KnownBuilds.HasBattleRoyale(build.Changelist) && settings.Servers.HostsBattleRoyale(instance);
+            var battleRoyale = host.HostsBattleRoyale(instance);
             var arguments = LaunchArguments.Server(build, host.Backend.Port!.Value, settings.Servers.LoginFor(instance), battleRoyale);
             var output = host.ServerLog(instance);
             output.Write($"(launcher) --- {DateTime.Now:yyyy-MM-dd HH:mm:ss} ---");
