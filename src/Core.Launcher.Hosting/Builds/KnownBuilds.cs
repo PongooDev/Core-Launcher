@@ -77,7 +77,7 @@ public static partial class KnownBuilds
     [
         new(Cert, "1.1", "Fortnite 1.1 (Cert CL-3532353)", BuildSupport.Full, ["Cert CL-3532353"]),
         new(Fortnite12, "1.2", "Fortnite 1.2 (CL-3541083)", BuildSupport.Full, []),
-        new(Fortnite172, "1.7.2", "Fortnite 1.7.2 (CL-3700114)", BuildSupport.InProgress, [], BattleRoyale: true),
+        new(Fortnite172, "1.7.2", "Fortnite 1.7.2 (CL-3700114)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite18, "1.8", "Fortnite 1.8 (CL-3724489)", BuildSupport.InProgress, [], BattleRoyale: true),
     ];
 
@@ -120,13 +120,13 @@ public static partial class KnownBuilds
     /// <summary>The known build's name ("Fortnite 1.2 (CL-3541083)"), or null for an unsupported changelist.</summary>
     public static string? NameOf(int changelist) => Find(changelist)?.Name;
 
-    /// <summary>"Fortnite 1.1 to 1.2" (the fully supported builds, for messages).</summary>
+    /// <summary>"Fortnite 1.1 to 1.7.2" (the fully supported builds, for messages).</summary>
     public static string SupportedNames => Versions(BuildSupport.Full);
 
-    /// <summary>"Fortnite 1.7.2" (the builds whose support is in progress, for messages), or "" when none is.</summary>
+    /// <summary>"Fortnite 1.8" (the build whose support is in progress, for messages), or "" when none is.</summary>
     public static string InProgressNames => Versions(BuildSupport.InProgress);
 
-    /// <summary>"Fortnite 1.1 to 1.2, and support for Fortnite 1.7.2 is in progress".</summary>
+    /// <summary>"Fortnite 1.1 to 1.7.2, and support for Fortnite 1.8 is in progress".</summary>
     public static string SupportSummary =>
         InProgressNames.Length == 0 ? SupportedNames : $"{SupportedNames}, and support for {InProgressNames} is in progress";
 

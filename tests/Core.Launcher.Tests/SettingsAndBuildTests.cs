@@ -266,7 +266,7 @@ public sealed class SettingsAndBuildTests
         Assert.Contains("Core DLLs turned off", KnownBuilds.NotSupported(build, allowUnsupported: true));
         Assert.DoesNotContain("doesn't support", KnownBuilds.NotSupported(build, allowUnsupported: true));
         Assert.Equal(
-            "Fortnite 1.9 CL-3757339 isn't supported and may not work: Core is only tested on Fortnite 1.1 to 1.2, and support for Fortnite 1.7.2 to 1.8 is in progress.",
+            "Fortnite 1.9 CL-3757339 isn't supported and may not work: Core is only tested on Fortnite 1.1 to 1.7.2, and support for Fortnite 1.8 is in progress.",
             KnownBuilds.UnsupportedWarning(build.Name));
     }
 
