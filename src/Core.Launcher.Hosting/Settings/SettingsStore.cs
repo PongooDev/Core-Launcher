@@ -14,8 +14,13 @@ public sealed class SettingsStore
     /// waits for the writer thread, which can be waiting for that lock in its periodic flush (CoreV2 session,
     /// 2026-10-19: about 2 runs in 3 stalled with it, 4 in 4 started without it). Core's own logs flush themselves.
     /// 2: every build records its changelist, and Cert servers get -McpRegion=NA (<see cref="KnownBuilds.CertServerRegion"/>).
+    /// 3: Core knows 1.2 (<see cref="KnownBuilds.Fortnite12"/>, support in progress), so a 1.2 build added while it was
+    /// unsupported becomes the known one (<see cref="KnownBuilds.MakeKnown"/>: it keeps its path and options and loses
+    /// CoreDefaultsAdded). Builds still named what an earlier launcher made up ("Cert CL-3532353",
+    /// "Fortnite Cert CL-3541083") take the known build's name (<see cref="KnownBuilds.CurrentName"/>); names set by
+    /// hand stay.
     /// </summary>
-    public const int CurrentVersion = 2;
+    public const int CurrentVersion = 3;
 
     private static readonly JsonSerializerOptions Options = new()
     {
@@ -75,6 +80,43 @@ public sealed class SettingsStore
                     build.ServerArguments = (build.ServerArguments + " " + KnownBuilds.CertServerRegion).Trim();
                 }
             }
+
+            if (from < 3 && build.Changelist == KnownBuilds.Fortnite12)
+            {
+                build.ClientDlls ??= [];
+                build.ServerDlls ??= [];
+                KnownBuilds.MakeKnown(build);
+            }
+        }
+
+        if (from < 3 && settings.Builds is { } builds)
+        {
+            RenameGeneratedNames(settings, builds);
+        }
+    }
+
+    /// <summary>Gives builds still named what an earlier launcher made up the known build's name, keeping names unique and the selection.</summary>
+    private static void RenameGeneratedNames(LauncherSettings settings, List<BuildSettings> builds)
+    {
+        var selected = settings.FindSelectedBuild();
+        foreach (var build in builds)
+        {
+            if (KnownBuilds.CurrentName(build.Name ?? "", build.Changelist) is not { } name)
+            {
+                continue;
+            }
+
+            var known = KnownBuilds.NameOf(build.Changelist)!;
+            for (var copy = 2; builds.Any(other => other != build && string.Equals(other.Name, name, StringComparison.OrdinalIgnoreCase)); ++copy)
+            {
+                name = $"{known} ({copy})";
+            }
+
+            build.Name = name;
+            if (build == selected)
+            {
+                settings.SelectedBuild = name;
+            }
         }
     }
 
@@ -102,6 +144,7 @@ public sealed class SettingsStore
         settings.Servers ??= new ServerSettings();
         settings.PlayerName = settings.PlayerName?.Trim() ?? "";
         settings.Servers.Instances = Math.Clamp(settings.Servers.Instances, 0, MaxInstances);
+        settings.Servers.BattleRoyaleInstances = Math.Clamp(settings.Servers.BattleRoyaleInstances, 0, MaxInstances);
         settings.Servers.ReadyTimeoutSeconds = Math.Max(0, settings.Servers.ReadyTimeoutSeconds);
         settings.Backend.Port = Math.Clamp(settings.Backend.Port, 0, 65535);
         settings.Backend.Remote ??= new RemoteBackend();

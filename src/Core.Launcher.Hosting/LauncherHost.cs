@@ -363,7 +363,7 @@ public sealed class LauncherHost : IAsyncDisposable
             _ = RestartBackendAsync();
         }
 
-        Servers.Configure(settings.Servers.Instances, TimeSpan.FromSeconds(settings.Servers.ReadyTimeoutSeconds));
+        Servers.Configure(KnownBuilds.ServerCount(settings.Servers, settings.FindSelectedBuild()), TimeSpan.FromSeconds(settings.Servers.ReadyTimeoutSeconds));
         // On a friend's backend their servers host the matches: servers here would log in to it with the same accounts
         // as theirs (CoreServer1, ...) and take over their sessions.
         Servers.SetEnabled(settings.Servers.Enabled && !settings.Backend.UseRemote);
@@ -411,7 +411,7 @@ public sealed class LauncherHost : IAsyncDisposable
         var build = settings.FindSelectedBuild() ?? throw new InvalidOperationException("Add a build first (Settings → Builds)");
         if (!KnownBuilds.CanPlay(build))
         {
-            throw new InvalidOperationException(KnownBuilds.NotSupported(build));
+            throw new InvalidOperationException(KnownBuilds.NotSupported(build, settings.AllowUnsupportedBuilds));
         }
 
         if (login.Length == 0)
@@ -439,6 +439,8 @@ public sealed class LauncherHost : IAsyncDisposable
             output.Write($"(launcher) Playing on {BackendDescription} ({backend.Url})");
         }
 
+        WarnAboutSupport(build, output);
+
         var session = new ClientSession(login, _launcher.Start(new GameStart($"Client {login}", build, build.ClientDlls, LaunchArguments.Client(build, backend, login), false, output)));
         lock (_gate)
         {
@@ -456,6 +458,18 @@ public sealed class LauncherHost : IAsyncDisposable
 
             OnChanged();
         }, TaskScheduler.Default);
+    }
+
+    /// <summary>
+    /// Starts the log with a note when Core doesn't fully support the build: its support is in progress, or it is
+    /// unsupported (which only gets this far with Allow unsupported builds on, or the Core DLLs turned on by hand).
+    /// </summary>
+    private static void WarnAboutSupport(BuildSettings build, LogChannel output)
+    {
+        if (KnownBuilds.SupportWarning(build) is { } warning)
+        {
+            output.Write($"(launcher) {warning}");
+        }
     }
 
     public void StopClient(string login) => ClientFor(login)?.Game.Terminate();
@@ -491,6 +505,12 @@ public sealed class LauncherHost : IAsyncDisposable
 
     private void OnChanged() => Changed?.Invoke();
 
+    /// <summary>Whether the selected build has Battle Royale, so some servers host it.</summary>
+    public bool BuildHasBattleRoyale => Settings.FindSelectedBuild() is { } build && KnownBuilds.HasBattleRoyale(build.Changelist);
+
+    /// <summary>Whether server <paramref name="instance"/> hosts Battle Royale (<see cref="ServerSettings.BattleRoyaleInstances"/>).</summary>
+    public bool HostsBattleRoyale(int instance) => BuildHasBattleRoyale && Settings.Servers.HostsBattleRoyale(instance);
+
     private static bool SameJson<T>(T left, T right) => JsonSerializer.Serialize(left) == JsonSerializer.Serialize(right);
 
     private sealed class ServerStarter(LauncherHost host) : IServerStarter
@@ -504,7 +524,7 @@ public sealed class LauncherHost : IAsyncDisposable
 
             if (!KnownBuilds.CanHost(build))
             {
-                return KnownBuilds.NotSupported(build);
+                return KnownBuilds.NotSupported(build, host.Settings.AllowUnsupportedBuilds);
             }
 
             if (host.Settings.Backend.UseRemote)
@@ -524,9 +544,11 @@ public sealed class LauncherHost : IAsyncDisposable
         {
             var settings = host.Settings;
             var build = settings.FindSelectedBuild()!;
-            var arguments = LaunchArguments.Server(build, host.Backend.Port!.Value, settings.Servers.LoginFor(instance));
+            var battleRoyale = host.HostsBattleRoyale(instance);
+            var arguments = LaunchArguments.Server(build, host.Backend.Port!.Value, settings.Servers.LoginFor(instance), battleRoyale);
             var output = host.ServerLog(instance);
             output.Write($"(launcher) --- {DateTime.Now:yyyy-MM-dd HH:mm:ss} ---");
+            WarnAboutSupport(build, output);
             return host._launcher.Start(new GameStart($"Server {instance}", build, build.ServerDlls, arguments, true, output));
         }
 

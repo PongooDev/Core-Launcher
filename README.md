@@ -10,9 +10,27 @@ This repository does NOT include Fortnite game files. Core-Backend, a Node.js ru
 
 ## Version support
 
-| Fortnite version | Status |
+| Status | Fortnite versions |
 | --- | --- |
-| Cert CL-3532353 (UE 4.16) | In progress 🚧 |
+| Supported ✅ | 1.1 – 1.2 |
+| In progress 🚧 | 1.7.2 |
+
+Core moves forward one build at a time and skips builds nobody has a copy of, so the supported builds are always one range: every build from the first version to the last one listed. The build Core V2 is being developed on ([Version support](https://github.com/PongooDev/CoreV2#version-support)) is added here as **in progress** once Core runs on it.
+
+<details>
+<summary>Every build by changelist</summary>
+
+| Fortnite version | Build | Status |
+| --- | --- | --- |
+| 1.1 | Cert CL-3532353 (UE 4.16) | Supported ✅ |
+| 1.2 | Release-Cert CL-3541083 (UE 4.16) | Supported ✅ |
+| 1.7.2 | Release-Cert CL-3700114 (UE 4.16) | In progress 🚧 |
+
+</details>
+
+**Supported** builds are the ones Core is tested on. **In progress** builds play and host the same way (same Core DLLs, `-httpproxy` and server arguments), without any switch, but Core's support for them isn't finished, so some things may not work yet: Home shows "support in progress" next to the build, and each client and server log starts with a note saying so.
+
+Other builds are turned away unless you turn on **Allow unsupported builds** (Settings → Builds): they then get the same Core DLLs, `-httpproxy` and server arguments as 1.1 and can play and host, but Core is only tested on the builds above, so they may not work.
 
 ## Contents
 
@@ -105,17 +123,19 @@ Settings are saved in `%LOCALAPPDATA%\Core-Launcher\settings.json`.
 | --- | --- | --- |
 | Player name | | Client login (`-AUTH_LOGIN`) |
 | Builds | | Folder, executable, client and server arguments, `-httpproxy`, and which DLLs the client and servers load |
+| Allow unsupported builds | Off | Gives builds Core doesn't support Core's defaults and lets them play and host (with a warning); builds whose Core options you set by hand are left alone. Supported and in-progress builds don't need it |
 | DLLs | Latest `PongooDev/CoreV2` release | Or a local folder with `Core.dll`, `CoreClient.dll`, `CoreRedirect.dll` |
 | Backend | Installed by the launcher | Or your own Core-Backend folder, or one that is already running |
 | Play on | My own backend | Or a friend's backend: a name and an address (`host` or `host:port`, port 5595 by default), with a saved list |
 | Port | `5595` | `0` lets the backend pick a free port |
 | Data folder | `Backend\data` | Your own folder uses its `data` folder, the one `npm start` uses |
 | Host servers | On | Autohost on or off |
-| Servers to keep running | `2` | |
+| Servers to keep running | `2` | Save the World's on a build with Battle Royale |
+| Battle Royale servers | `2` | On a build with Battle Royale (1.7.2 on), on top of the servers above; each match takes a server of its own |
 | Ready timeout | `180` s | `0` waits forever |
 | Server login | `CoreServer{n}` | `{n}` is the server's number, so each server has its own account |
 
-The launcher adds `-AUTH_LOGIN`, `-AUTH_PASSWORD` and `-AUTH_TYPE=epic` itself. It adds `-httpproxy=127.0.0.1:<port>` when the build uses it, `-CoreBackend=http://127.0.0.1:<port>` for processes that load `CoreRedirect.dll` (both with the friend's address instead when you play on a friend's backend), and `-nullrhi -unattended` for servers (no renderer, and engine message boxes are logged instead of waiting for a click, as dedicated servers run).
+The launcher adds `-AUTH_LOGIN`, `-AUTH_PASSWORD` and `-AUTH_TYPE=epic` itself. It adds `-httpproxy=127.0.0.1:<port>` when the build uses it, `-CoreBackend=http://127.0.0.1:<port>` for processes that load `CoreRedirect.dll` (both with the friend's address instead when you play on a friend's backend), and `-nullrhi -unattended` for servers (no renderer, and engine message boxes are logged instead of waiting for a click, as dedicated servers run). Battle Royale servers also get `-CoreMode=BattleRoyale`: Core takes the map and playlist from the build itself and registers the server with Core-Backend's matchmaking.
 
 ## Logs
 

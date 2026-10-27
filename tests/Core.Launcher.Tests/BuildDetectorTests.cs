@@ -69,7 +69,7 @@ public sealed class BuildDetectorTests
         var build = BuildDetector.Detect(root)!;
 
         Assert.Equal((14786821, "++Fortnite+Release-14.60", "FortniteClient-Win64-Shipping.exe"), (build.Version.Changelist, build.Version.BranchName, build.Source));
-        Assert.Equal("Fortnite 14.60 CL-14786821", KnownBuilds.Create(build.Folder, build.Version).Name);
+        Assert.Equal("Fortnite 14.60 CL-14786821", KnownBuilds.Create(build.Folder, build.Version, allowUnsupported: false).Name);
     }
 
     [Fact]
@@ -112,7 +112,7 @@ public sealed class BuildDetectorTests
         using var folder = new TempFolder();
         var build = BuildDetector.Detect(SharedBuild(folder, "build"))!;
         Assert.Equal(0, build.Version.Changelist);
-        Assert.Equal("Fortnite build", KnownBuilds.Create(build.Folder, build.Version).Name);
+        Assert.Equal("Fortnite build", KnownBuilds.Create(build.Folder, build.Version, allowUnsupported: false).Name);
     }
 
     [Theory]
@@ -147,18 +147,20 @@ public sealed class BuildDetectorTests
     [Fact]
     public void UnsupportedBuildsCanNeitherPlayNorHost()
     {
-        var unsupported = KnownBuilds.Create(@"C:\14.60", new BuildVersion(0, 0, 0, 14786821, "++Fortnite+Release-14.60"));
+        var unsupported = KnownBuilds.Create(@"C:\14.60", new BuildVersion(0, 0, 0, 14786821, "++Fortnite+Release-14.60"), allowUnsupported: false);
         Assert.False(KnownBuilds.CanPlay(unsupported));
         Assert.False(KnownBuilds.CanHost(unsupported));
-        Assert.Equal("Core doesn't support Fortnite 14.60 CL-14786821 yet. It supports Cert CL-3532353.", KnownBuilds.NotSupported(unsupported));
+        Assert.Equal(
+            "Core doesn't support Fortnite 14.60 CL-14786821 yet. It supports Fortnite 1.1 to 1.2, and support for Fortnite 1.7.2 is in progress. Turn on Allow unsupported builds in Settings → Builds to try it.",
+            KnownBuilds.NotSupported(unsupported, allowUnsupported: false));
 
-        var cert = KnownBuilds.Create(@"C:\Cert", new BuildVersion(4, 16, 0, KnownBuilds.Cert, "++Fortnite+Release-Cert"));
+        var cert = KnownBuilds.Create(@"C:\Cert", new BuildVersion(4, 16, 0, KnownBuilds.Cert, "++Fortnite+Release-Cert"), allowUnsupported: false);
         Assert.True(KnownBuilds.CanPlay(cert));
         Assert.True(KnownBuilds.CanHost(cert));
 
         cert.ServerDlls = [DllRole.Redirect];
         Assert.False(KnownBuilds.CanHost(cert));
-        Assert.Contains("Core DLLs turned off", KnownBuilds.NotSupported(cert));
+        Assert.Contains("Core DLLs turned off", KnownBuilds.NotSupported(cert, allowUnsupported: false));
     }
 
     /// <summary>The build strings in real exes, from CORE_LAUNCHER_BUILD_DIRS (folders separated by ';').</summary>

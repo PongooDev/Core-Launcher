@@ -58,7 +58,26 @@ public sealed partial class CommandLineTests
     }
 
     private static BuildSettings Cert() =>
-        KnownBuilds.Create(@"F:\Builds\++Fortnite+Cert-CL-3532353\Fortnite", new BuildVersion(4, 16, 0, 3532353, "++Fortnite+Release-Cert"));
+        KnownBuilds.Create(@"F:\Builds\++Fortnite+Cert-CL-3532353\Fortnite", new BuildVersion(4, 16, 0, 3532353, "++Fortnite+Release-Cert"), allowUnsupported: false);
+
+    [Fact]
+    public void BattleRoyaleServersStartOnAthenaAndRegisterForMatchmaking()
+    {
+        var build = KnownBuilds.Create(@"F:\Builds.7.2", new BuildVersion(4, 16, 0, KnownBuilds.Fortnite172, "++Fortnite+Release-Cert"), allowUnsupported: false);
+        Assert.Equal(BuildSupport.InProgress, KnownBuilds.SupportOf(build.Changelist));
+        Assert.True(KnownBuilds.HasBattleRoyale(build.Changelist));
+        Assert.False(KnownBuilds.HasBattleRoyale(Cert().Changelist));
+
+        Assert.Contains("-CoreMode=BattleRoyale", Split("x.exe " + LaunchArguments.Server(build, 5595, "CoreServer3", battleRoyale: true)));
+        Assert.DoesNotContain("-CoreMode=BattleRoyale", Split("x.exe " + LaunchArguments.Server(build, 5595, "CoreServer1")));
+
+        // By default 1.7.2 keeps two Save the World servers and two Battle Royale ones, which come after them; 1.2 two.
+        var servers = new ServerSettings();
+        Assert.Equal(4, KnownBuilds.ServerCount(servers, build));
+        Assert.Equal(2, KnownBuilds.ServerCount(servers, Cert()));
+        Assert.False(servers.HostsBattleRoyale(2));
+        Assert.True(servers.HostsBattleRoyale(3));
+    }
 
     [Fact]
     public void ServerArgumentsHaveEveryRunServerSwitchAndTheRedirectsBackend()

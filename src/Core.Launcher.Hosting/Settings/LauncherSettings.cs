@@ -17,6 +17,13 @@ public sealed class LauncherSettings
 
     public List<BuildSettings> Builds { get; set; } = [];
 
+    /// <summary>
+    /// Lets builds Core doesn't support use it anyway: they get Core's defaults (<see cref="Core.Launcher.Hosting.Builds.KnownBuilds.SetAllowUnsupported"/>)
+    /// and play and host with a warning instead of being turned away. Off by default; Core is only tested on the
+    /// supported builds. Known builds whose support is in progress don't need it.
+    /// </summary>
+    public bool AllowUnsupportedBuilds { get; set; }
+
     public DllSettings Dlls { get; set; } = new();
 
     public BackendSettings Backend { get; set; } = new();
@@ -49,6 +56,12 @@ public sealed class BuildSettings
     public List<DllRole> ClientDlls { get; set; } = [];
 
     public List<DllRole> ServerDlls { get; set; } = [];
+
+    /// <summary>
+    /// True when <see cref="LauncherSettings.AllowUnsupportedBuilds"/> gave this unsupported build Core's defaults;
+    /// turning it off takes them back off unless they've been changed since.
+    /// </summary>
+    public bool CoreDefaultsAdded { get; set; }
 
     public string ExecutablePath => System.IO.Path.Combine(Path, Executable);
 }
@@ -134,6 +147,12 @@ public sealed class ServerSettings
 
     public int Instances { get; set; } = 2;
 
+    /// <summary>
+    /// On a build with Battle Royale, how many servers host it, on top of <see cref="Instances"/> (which host Save the
+    /// World). Each Battle Royale match takes a server of its own.
+    /// </summary>
+    public int BattleRoyaleInstances { get; set; } = 2;
+
     /// <summary>A server that hasn't logged "Server ready" by then is restarted; 0 waits forever.</summary>
     public int ReadyTimeoutSeconds { get; set; } = 180;
 
@@ -141,4 +160,7 @@ public sealed class ServerSettings
     public string Login { get; set; } = "CoreServer{n}";
 
     public string LoginFor(int instance) => Login.Replace("{n}", instance.ToString(), StringComparison.Ordinal);
+
+    /// <summary>Whether server <paramref name="instance"/> (from 1) hosts Battle Royale on a build that has it: the ones after <see cref="Instances"/>.</summary>
+    public bool HostsBattleRoyale(int instance) => instance > Instances;
 }

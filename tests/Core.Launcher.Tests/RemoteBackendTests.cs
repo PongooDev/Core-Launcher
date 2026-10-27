@@ -49,7 +49,7 @@ public sealed class RemoteBackendTests
     [Fact]
     public void ClientsAreSentToTheFriendsBackend()
     {
-        var build = KnownBuilds.Create(@"C:\Cert", new BuildVersion(4, 16, 0, KnownBuilds.Cert, "++Fortnite+Release-Cert"));
+        var build = KnownBuilds.Create(@"C:\Cert", new BuildVersion(4, 16, 0, KnownBuilds.Cert, "++Fortnite+Release-Cert"), allowUnsupported: false);
         var arguments = LaunchArguments.Client(build, new BackendEndpoint("203.0.113.7", 5600), "Friend");
         Assert.Contains("-httpproxy=203.0.113.7:5600", arguments);
         Assert.Contains("-CoreBackend=http://203.0.113.7:5600", arguments);

@@ -20,7 +20,8 @@ public partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         _args = e.Args;
-        if (ShouldUseSoftwareRendering(_args))
+        var softwareRendering = ShouldUseSoftwareRendering(_args);
+        if (softwareRendering)
         {
             RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
         }
@@ -40,9 +41,9 @@ public partial class App : Application
         var host = new LauncherHost(Option("--data") is { } folder ? new LauncherPaths(Path.GetFullPath(folder)) : LauncherPaths.Default);
         _host = host;
 
-        if (IsWine())
+        if (softwareRendering)
         {
-            host.Log.Write("Running under Wine: software rendering active");
+            host.Log.Write(IsWine() ? "Running under Wine: software rendering active" : "Software rendering active");
         }
 
         if (!host.Settings.SetupComplete && new SetupWindow(new SetupViewModel(host)).ShowDialog() != true)

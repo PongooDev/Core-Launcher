@@ -185,6 +185,37 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public bool HasBuild => SelectedBuild is not null;
 
+    public static string UnsupportedBuildsHint =>
+        $"Core supports {KnownBuilds.SupportSummary}; those play and host without this. With this on, other builds get Core's defaults (the Core DLLs and -httpproxy) and can play and host, but they may not work. Builds whose Core options you've set yourself keep them.";
+
+    /// <summary>
+    /// Turning it on gives every unsupported build that still has every Core option off Core's defaults; turning it off
+    /// takes them back off the builds that still have them unchanged. Builds set up by hand keep their settings.
+    /// </summary>
+    public bool AllowUnsupportedBuilds
+    {
+        get => Settings.AllowUnsupportedBuilds;
+        set
+        {
+            if (value == Settings.AllowUnsupportedBuilds)
+            {
+                return;
+            }
+
+            var changed = KnownBuilds.SetAllowUnsupported(Settings, value);
+            foreach (var editor in Builds.Where(editor => changed.Contains(editor.Settings)))
+            {
+                editor.Refresh();
+            }
+
+            OnPropertyChanged();
+            var names = string.Join(", ", changed.Select(build => build.Name));
+            Message = changed.Count == 0 ? ""
+                : value ? $"Turned on Core's defaults for {names}. Save to keep them."
+                : $"Took Core's defaults back off {names}. Save to keep it.";
+        }
+    }
+
     public bool UseRelease
     {
         get => Settings.Dlls.Source == DllSource.Release;
@@ -275,13 +306,13 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         Message = "Checking the build…";
         var detected = await Task.Run(() => BuildDetector.Detect(folder));
-        Message = BuildMessages.Describe(detected).Text;
+        Message = BuildMessages.Describe(detected, AllowUnsupportedBuilds).Text;
         if (detected is null)
         {
             return;
         }
 
-        var build = KnownBuilds.Create(detected.Folder, detected.Version);
+        var build = KnownBuilds.Create(detected.Folder, detected.Version, AllowUnsupportedBuilds);
         var name = build.Name;
         for (var copy = 2; Settings.Builds.Any(existing => string.Equals(existing.Name, build.Name, StringComparison.OrdinalIgnoreCase)); ++copy)
         {
@@ -292,9 +323,13 @@ public sealed partial class SettingsViewModel : ObservableObject
         var editor = new BuildEditor(build);
         Builds.Add(editor);
         SelectedBuild = editor;
-        Message = KnownBuilds.IsKnown(detected.Version.Changelist)
-            ? $"Added {build.Name}"
-            : $"Added {build.Name}. Core doesn't support it yet: its DLLs stay off until you turn them on.";
+        Message = KnownBuilds.SupportOf(build.Changelist) switch
+        {
+            BuildSupport.Full => $"Added {build.Name}",
+            BuildSupport.InProgress => $"Added {build.Name}. {KnownBuilds.InProgressWarning(build.Changelist)}",
+            _ => AllowUnsupportedBuilds ? $"Added {build.Name} with Core's defaults. {KnownBuilds.UnsupportedWarning(build.Name)}"
+                : $"Added {build.Name}. Core doesn't support it yet: its DLLs stay off until you turn them on, or turn on {KnownBuilds.AllowUnsupportedSetting} to try it.",
+        };
     }
 
     [RelayCommand]
@@ -433,6 +468,14 @@ public sealed partial class BuildEditor : ObservableObject
 
     public string ExecutableStatus => PeImage.CheckX64(Settings.ExecutablePath, dll: false) ?? "x64 executable found";
 
+    /// <summary>How far Core supports the build, from the changelist it was added with.</summary>
+    public string Support => KnownBuilds.SupportOf(Settings.Changelist) switch
+    {
+        BuildSupport.Full => $"{KnownBuilds.NameOf(Settings.Changelist)}: supported",
+        BuildSupport.InProgress => $"{KnownBuilds.NameOf(Settings.Changelist)}: {KnownBuilds.InProgressNote}",
+        _ => Settings.Changelist > 0 ? $"CL {Settings.Changelist}: not a build Core supports" : "Unknown version: not a build Core supports",
+    };
+
     public string ClientArguments
     {
         get => Settings.ClientArguments;
@@ -474,6 +517,9 @@ public sealed partial class BuildEditor : ObservableObject
         get => Settings.ServerDlls.Contains(DllRole.Server);
         set => Toggle(Settings.ServerDlls, DllRole.Server, value);
     }
+
+    /// <summary>Shows settings changed outside the editor (Allow unsupported builds).</summary>
+    public void Refresh() => OnPropertyChanged(string.Empty);
 
     private static void Toggle(List<DllRole> list, DllRole role, bool on)
     {

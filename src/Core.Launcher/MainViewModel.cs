@@ -75,7 +75,11 @@ public sealed partial class MainViewModel : ObservableObject
 
     public ObservableCollection<BuildSettings> Builds { get; } = [];
 
+    /// <summary>The servers hosting Save the World (every server on a build without Battle Royale).</summary>
     public ObservableCollection<ServerRowViewModel> Servers { get; } = [];
+
+    /// <summary>The servers hosting Battle Royale, on a build that has it.</summary>
+    public ObservableCollection<ServerRowViewModel> BattleRoyaleServers { get; } = [];
 
     public ObservableCollection<LogTabViewModel> Logs { get; } = [];
 
@@ -119,6 +123,13 @@ public sealed partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     public partial int Instances { get; set; }
+
+    [ObservableProperty]
+    public partial int BattleRoyaleInstances { get; set; }
+
+    /// <summary>The selected build has Battle Royale: the Servers page shows its servers apart from Save the World's.</summary>
+    [ObservableProperty]
+    public partial bool HasBattleRoyale { get; set; }
 
     /// <summary>The player's own client (their player name) is running.</summary>
     [ObservableProperty]
@@ -236,10 +247,17 @@ public sealed partial class MainViewModel : ObservableObject
                 {
                     BuildVersion.Read(selected.Path)?.Engine,
                     selected.Changelist > 0 ? $"CL {selected.Changelist}" : null,
-                    KnownBuilds.IsKnown(selected.Changelist) ? null : "not supported yet",
+                    KnownBuilds.SupportOf(selected.Changelist) switch
+                    {
+                        BuildSupport.Full => null,
+                        BuildSupport.InProgress => KnownBuilds.InProgressNote,
+                        _ => settings.AllowUnsupportedBuilds ? "unsupported, may not work" : "not supported yet",
+                    },
                 }.Where(part => part is not null));
             Hosting = _host.Servers.Enabled;
             Instances = settings.Servers.Instances;
+            BattleRoyaleInstances = settings.Servers.BattleRoyaleInstances;
+            HasBattleRoyale = _host.BuildHasBattleRoyale;
             UsingRemote = settings.Backend.UseRemote;
             HostingOffText = UsingRemote
                 ? $"You're playing on {_host.BackendDescription}: its servers host the matches. Switch to your own backend to host here."
@@ -287,30 +305,22 @@ public sealed partial class MainViewModel : ObservableObject
     private void RefreshServers()
     {
         var slots = _host.Servers.Slots;
-        while (Servers.Count > slots.Count)
-        {
-            Servers.RemoveAt(Servers.Count - 1);
-        }
+        SyncServerRows(Servers, slots.Where(slot => !_host.HostsBattleRoyale(slot.Instance)).ToList());
+        SyncServerRows(BattleRoyaleServers, slots.Where(slot => _host.HostsBattleRoyale(slot.Instance)).ToList());
 
-        for (var index = 0; index < slots.Count; ++index)
+        foreach (var slot in slots)
         {
-            if (index == Servers.Count)
-            {
-                Servers.Add(new ServerRowViewModel(_host.Servers, ShowServerLog));
-            }
-
-            var slot = slots[index];
-            Servers[index].Update(slot);
             EnsureServerLog(slot.Instance);
 
+            var name = ServerName(slot.Instance);
             _lastSlots.TryGetValue(slot.Instance, out var previous);
             if (slot.State == ServerState.Ready && previous != ServerState.Ready)
             {
-                Toast($"Server {slot.Instance} is ready{(slot.Ports.Count > 0 ? $" on UDP {slot.Ports[0]}" : "")}", "GoodBrush");
+                Toast($"{name} is ready{(slot.Ports.Count > 0 ? $" on UDP {slot.Ports[0]}" : "")}", "GoodBrush");
             }
             else if (previous == ServerState.Ready && slot.State != ServerState.Ready && _host.Servers.Enabled)
             {
-                Toast($"Server {slot.Instance} stopped; it will restart", "BusyBrush");
+                Toast($"{name} stopped; it will restart", "BusyBrush");
             }
 
             _lastSlots[slot.Instance] = slot.State;
@@ -429,7 +439,7 @@ public sealed partial class MainViewModel : ObservableObject
         }
         else if (!KnownBuilds.CanPlay(build))
         {
-            (text, brush) = (KnownBuilds.NotSupported(build), "BusyBrush");
+            (text, brush) = (KnownBuilds.NotSupported(build, settings.AllowUnsupportedBuilds), "BusyBrush");
             (actionText, action) = ("Choose another build", ChooseBuildFolder);
         }
         else if (settings.Backend.UseRemote && backend.State is BackendState.Failed or BackendState.Unreachable)
@@ -659,6 +669,41 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
+    /// <summary>"Server 3", or "Battle Royale server 3" when the build hosts both modes.</summary>
+    private string ServerName(int instance) =>
+        !_host.BuildHasBattleRoyale ? $"Server {instance}"
+        : _host.HostsBattleRoyale(instance) ? $"Battle Royale server {instance}"
+        : $"Save the World server {instance}";
+
+    private void SyncServerRows(ObservableCollection<ServerRowViewModel> rows, IReadOnlyList<ServerSlotView> slots)
+    {
+        while (rows.Count > slots.Count)
+        {
+            rows.RemoveAt(rows.Count - 1);
+        }
+
+        for (var index = 0; index < slots.Count; ++index)
+        {
+            if (index == rows.Count)
+            {
+                rows.Add(new ServerRowViewModel(_host.Servers, ShowServerLog));
+            }
+
+            rows[index].Update(slots[index]);
+        }
+    }
+
+    [RelayCommand]
+    private void ChangeBattleRoyaleInstances(string delta)
+    {
+        var updated = SettingsStore.Clone(_host.Settings);
+        updated.Servers.BattleRoyaleInstances = Math.Clamp(updated.Servers.BattleRoyaleInstances + int.Parse(delta), 0, SettingsStore.MaxInstances);
+        if (updated.Servers.BattleRoyaleInstances != _host.Settings.Servers.BattleRoyaleInstances)
+        {
+            _host.SaveSettings(updated);
+        }
+    }
+
     [RelayCommand]
     private void ChangeInstances(string delta)
     {
@@ -839,7 +884,8 @@ public sealed partial class MainViewModel : ObservableObject
         }
 
         var detected = await Task.Run(() => BuildDetector.Detect(folder));
-        var (description, brush) = BuildMessages.Describe(detected);
+        var allowUnsupported = _host.Settings.AllowUnsupportedBuilds;
+        var (description, brush) = BuildMessages.Describe(detected, allowUnsupported);
         if (detected is null)
         {
             Toast(description, brush);
@@ -848,13 +894,13 @@ public sealed partial class MainViewModel : ObservableObject
 
         var updated = SettingsStore.Clone(_host.Settings);
         var build = updated.FindSelectedBuild();
-        if (build is not null && !File.Exists(build.ExecutablePath) && KnownBuilds.Create(detected.Folder, detected.Version).Name == build.Name)
+        if (build is not null && !File.Exists(build.ExecutablePath) && KnownBuilds.Create(detected.Folder, detected.Version, allowUnsupported).Name == build.Name)
         {
             build.Path = detected.Folder;
         }
         else
         {
-            build = KnownBuilds.Create(detected.Folder, detected.Version);
+            build = KnownBuilds.Create(detected.Folder, detected.Version, allowUnsupported);
             if (updated.Builds.All(existing => !string.Equals(existing.Name, build.Name, StringComparison.OrdinalIgnoreCase)))
             {
                 updated.Builds.Add(build);
@@ -863,7 +909,12 @@ public sealed partial class MainViewModel : ObservableObject
 
         updated.SelectedBuild = build.Name;
         _host.SaveSettings(updated);
-        Toast(KnownBuilds.IsKnown(build.Changelist) ? $"Using {build.Name}" : description, brush);
+        Toast(KnownBuilds.SupportOf(build.Changelist) switch
+        {
+            BuildSupport.Full => $"Using {build.Name}",
+            BuildSupport.InProgress => $"Using {build.Name}: {KnownBuilds.InProgressNote}",
+            _ => description,
+        }, brush);
     }
 
     private void UseRunningBackend()
