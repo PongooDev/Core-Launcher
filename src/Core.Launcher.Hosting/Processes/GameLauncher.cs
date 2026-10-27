@@ -1,3 +1,4 @@
+using Core.Launcher.Hosting.Builds;
 using Core.Launcher.Hosting.Dlls;
 using Core.Launcher.Hosting.Logging;
 using Core.Launcher.Hosting.Native;
@@ -15,6 +16,7 @@ public sealed class GameLauncher
     private readonly DllStore _dlls;
     private readonly LauncherPaths _paths;
     private readonly LogChannel _log;
+    private readonly HashSet<string> _checkedExecutables = new(StringComparer.OrdinalIgnoreCase);
 
     public GameLauncher(JobObject job, DllStore dlls, LauncherPaths paths, LogChannel log)
     {
@@ -33,6 +35,11 @@ public sealed class GameLauncher
             throw new InvalidOperationException(problem);
         }
 
+        if (start.Dlls.Contains(DllRole.Server))
+        {
+            PatchWhitelist(executable);
+        }
+
         var dlls = start.Dlls.Select(role => (Role: role, Path: _dlls.Resolve(role))).ToList();
         _log.Write($"{start.Label}: starting {executable} {start.Arguments.Replace($"-AUTH_PASSWORD={LaunchArguments.Password}", "-AUTH_PASSWORD=***")}");
         foreach (var dll in dlls)
@@ -43,6 +50,28 @@ public sealed class GameLauncher
         var process = GameProcess.Start(new GameLaunch(executable, start.Arguments, [.. dlls.Select(dll => dll.Path)], start.Minimized), _job);
         _log.Write($"{start.Label}: pid {process.Id}, {dlls.Count} DLL(s) queued, resumed");
         return new RunningGame(start, process, dlls, _paths, _log);
+    }
+
+    /// <summary>Once per exe a session: lets -nullrhi through its command line whitelist (<see cref="ExePatcher"/>).</summary>
+    private void PatchWhitelist(string executable)
+    {
+        if (!_checkedExecutables.Add(executable))
+        {
+            return;
+        }
+
+        try
+        {
+            if (ExePatcher.PatchWhitelist(executable) == ExePatcher.Result.Patched)
+            {
+                _log.Write($"Patched {executable}: its command line whitelist now lets -nullrhi, -nosplash, -nosound and -log through");
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // Core's server makes the same change in memory, so the server still starts.
+            _log.Write($"Couldn't patch {executable} ({exception.Message}); Core lets -nullrhi through in memory instead");
+        }
     }
 }
 

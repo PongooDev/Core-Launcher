@@ -36,6 +36,12 @@ public static partial class KnownBuilds
     public const int Fortnite172 = 3700114;
 
     /// <summary>
+    /// Fortnite 1.8, ++Fortnite+Release-Live CL-3724489 on UE 4.16.0. Plays like 1.7.2; its exe drops -nullrhi unless the
+    /// command line whitelist lets it through (<see cref="ExePatcher"/>).
+    /// </summary>
+    public const int Fortnite18 = 3724489;
+
+    /// <summary>
     /// What a Battle Royale server gets. Core takes the map and playlist from the build's own data (on 1.7.2 the Battle
     /// Royale zone theme's Athena_Terrain and solo playlist; the match's playlist comes with its assignment) and
     /// registers the server with the matchmaking service that Battle Royale's players queue on, so the launcher needs no
@@ -72,6 +78,7 @@ public static partial class KnownBuilds
         new(Cert, "1.1", "Fortnite 1.1 (Cert CL-3532353)", BuildSupport.Full, ["Cert CL-3532353"]),
         new(Fortnite12, "1.2", "Fortnite 1.2 (CL-3541083)", BuildSupport.Full, []),
         new(Fortnite172, "1.7.2", "Fortnite 1.7.2 (CL-3700114)", BuildSupport.InProgress, [], BattleRoyale: true),
+        new(Fortnite18, "1.8", "Fortnite 1.8 (CL-3724489)", BuildSupport.InProgress, [], BattleRoyale: true),
     ];
 
     private static KnownBuild? Find(int changelist) => Array.Find(Builds, build => build.Changelist == changelist);

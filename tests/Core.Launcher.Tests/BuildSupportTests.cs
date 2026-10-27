@@ -12,7 +12,7 @@ public sealed class BuildSupportTests
 {
     private static readonly BuildVersion Fortnite11 = new(4, 16, 0, KnownBuilds.Cert, "++Fortnite+Release-Cert");
     private static readonly BuildVersion Fortnite12 = new(4, 16, 0, KnownBuilds.Fortnite12, "++Fortnite+Release-Cert");
-    private static readonly BuildVersion Unsupported = new(4, 19, 0, 3724489, "++Fortnite+Release-1.8");
+    private static readonly BuildVersion Unsupported = new(4, 19, 0, 3757339, "++Fortnite+Release-1.9");
 
     private const string ClientArguments = "-epicapp=Fortnite -epicenv=Prod -epicportal -SkipPatchCheck";
     private const string ServerArguments = ClientArguments + " -nullrhi -nosplash -nosound";
@@ -24,7 +24,7 @@ public sealed class BuildSupportTests
     {
         Assert.Equal(BuildSupport.Full, KnownBuilds.SupportOf(KnownBuilds.Cert));
         Assert.Equal(BuildSupport.Full, KnownBuilds.SupportOf(3541083));
-        Assert.Equal(BuildSupport.Unsupported, KnownBuilds.SupportOf(3724489));
+        Assert.Equal(BuildSupport.Unsupported, KnownBuilds.SupportOf(3757339));
         Assert.Equal(BuildSupport.Unsupported, KnownBuilds.SupportOf(0));
         Assert.True(KnownBuilds.IsKnown(3541083));
         Assert.Equal("Fortnite 1.1 (Cert CL-3532353)", KnownBuilds.Create(@"F:\Builds\1.1", Fortnite11, allowUnsupported: false).Name);
@@ -75,15 +75,15 @@ public sealed class BuildSupportTests
     public void MessagesGiveTheSupportedBuildsAsOneRangeOfVersions()
     {
         Assert.Equal("Fortnite 1.1 to 1.2", KnownBuilds.SupportedNames);
-        Assert.Equal("Fortnite 1.7.2", KnownBuilds.InProgressNames);
-        Assert.Equal("Fortnite 1.1 to 1.2, and support for Fortnite 1.7.2 is in progress", KnownBuilds.SupportSummary);
+        Assert.Equal("Fortnite 1.7.2 to 1.8", KnownBuilds.InProgressNames);
+        Assert.Equal("Fortnite 1.1 to 1.2, and support for Fortnite 1.7.2 to 1.8 is in progress", KnownBuilds.SupportSummary);
 
         var other = KnownBuilds.Create(@"F:\Builds\Other", Unsupported, allowUnsupported: false);
         Assert.Equal(
-            "Core doesn't support Fortnite 1.8 CL-3724489 yet. It supports Fortnite 1.1 to 1.2, and support for Fortnite 1.7.2 is in progress. Turn on Allow unsupported builds in Settings → Builds to try it.",
+            "Core doesn't support Fortnite 1.9 CL-3757339 yet. It supports Fortnite 1.1 to 1.2, and support for Fortnite 1.7.2 to 1.8 is in progress. Turn on Allow unsupported builds in Settings → Builds to try it.",
             KnownBuilds.NotSupported(other, allowUnsupported: false));
         Assert.Equal(
-            "Fortnite 1.8 CL-3724489 isn't supported and may not work: Core is only tested on Fortnite 1.1 to 1.2, and support for Fortnite 1.7.2 is in progress.",
+            "Fortnite 1.9 CL-3757339 isn't supported and may not work: Core is only tested on Fortnite 1.1 to 1.2, and support for Fortnite 1.7.2 to 1.8 is in progress.",
             KnownBuilds.UnsupportedWarning(other.Name));
     }
 
@@ -97,7 +97,7 @@ public sealed class BuildSupportTests
 
         Assert.Null(KnownBuilds.SupportWarning(cert));
         Assert.Null(KnownBuilds.SupportWarning(fortnite12));
-        Assert.Equal(KnownBuilds.UnsupportedWarning("Fortnite 1.8 CL-3724489"), KnownBuilds.SupportWarning(other));
+        Assert.Equal(KnownBuilds.UnsupportedWarning("Fortnite 1.9 CL-3757339"), KnownBuilds.SupportWarning(other));
         Assert.Equal("support in progress, some things may not work yet", KnownBuilds.InProgressNote);
     }
 
@@ -163,7 +163,7 @@ public sealed class BuildSupportTests
                 { "Name": "Fortnite Cert CL-3541083", "Path": "F:\\Builds\\1.2.0\\Fortnite\\Fortnite", "Changelist": 3541083, "UseHttpProxy": true,
                   "ClientArguments": "{{ClientArguments}} -log", "ServerArguments": "{{ServerArguments}} -McpRegion=NA",
                   "ClientDlls": [ "Redirect", "Client" ], "ServerDlls": [ "Redirect", "Server" ], "CoreDefaultsAdded": true },
-                { "Name": "Fortnite 1.8 CL-3724489", "Path": "F:\\Builds\\1.8", "Changelist": 3724489, "UseHttpProxy": true,
+                { "Name": "Fortnite 1.9 CL-3757339", "Path": "F:\\Builds\\1.8", "Changelist": 3757339, "UseHttpProxy": true,
                   "ClientArguments": "{{ClientArguments}}", "ServerArguments": "{{ServerArguments}} -McpRegion=NA",
                   "ClientDlls": [ "Redirect", "Client" ], "ServerDlls": [ "Redirect", "Server" ], "CoreDefaultsAdded": true }
               ]
@@ -184,7 +184,7 @@ public sealed class BuildSupportTests
         Assert.Equal(ServerArguments + " -McpRegion=NA", build.ServerArguments);
         Assert.False(build.CoreDefaultsAdded);
         Assert.True(settings.Builds[2].CoreDefaultsAdded);
-        Assert.Equal("Fortnite 1.8 CL-3724489", settings.Builds[2].Name);
+        Assert.Equal("Fortnite 1.9 CL-3757339", settings.Builds[2].Name);
 
         var before = Json(build);
         Assert.Equal([settings.Builds[2]], KnownBuilds.SetAllowUnsupported(settings, false));
@@ -264,7 +264,7 @@ public sealed class BuildSupportTests
     [InlineData("1.2", 3541083, null)]
     [InlineData("My Cert CL-3541083", 3541083, null)]
     [InlineData("Fortnite Cert CL-3541083", 3532353, null)]
-    [InlineData("Fortnite 1.8 CL-3724489", 3724489, null)]
+    [InlineData("Fortnite 1.9 CL-3757339", 3757339, null)]
     public void OnlyNamesTheLauncherMadeUpAreRenamed(string name, int changelist, string? renamed)
     {
         Assert.Equal(renamed, KnownBuilds.CurrentName(name, changelist));

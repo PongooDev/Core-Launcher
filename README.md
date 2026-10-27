@@ -13,7 +13,7 @@ This repository does NOT include Fortnite game files. Core-Backend, a Node.js ru
 | Status | Fortnite versions |
 | --- | --- |
 | Supported ✅ | 1.1 – 1.2 |
-| In progress 🚧 | 1.7.2 |
+| In progress 🚧 | 1.7.2 – 1.8 |
 
 Core moves forward one build at a time and skips builds nobody has a copy of, so the supported builds are always one range: every build from the first version to the last one listed. The build Core V2 is being developed on ([Version support](https://github.com/PongooDev/CoreV2#version-support)) is added here as **in progress** once Core runs on it.
 
@@ -25,6 +25,7 @@ Core moves forward one build at a time and skips builds nobody has a copy of, so
 | 1.1 | Cert CL-3532353 (UE 4.16) | Supported ✅ |
 | 1.2 | Release-Cert CL-3541083 (UE 4.16) | Supported ✅ |
 | 1.7.2 | Release-Cert CL-3700114 (UE 4.16) | In progress 🚧 |
+| 1.8 | Release-Live CL-3724489 (UE 4.16) | In progress 🚧 |
 
 </details>
 
@@ -135,7 +136,7 @@ Settings are saved in `%LOCALAPPDATA%\Core-Launcher\settings.json`.
 | Ready timeout | `180` s | `0` waits forever |
 | Server login | `CoreServer{n}` | `{n}` is the server's number, so each server has its own account |
 
-The launcher adds `-AUTH_LOGIN`, `-AUTH_PASSWORD` and `-AUTH_TYPE=epic` itself. It adds `-httpproxy=127.0.0.1:<port>` when the build uses it, `-CoreBackend=http://127.0.0.1:<port>` for processes that load `CoreRedirect.dll` (both with the friend's address instead when you play on a friend's backend), and `-nullrhi -unattended` for servers (no renderer, and engine message boxes are logged instead of waiting for a click, as dedicated servers run). Battle Royale servers also get `-CoreMode=BattleRoyale`: Core takes the map and playlist from the build itself and registers the server with Core-Backend's matchmaking.
+The launcher adds `-AUTH_LOGIN`, `-AUTH_PASSWORD` and `-AUTH_TYPE=epic` itself. It adds `-httpproxy=127.0.0.1:<port>` when the build uses it, `-CoreBackend=http://127.0.0.1:<port>` for processes that load `CoreRedirect.dll` (both with the friend's address instead when you play on a friend's backend), and `-nullrhi -unattended` for servers (no renderer, and engine message boxes are logged instead of waiting for a click, as dedicated servers run). The shipping exe drops any switch missing from its command line whitelist, `-nullrhi` included, so before a build's first server starts the launcher patches its exe the way Reboot Launcher does: four client-only switches in the whitelist become `-log -nosplash -nosound -nullrhi`. Core's server makes the same change in memory, so an exe the launcher can't write to still works. Battle Royale servers also get `-CoreMode=BattleRoyale`: Core takes the map and playlist from the build itself and registers the server with Core-Backend's matchmaking.
 
 ## Logs
 
