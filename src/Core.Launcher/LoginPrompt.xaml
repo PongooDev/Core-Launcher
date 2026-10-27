@@ -9,6 +9,11 @@
                    Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,6,0,0" />
         <TextBlock Text="Username" Style="{StaticResource Muted}" Margin="0,18,0,5" />
         <TextBox x:Name="Login" FontSize="14" />
+        <TextBlock Text="Password" Style="{StaticResource Muted}" Margin="0,14,0,5" />
+        <PasswordBox x:Name="Password" FontSize="14" />
+        <Button x:Name="RegisterButton" Style="{StaticResource GhostButton}" HorizontalAlignment="Left" Margin="0,6,0,0" Click="OnRegister">
+            <TextBlock Text="Need an account? Register" Foreground="{StaticResource AccentBrush}" />
+        </Button>
         <TextBlock x:Name="Error" Foreground="{StaticResource BadBrush}" TextWrapping="Wrap" Margin="0,8,0,0" />
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
             <Button Content="Cancel" IsCancel="True" />

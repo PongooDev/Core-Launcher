@@ -91,8 +91,24 @@ public sealed partial class BackendHost : IAsyncDisposable
     /// <summary>Core-Backend's admin panel (loopback only), served by the backend itself.</summary>
     public const string AdminPath = "/admin";
 
+    /// <summary>Core-Backend's registration portal page path.</summary>
+    public const string RegisterPath = "/register";
+
+    /// <summary>Core-Backend's player self-service portal page path.</summary>
+    public const string PortalPath = "/portal";
+
     /// <summary>The admin panel of the backend in use (started here or already running), or null while it isn't reachable.</summary>
     public string? AdminPanelUrl => State == BackendState.Ready && Port is { } port && !Target.Remote ? $"http://127.0.0.1:{port}{AdminPath}" : null;
+
+    /// <summary>The registration page of the backend in use (local or friend's).</summary>
+    public string? RegisterUrl => State == BackendState.Ready && Port is { } port
+        ? (Target.Remote ? $"http://{Target.Host}:{port}{RegisterPath}" : $"http://127.0.0.1:{port}{RegisterPath}")
+        : (Target.Remote ? $"http://{Target.Host}:{Target.Port}{RegisterPath}" : null);
+
+    /// <summary>The player self-service portal page of the backend in use (local or friend's).</summary>
+    public string? PortalUrl => State == BackendState.Ready && Port is { } port
+        ? (Target.Remote ? $"http://{Target.Host}:{port}{PortalPath}" : $"http://127.0.0.1:{port}{PortalPath}")
+        : (Target.Remote ? $"http://{Target.Host}:{Target.Port}{PortalPath}" : null);
 
     public bool Running => !_run.IsCompleted;
 

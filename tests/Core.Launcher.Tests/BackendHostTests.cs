@@ -67,10 +67,14 @@ public sealed class BackendHostTests
         host.Start();
         Assert.True(await host.WaitReadyAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
         Assert.Equal($"http://127.0.0.1:{port}/admin", host.AdminPanelUrl);
+        Assert.Equal($"http://127.0.0.1:{port}/register", host.RegisterUrl);
+        Assert.Equal($"http://127.0.0.1:{port}/portal", host.PortalUrl);
 
         listener.Stop();
         await host.StopAsync();
         Assert.Null(host.AdminPanelUrl);
+        Assert.Null(host.RegisterUrl);
+        Assert.Null(host.PortalUrl);
     }
 
     /// <summary>Runs the real Core-Backend from CORE_BACKEND_DIR on a free port with a throwaway data folder.</summary>

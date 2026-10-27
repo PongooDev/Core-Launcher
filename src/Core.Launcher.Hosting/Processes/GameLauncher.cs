@@ -34,7 +34,7 @@ public sealed class GameLauncher
         }
 
         var dlls = start.Dlls.Select(role => (Role: role, Path: _dlls.Resolve(role))).ToList();
-        _log.Write($"{start.Label}: starting {executable} {start.Arguments.Replace($"-AUTH_PASSWORD={LaunchArguments.Password}", "-AUTH_PASSWORD=***")}");
+        _log.Write($"{start.Label}: starting {executable} {System.Text.RegularExpressions.Regex.Replace(start.Arguments, @"-AUTH_PASSWORD=(?:""[^""]*""|\S+)", "-AUTH_PASSWORD=***")}");
         foreach (var dll in dlls)
         {
             _log.Write($"{start.Label}: loading {dll.Path}");

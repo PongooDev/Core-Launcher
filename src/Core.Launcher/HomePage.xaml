@@ -48,6 +48,18 @@
                                 <KeyBinding Key="Enter" Command="{Binding PlayCommand}" />
                             </TextBox.InputBindings>
                         </TextBox>
+
+                        <TextBlock Text="PASSWORD" Style="{StaticResource Heading}" Margin="0,16,0,6" />
+                        <PasswordBox x:Name="Password" Width="260" HorizontalAlignment="Left" FontSize="15"
+                                     IsEnabled="{Binding ClientRunning, Converter={StaticResource Not}}"
+                                     PasswordChanged="OnPasswordChanged" LostFocus="OnPasswordLostFocus">
+                            <PasswordBox.InputBindings>
+                                <KeyBinding Key="Enter" Command="{Binding PlayCommand}" />
+                            </PasswordBox.InputBindings>
+                        </PasswordBox>
+                        <Button Style="{StaticResource GhostButton}" HorizontalAlignment="Left" Margin="0,4,0,0" Command="{Binding RegisterCommand}">
+                            <TextBlock Text="Need an account? Register" Foreground="{StaticResource AccentBrush}" />
+                        </Button>
                         <TextBlock Text="{Binding Message}" Foreground="{StaticResource BadBrush}" Margin="0,8,0,0" TextWrapping="Wrap" MaxWidth="520" HorizontalAlignment="Left" />
                     </StackPanel>
 

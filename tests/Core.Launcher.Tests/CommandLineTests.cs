@@ -88,7 +88,7 @@ public sealed partial class CommandLineTests
         string[] expected =
         [
             "-epicapp=Fortnite", "-epicenv=Prod", "-epicportal", "-httpproxy=127.0.0.1:5595", "-AUTH_LOGIN=CoreServer",
-            "-AUTH_PASSWORD=Core", "-AUTH_TYPE=epic", "-SkipPatchCheck", "-nullrhi", "-nosplash", "-nosound",
+            $"-AUTH_PASSWORD={LaunchArguments.Password}", "-AUTH_TYPE=epic", "-SkipPatchCheck", "-nullrhi", "-nosplash", "-nosound",
             "-CoreBackend=http://127.0.0.1:5595", "-unattended", "-McpRegion=NA",
         ];
         Assert.Equal(expected.Order(), Split("x.exe " + arguments).Skip(1).Order());
@@ -132,6 +132,26 @@ public sealed partial class CommandLineTests
         Assert.Contains("-httpproxy=127.0.0.1:6000", arguments);
         Assert.Contains("-AUTH_LOGIN=Two Words", arguments);
         Assert.DoesNotContain("-nullrhi", arguments);
+    }
+
+    [Fact]
+    public void ClientArgumentsUseDefaultCorePasswordWhenUnsetOrWhitespace()
+    {
+        var b = Cert();
+        Assert.Contains($"-AUTH_PASSWORD={LaunchArguments.Password}", LaunchArguments.Client(b, 5595, "Player"));
+        Assert.Contains($"-AUTH_PASSWORD={LaunchArguments.Password}", LaunchArguments.Client(b, 5595, "Player", ""));
+        Assert.Contains($"-AUTH_PASSWORD={LaunchArguments.Password}", LaunchArguments.Client(b, 5595, "Player", "   "));
+        Assert.Contains($"-AUTH_PASSWORD={LaunchArguments.Password}", LaunchArguments.Client(b, 5595, "Player", null));
+        Assert.Equal("CoreBackend123!", LaunchArguments.Password);
+    }
+
+    [Fact]
+    public void ClientArgumentsUseCustomPasswordWhenProvided()
+    {
+        var b = Cert();
+        var arguments = Split("x.exe " + LaunchArguments.Client(b, 5595, "Player", "MyCustomSecret"));
+        Assert.Contains("-AUTH_PASSWORD=MyCustomSecret", arguments);
+        Assert.DoesNotContain($"-AUTH_PASSWORD={LaunchArguments.Password}", arguments);
     }
 
     [Fact]
