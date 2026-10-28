@@ -74,16 +74,16 @@ public sealed class BuildSupportTests
     [Fact]
     public void MessagesGiveTheSupportedBuildsAsOneRangeOfVersions()
     {
-        Assert.Equal("Fortnite 1.1 to 1.7.2", KnownBuilds.SupportedNames);
-        Assert.Equal("Fortnite 1.8", KnownBuilds.InProgressNames);
-        Assert.Equal("Fortnite 1.1 to 1.7.2, and support for Fortnite 1.8 is in progress", KnownBuilds.SupportSummary);
+        Assert.Equal("Fortnite 1.1 to 1.8", KnownBuilds.SupportedNames);
+        Assert.Equal("Fortnite 1.8.1", KnownBuilds.InProgressNames);
+        Assert.Equal("Fortnite 1.1 to 1.8, and support for Fortnite 1.8.1 is in progress", KnownBuilds.SupportSummary);
 
         var other = KnownBuilds.Create(@"F:\Builds\Other", Unsupported, allowUnsupported: false);
         Assert.Equal(
-            "Core doesn't support Fortnite 1.9 CL-3757339 yet. It supports Fortnite 1.1 to 1.7.2, and support for Fortnite 1.8 is in progress. Turn on Allow unsupported builds in Settings → Builds to try it.",
+            "Core doesn't support Fortnite 1.9 CL-3757339 yet. It supports Fortnite 1.1 to 1.8, and support for Fortnite 1.8.1 is in progress. Turn on Allow unsupported builds in Settings → Builds to try it.",
             KnownBuilds.NotSupported(other, allowUnsupported: false));
         Assert.Equal(
-            "Fortnite 1.9 CL-3757339 isn't supported and may not work: Core is only tested on Fortnite 1.1 to 1.7.2, and support for Fortnite 1.8 is in progress.",
+            "Fortnite 1.9 CL-3757339 isn't supported and may not work: Core is only tested on Fortnite 1.1 to 1.8, and support for Fortnite 1.8.1 is in progress.",
             KnownBuilds.UnsupportedWarning(other.Name));
     }
 
