@@ -45,6 +45,9 @@ public static partial class KnownBuilds
     /// fixes).</summary>
     public const int Fortnite181 = 3729133;
 
+    /// <summary>Fortnite 1.8.2, ++Fortnite+Release-Cert CL-3741772 on UE 4.16.0: the Bush and the Battle Royale Season Shop.</summary>
+    public const int Fortnite182 = 3741772;
+
     /// <summary>
     /// What a Battle Royale server gets. Core takes the map and playlist from the build's own data (on 1.7.2 the Battle
     /// Royale zone theme's Athena_Terrain and solo playlist; the match's playlist comes with its assignment) and
@@ -83,7 +86,8 @@ public static partial class KnownBuilds
         new(Fortnite12, "1.2", "Fortnite 1.2 (CL-3541083)", BuildSupport.Full, []),
         new(Fortnite172, "1.7.2", "Fortnite 1.7.2 (CL-3700114)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite18, "1.8", "Fortnite 1.8 (CL-3724489)", BuildSupport.Full, [], BattleRoyale: true),
-        new(Fortnite181, "1.8.1", "Fortnite 1.8.1 (CL-3729133)", BuildSupport.InProgress, [], BattleRoyale: true),
+        new(Fortnite181, "1.8.1", "Fortnite 1.8.1 (CL-3729133)", BuildSupport.Full, [], BattleRoyale: true),
+        new(Fortnite182, "1.8.2", "Fortnite 1.8.2 (CL-3741772)", BuildSupport.InProgress, [], BattleRoyale: true),
     ];
 
     private static KnownBuild? Find(int changelist) => Array.Find(Builds, build => build.Changelist == changelist);
