@@ -13,6 +13,8 @@ public sealed class LauncherSettings
 
     public string PlayerName { get; set; } = "";
 
+    public string Password { get; set; } = "";
+
     public string SelectedBuild { get; set; } = "";
 
     public List<BuildSettings> Builds { get; set; } = [];

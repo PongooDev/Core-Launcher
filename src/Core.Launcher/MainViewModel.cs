@@ -12,6 +12,7 @@ using Core.Launcher.Hosting.Backend;
 using Core.Launcher.Hosting.Builds;
 using Core.Launcher.Hosting.Components;
 using Core.Launcher.Hosting.Logging;
+using Core.Launcher.Hosting.Processes;
 using Core.Launcher.Hosting.Servers;
 using Core.Launcher.Hosting.Settings;
 
@@ -50,6 +51,7 @@ public sealed partial class MainViewModel : ObservableObject
         Logs.Add(new LogTabViewModel(host.BackendLog));
         SelectedLog = Logs[0];
         PlayerName = host.Settings.PlayerName;
+        Password = host.Settings.Password;
         foreach (var line in host.Log.Snapshot().TakeLast(ActivityLines))
         {
             Activity.Add(line);
@@ -69,7 +71,7 @@ public sealed partial class MainViewModel : ObservableObject
     public Func<string, string?>? PickFolder { get; set; }
 
     /// <summary>Asks for the login of another client: (suggested name, validation returning an error or null) → name, or null when cancelled.</summary>
-    public Func<string, Func<string, string?>, string?>? PromptLogin { get; set; }
+    public Func<string, Func<string, string?>, (string Login, string? Password)?>? PromptLogin { get; set; }
 
     public ObservableCollection<ClientRowViewModel> Clients { get; } = [];
 
@@ -117,6 +119,18 @@ public sealed partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     public partial string PlayerName { get; set; } = "";
+
+    [ObservableProperty]
+    public partial string Password { get; set; } = "";
+
+    [ObservableProperty]
+    public partial bool PasswordRequired { get; set; }
+
+    [ObservableProperty]
+    public partial string PasswordHint { get; set; } = "Optional (defaults to Core)";
+
+    [ObservableProperty]
+    public partial string? RegisterUrl { get; set; }
 
     [ObservableProperty]
     public partial bool Hosting { get; set; }
@@ -341,6 +355,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
         var backend = _host.Backend;
         BackendRunning = backend.Running;
+        RegisterUrl = _host.RegisterUrl;
         CanOpenAdminPanel = backend.AdminPanelUrl is not null;
         AdminPanelHint = backend.AdminPanelUrl is { } url ? $"Open Core-Backend's admin panel ({url})"
             : _host.Settings.Backend.UseRemote ? "A friend's admin panel only opens on their PC"
@@ -368,6 +383,7 @@ public sealed partial class MainViewModel : ObservableObject
             if (backend.State == BackendState.Ready)
             {
                 Toast(remote ? $"Connected to {_host.BackendDescription}" : "Core-Backend is running", "GoodBrush");
+                _ = UpdateAuthRequirementsAsync();
             }
             else if (backend.State is BackendState.Failed or BackendState.Unreachable)
             {
@@ -573,6 +589,7 @@ public sealed partial class MainViewModel : ObservableObject
         Toast(saved ? "Settings saved" : "Changes discarded", saved ? "GoodBrush" : "IdleBrush");
         Settings = new SettingsViewModel(_host, OnSettingsFinished);
         PlayerName = _host.Settings.PlayerName;
+        Password = _host.Settings.Password;
         Refresh();
     }
 
@@ -650,13 +667,65 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
+    partial void OnPlayerNameChanged(string value) => _ = UpdateAuthRequirementsAsync();
+
+    private async Task UpdateAuthRequirementsAsync()
+    {
+        var user = PlayerName.Trim();
+        if (string.IsNullOrWhiteSpace(user))
+        {
+            PasswordRequired = false;
+            PasswordHint = "Optional (defaults to Core)";
+            return;
+        }
+
+        try
+        {
+            var reqs = await _host.GetAuthRequirementsAsync(user);
+            if (reqs is null)
+            {
+                PasswordRequired = false;
+                PasswordHint = "Optional (defaults to Core)";
+                return;
+            }
+
+            PasswordRequired = reqs.PasswordRequired;
+            PasswordHint = reqs.PasswordRequired ? "Required" : "Optional (defaults to Core)";
+        }
+        catch
+        {
+            // Ignore background requirement check failures
+        }
+    }
+
+    [RelayCommand]
+    private void SavePassword()
+    {
+        var password = Password.Trim();
+        if (!string.IsNullOrWhiteSpace(password) &&
+            !string.Equals(password, LaunchArguments.Password, StringComparison.OrdinalIgnoreCase) &&
+            PasswordValidation.Validate(password) is { } error)
+        {
+            Message = error;
+            return;
+        }
+
+        Message = "";
+        if (password != _host.Settings.Password)
+        {
+            var updated = SettingsStore.Clone(_host.Settings);
+            updated.Password = password;
+            _host.SaveSettings(updated);
+        }
+    }
+
     [RelayCommand]
     private void SavePlayerName()
     {
         var name = PlayerName.Trim();
-        if (name.Contains('"'))
+        if (PasswordValidation.ValidateUsername(name) is { } error)
         {
-            Message = "A player name can't contain quotes";
+            Message = error;
             return;
         }
 
@@ -666,6 +735,7 @@ public sealed partial class MainViewModel : ObservableObject
             var updated = SettingsStore.Clone(_host.Settings);
             updated.PlayerName = name;
             _host.SaveSettings(updated);
+            _ = UpdateAuthRequirementsAsync();
         }
     }
 
@@ -725,6 +795,7 @@ public sealed partial class MainViewModel : ObservableObject
         }
 
         SavePlayerName();
+        SavePassword();
         if (Message.Length > 0)
         {
             return;
@@ -751,15 +822,17 @@ public sealed partial class MainViewModel : ObservableObject
     private async Task LaunchAnotherClientAsync()
     {
         var suggestion = Enumerable.Range(2, 99).Select(number => $"{_host.Settings.PlayerName}{number}").First(name => _host.ClientFor(name) is null);
-        if (PromptLogin?.Invoke(suggestion, ValidateLogin) is not { } login)
+        if (PromptLogin?.Invoke(suggestion, ValidateLogin) is not { } credentials)
         {
             return;
         }
 
+        var (login, password) = credentials;
+
         Message = "";
         try
         {
-            await _host.PlayAsync(login);
+            await _host.PlayAsync(login, password);
             Toast($"Starting a client as {login}", "GoodBrush");
         }
         catch (Exception exception)
@@ -774,8 +847,7 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     private string? ValidateLogin(string login) =>
-        login.Trim().Length == 0 ? "Enter a username"
-        : login.Contains('"') ? "A username can't contain quotes"
+        PasswordValidation.ValidateUsername(login) is { } error ? error
         : _host.ClientFor(login.Trim()) is not null ? $"{login.Trim()} is already in the game"
         : null;
 
@@ -816,6 +888,21 @@ public sealed partial class MainViewModel : ObservableObject
     private void OpenAdminPanel()
     {
         if (_host.Backend.AdminPanelUrl is { } url)
+        {
+            Open(url);
+        }
+    }
+
+    [RelayCommand]
+    private async Task RegisterAsync()
+    {
+        if (!_host.Backend.Running && !_host.Settings.Backend.UseRemote)
+        {
+            _host.StartBackend();
+            await _host.Backend.WaitReadyAsync(TimeSpan.FromSeconds(5));
+        }
+
+        if (_host.RegisterUrl is { } url)
         {
             Open(url);
         }

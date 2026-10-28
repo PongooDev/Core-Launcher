@@ -143,6 +143,7 @@ public sealed class SettingsStore
         settings.Backend ??= new BackendSettings();
         settings.Servers ??= new ServerSettings();
         settings.PlayerName = settings.PlayerName?.Trim() ?? "";
+        settings.Password = settings.Password?.Trim() ?? "";
         settings.Servers.Instances = Math.Clamp(settings.Servers.Instances, 0, MaxInstances);
         settings.Servers.BattleRoyaleInstances = Math.Clamp(settings.Servers.BattleRoyaleInstances, 0, MaxInstances);
         settings.Servers.ReadyTimeoutSeconds = Math.Max(0, settings.Servers.ReadyTimeoutSeconds);

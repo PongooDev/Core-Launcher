@@ -1,10 +1,13 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Core.Launcher.Hosting;
+using Core.Launcher.Hosting.Backend;
 using Core.Launcher.Hosting.Builds;
+using Core.Launcher.Hosting.Processes;
 using Core.Launcher.Hosting.Settings;
 
 namespace Core.Launcher;
@@ -22,6 +25,7 @@ public sealed partial class SetupViewModel : ObservableObject
         _host = host;
         var settings = host.Settings;
         PlayerName = settings.PlayerName;
+        Password = settings.Password;
         BuildFolder = settings.FindSelectedBuild()?.Path ?? "";
         UseLocalBackend = settings.Backend.Source == BackendSource.Folder;
         BackendFolder = settings.Backend.Folder;
@@ -37,6 +41,9 @@ public sealed partial class SetupViewModel : ObservableObject
 
     [ObservableProperty]
     public partial string PlayerName { get; set; } = "";
+
+    [ObservableProperty]
+    public partial string Password { get; set; } = "";
 
     [ObservableProperty]
     public partial string BuildFolder { get; set; } = "";
@@ -133,12 +140,28 @@ public sealed partial class SetupViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void Register()
+    {
+        var url = _host.RegisterUrl ?? "http://127.0.0.1:5595/register";
+        Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+    }
+
+    [RelayCommand]
     private async Task InstallAsync()
     {
         Message = "";
-        if (PlayerName.Trim().Length == 0 || PlayerName.Contains('"'))
+        if (PasswordValidation.ValidateUsername(PlayerName) is { } playerError)
         {
-            Message = "Enter a player name (no quotes)";
+            Message = playerError;
+            return;
+        }
+
+        var pass = Password.Trim();
+        if (!string.IsNullOrWhiteSpace(pass) &&
+            !string.Equals(pass, LaunchArguments.Password, StringComparison.OrdinalIgnoreCase) &&
+            PasswordValidation.Validate(pass) is { } passwordError)
+        {
+            Message = passwordError;
             return;
         }
 
@@ -163,6 +186,7 @@ public sealed partial class SetupViewModel : ObservableObject
 
         var settings = SettingsStore.Clone(_host.Settings);
         settings.PlayerName = PlayerName.Trim();
+        settings.Password = Password.Trim();
         var buildSettings = settings.Builds.FirstOrDefault(existing => string.Equals(existing.Path, build.Folder, StringComparison.OrdinalIgnoreCase));
         if (buildSettings is null)
         {

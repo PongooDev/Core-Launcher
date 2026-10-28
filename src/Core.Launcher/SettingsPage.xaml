@@ -291,6 +291,7 @@
                                 <TextBlock Text="Server login" Style="{StaticResource Label}" />
                                 <TextBox Text="{Binding Settings.Servers.Login, UpdateSourceTrigger=PropertyChanged}" Width="240" HorizontalAlignment="Left" />
                                 <TextBlock Style="{StaticResource Hint}" Text="{}{n} is the server's number, so each server logs in with its own account." />
+                                <TextBlock Style="{StaticResource Hint}" Margin="0,10,0,0" Text="If hosting servers for a remote backend, ensure this machine's IP is whitelisted under Sessions → Trusted Hosting IPs in the Core-Backend admin dashboard." />
                             </StackPanel>
                         </Border>
                     </StackPanel>

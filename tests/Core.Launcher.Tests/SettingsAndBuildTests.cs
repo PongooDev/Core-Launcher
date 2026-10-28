@@ -38,7 +38,7 @@ public sealed class SettingsAndBuildTests
     {
         using var folder = new TempFolder();
         var store = new SettingsStore(folder.Combine("settings.json"));
-        var settings = new LauncherSettings { PlayerName = "  Player  " };
+        var settings = new LauncherSettings { PlayerName = "  Player  ", Password = "  MySecret  " };
         settings.Servers.Instances = 99;
         settings.Dlls.Source = DllSource.Local;
         settings.Builds.Add(new BuildSettings { Name = "Cert", ServerDlls = [DllRole.Server] });
@@ -46,6 +46,7 @@ public sealed class SettingsAndBuildTests
 
         var loaded = store.Load();
         Assert.Equal("Player", loaded.PlayerName);
+        Assert.Equal("MySecret", loaded.Password);
         Assert.Equal(SettingsStore.MaxInstances, loaded.Servers.Instances);
         Assert.Equal(DllSource.Local, loaded.Dlls.Source);
         Assert.Equal([DllRole.Server], loaded.Builds.Single().ServerDlls);
