@@ -617,7 +617,24 @@ public sealed class LauncherHost : IAsyncDisposable
             var output = host.ServerLog(instance);
             output.Write($"(launcher) --- {DateTime.Now:yyyy-MM-dd HH:mm:ss} ---");
             WarnAboutSupport(build, output);
+            WriteServerConfig();
             return host._launcher.Start(new GameStart($"Server {instance}", build, build.ServerDlls, arguments, true, output));
+        }
+
+        private void WriteServerConfig()
+        {
+            try
+            {
+                if (ServerConfig.WriteEngineIni(host.Paths.ServerSaved))
+                {
+                    host.Log.Write($"Wrote {ServerConfig.EngineIniPath(host.Paths.ServerSaved)}: servers run without XMPP");
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                // The server still starts; its failed XMPP connection keeps a core busy (CoreV2 #109).
+                host.Log.Write($"Couldn't write the servers' Engine.ini ({exception.Message}); they will try XMPP and keep a core busy");
+            }
         }
 
         public SessionCheck Session(int instance, DateTimeOffset startedAt, IReadOnlyList<int> ports) =>

@@ -7,8 +7,9 @@ namespace Core.Launcher.Hosting.Builds;
 /// in one space-separated string the exe holds ("... -epicapp -epicenv -invitesession -invitefrom -party_joininfo_token
 /// -replay -purgatorymallocproxy ..."), so -nullrhi never reached the engine: a 1.8 server made a D3D11 device and
 /// crashed building the loading screen. This swaps four client-only switches for server ones in place, as Reboot
-/// Launcher does; the string keeps its length. Core's server makes the same swap in memory when it starts, so a build
-/// this can't write to (in use, read-only) still works.
+/// Launcher does; the string keeps its length. Core's server makes the swap in memory when it starts, so a build this
+/// can't write to (in use, read-only) still works; in memory it also swaps Reboot's -useolditemcards for
+/// -saveddirsuffix, which servers need (<see cref="Processes.ServerConfig"/>).
 /// </summary>
 public static class ExePatcher
 {

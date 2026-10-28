@@ -30,4 +30,11 @@ public sealed class LauncherPaths
     public string Logs => Path.Combine(Root, "Logs");
 
     public string CoreLogs => Path.Combine(Logs, "Core");
+
+    /// <summary>Fortnite's own folder (FPaths::GameUserDir), whatever the launcher's is: its Saved folders are here.</summary>
+    public string GameUserDir { get; init; } =
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FortniteGame");
+
+    /// <summary>The servers' saved folder (<see cref="Processes.ServerConfig"/>).</summary>
+    public string ServerSaved => Path.Combine(GameUserDir, "Saved_" + Processes.ServerConfig.SavedDirSuffix);
 }

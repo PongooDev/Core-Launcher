@@ -91,7 +91,7 @@ public sealed partial class CommandLineTests
         [
             "-epicapp=Fortnite", "-epicenv=Prod", "-epicportal", "-httpproxy=127.0.0.1:5595", "-AUTH_LOGIN=CoreServer",
             $"-AUTH_PASSWORD={LaunchArguments.Password}", "-AUTH_TYPE=epic", "-SkipPatchCheck", "-nullrhi", "-nosplash", "-nosound",
-            "-CoreBackend=http://127.0.0.1:5595", "-unattended", "-McpRegion=NA",
+            "-CoreBackend=http://127.0.0.1:5595", "-unattended", "-saveddirsuffix=CoreServer", "-McpRegion=NA",
         ];
         Assert.Equal(expected.Order(), Split("x.exe " + arguments).Skip(1).Order());
     }
@@ -108,6 +108,7 @@ public sealed partial class CommandLineTests
         var client = LaunchArguments.Client(Cert(), 5595, "Player");
         Assert.DoesNotContain("-nullrhi", client);
         Assert.DoesNotContain("-unattended", client);
+        Assert.DoesNotContain("-saveddirsuffix", client);
         Assert.DoesNotContain("-McpRegion", client);
 
         build.ServerArguments += " -NullRHI -Unattended";

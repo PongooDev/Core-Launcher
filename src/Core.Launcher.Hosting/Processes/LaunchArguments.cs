@@ -24,9 +24,10 @@ public static class LaunchArguments
     /// Switches every server needs, whatever its build's arguments say. -nullrhi: the engine's own null-RHI decision for
     /// servers is folded out of the client exe. -unattended: as Epic's dedicated servers run, FMessageDialog::Open logs
     /// the message and answers OK instead of opening a modal window that blocks startup (FApp::IsUnattended() reads it
-    /// once, so it has to be on the original command line). Clients never get them.
+    /// once, so it has to be on the original command line). -saveddirsuffix: the servers' own saved folder, whose
+    /// Engine.ini turns XMPP off (<see cref="ServerConfig"/>). Clients never get them.
     /// </summary>
-    public static IReadOnlyList<string> ServerSwitches { get; } = ["-nullrhi", "-unattended"];
+    public static IReadOnlyList<string> ServerSwitches { get; } = ["-nullrhi", "-unattended", $"-saveddirsuffix={ServerConfig.SavedDirSuffix}"];
 
     /// <param name="battleRoyale">A Battle Royale server (<see cref="KnownBuilds.BattleRoyaleServerArguments"/>).</param>
     public static string Server(BuildSettings build, int backendPort, string login, bool battleRoyale = false) =>
