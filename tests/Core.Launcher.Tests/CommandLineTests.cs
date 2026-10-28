@@ -64,7 +64,9 @@ public sealed partial class CommandLineTests
     public void BattleRoyaleServersStartOnAthenaAndRegisterForMatchmaking()
     {
         var build = KnownBuilds.Create(@"F:\Builds.7.2", new BuildVersion(4, 16, 0, KnownBuilds.Fortnite172, "++Fortnite+Release-Cert"), allowUnsupported: false);
-        Assert.Equal(BuildSupport.InProgress, KnownBuilds.SupportOf(build.Changelist));
+        Assert.Equal(BuildSupport.Full, KnownBuilds.SupportOf(build.Changelist));
+        Assert.Equal(BuildSupport.InProgress, KnownBuilds.SupportOf(KnownBuilds.Fortnite18));
+        Assert.True(KnownBuilds.HasBattleRoyale(KnownBuilds.Fortnite18));
         Assert.True(KnownBuilds.HasBattleRoyale(build.Changelist));
         Assert.False(KnownBuilds.HasBattleRoyale(Cert().Changelist));
 
