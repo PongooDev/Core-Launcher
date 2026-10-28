@@ -48,7 +48,10 @@
                             </StackPanel>
                             <TextBox Text="{Binding PlayerName, UpdateSourceTrigger=PropertyChanged}" Margin="38,12,0,0" FontSize="14" />
                             <TextBlock Text="The name other players see. Core-Backend creates the account the first time you play." Style="{StaticResource Subtle}" Margin="38,6,0,0" TextWrapping="Wrap" />
-                            <TextBlock Text="Password" FontSize="13" Foreground="{StaticResource MutedBrush}" Margin="38,12,0,0" />
+                            <StackPanel Orientation="Horizontal" Margin="38,12,0,0">
+                                <TextBlock Text="Password" FontSize="13" Foreground="{StaticResource MutedBrush}" Margin="0,0,8,0" />
+                                <TextBlock Text="(optional, defaults to Core)" FontSize="12" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" />
+                            </StackPanel>
                             <PasswordBox x:Name="SetupPassword" Margin="38,6,0,0" FontSize="14" PasswordChanged="OnPasswordChanged" />
                             <Button Style="{StaticResource GhostButton}" Command="{Binding RegisterCommand}" Margin="38,6,0,0" HorizontalAlignment="Left">
                                 <TextBlock Text="Need an account? Register" Foreground="{StaticResource AccentBrush}" />

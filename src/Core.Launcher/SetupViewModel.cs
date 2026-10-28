@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.Input;
 using Core.Launcher.Hosting;
 using Core.Launcher.Hosting.Backend;
 using Core.Launcher.Hosting.Builds;
+using Core.Launcher.Hosting.Processes;
 using Core.Launcher.Hosting.Settings;
 
 namespace Core.Launcher;
@@ -155,7 +156,10 @@ public sealed partial class SetupViewModel : ObservableObject
             return;
         }
 
-        if (PasswordValidation.Validate(Password) is { } passwordError)
+        var pass = Password.Trim();
+        if (!string.IsNullOrWhiteSpace(pass) &&
+            !string.Equals(pass, LaunchArguments.Password, StringComparison.OrdinalIgnoreCase) &&
+            PasswordValidation.Validate(pass) is { } passwordError)
         {
             Message = passwordError;
             return;

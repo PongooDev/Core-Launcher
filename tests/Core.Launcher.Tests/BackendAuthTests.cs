@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using Core.Launcher.Hosting;
 using Core.Launcher.Hosting.Backend;
+using Core.Launcher.Hosting.Builds;
 using Core.Launcher.Hosting.Processes;
 
 namespace Core.Launcher.Tests;
@@ -79,7 +80,89 @@ public sealed class BackendAuthTests
     {
         Assert.Equal("ec684b8caddf4013849166972d1ca549", LaunchArguments.DedicatedServerClientId);
         Assert.Equal("e1f31c211f28413186262d37a13fc1d0", LaunchArguments.DedicatedServerClientSecret);
-        Assert.True(LaunchArguments.Password.Length >= 8);
+        Assert.Equal("Core", LaunchArguments.Password);
+    }
+
+    [Fact]
+    public async Task GetAuthRequirementsDetectsPasswordRequiredWhenAccountHasPassword()
+    {
+        using var http = new HttpClient(new AuthMockHandler
+        {
+            RequirementsResponse = """{"name":"Core-Backend","version":"1.0.0","requirePassword":false,"passwordRequired":true,"accountExists":true,"hasPassword":true}"""
+        });
+
+        var endpoint = BackendEndpoint.Local(5595);
+        var reqs = await BackendAuthClient.GetAuthRequirementsAsync(http, endpoint, "SecurePlayer", TestContext.Current.CancellationToken);
+
+        Assert.NotNull(reqs);
+        Assert.False(reqs.RequirePassword);
+        Assert.True(reqs.PasswordRequired);
+        Assert.True(reqs.AccountExists);
+        Assert.True(reqs.HasPassword);
+    }
+
+    [Fact]
+    public async Task GetAuthRequirementsDetectsPasswordOptionalForPasswordlessAccount()
+    {
+        using var http = new HttpClient(new AuthMockHandler
+        {
+            RequirementsResponse = """{"name":"Core-Backend","version":"1.0.0","requirePassword":false,"passwordRequired":false,"accountExists":true,"hasPassword":false}"""
+        });
+
+        var endpoint = BackendEndpoint.Local(5595);
+        var reqs = await BackendAuthClient.GetAuthRequirementsAsync(http, endpoint, "LegacyPlayer", TestContext.Current.CancellationToken);
+
+        Assert.NotNull(reqs);
+        Assert.False(reqs.RequirePassword);
+        Assert.False(reqs.PasswordRequired);
+        Assert.True(reqs.AccountExists);
+        Assert.False(reqs.HasPassword);
+    }
+
+    [Fact]
+    public async Task GetAuthRequirementsEnforcesPasswordWhenServerWideRequirementIsTrue()
+    {
+        using var http = new HttpClient(new AuthMockHandler
+        {
+            RequirementsResponse = """{"name":"Core-Backend","version":"1.0.0","requirePassword":true,"passwordRequired":false,"accountExists":false,"hasPassword":false}"""
+        });
+
+        var endpoint = BackendEndpoint.Local(5595);
+        var reqs = await BackendAuthClient.GetAuthRequirementsAsync(http, endpoint, "NewPlayer", TestContext.Current.CancellationToken);
+
+        Assert.NotNull(reqs);
+        Assert.True(reqs.RequirePassword);
+        Assert.True(reqs.PasswordRequired);
+    }
+
+    [Fact]
+    public async Task GetAuthRequirementsReturnsDefaultFalseOnLegacyBackend()
+    {
+        using var http = new HttpClient(new AuthMockHandler
+        {
+            RequirementsResponse = """{"name":"Core-Backend","version":"1.0.0"}"""
+        });
+
+        var endpoint = BackendEndpoint.Local(5595);
+        var reqs = await BackendAuthClient.GetAuthRequirementsAsync(http, endpoint, "Player", TestContext.Current.CancellationToken);
+
+        Assert.NotNull(reqs);
+        Assert.False(reqs.RequirePassword);
+        Assert.False(reqs.PasswordRequired);
+    }
+
+    [Fact]
+    public void LaunchArgumentsFallsBackToCoreWhenPasswordEmpty()
+    {
+        var build = KnownBuilds.Create(@"F:\Builds\++Fortnite+Cert-CL-3532353\Fortnite", new BuildVersion(4, 16, 0, 3532353, "++Fortnite+Release-Cert"), allowUnsupported: false);
+        var args = LaunchArguments.Client(build, 5595, "Player", null);
+        Assert.Contains("-AUTH_PASSWORD=Core", args);
+
+        var argsEmpty = LaunchArguments.Client(build, 5595, "Player", "");
+        Assert.Contains("-AUTH_PASSWORD=Core", argsEmpty);
+
+        var argsCustom = LaunchArguments.Client(build, 5595, "Player", "MySecretPass123!");
+        Assert.Contains("-AUTH_PASSWORD=MySecretPass123!", argsCustom);
     }
 
     [Fact]
@@ -201,6 +284,7 @@ public sealed class BackendAuthTests
     private sealed class AuthMockHandler : HttpMessageHandler
     {
         public string StatusResponse { get; init; } = """{"status":"online","requirePassword":true,"allowRegistration":true}""";
+        public string RequirementsResponse { get; init; } = """{"name":"Core-Backend","version":"1.0.0","requirePassword":false,"passwordRequired":true,"accountExists":true,"hasPassword":true}""";
         public HttpStatusCode TokenStatusCode { get; init; } = HttpStatusCode.OK;
         public string TokenResponse { get; init; } = "{}";
 
@@ -215,6 +299,13 @@ public sealed class BackendAuthTests
                 });
             }
 
+            if (path is BackendAuthClient.StatusPath or BackendAuthClient.AuthRequirementsPath)
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(RequirementsResponse, Encoding.UTF8, "application/json")
+                });
+            }
             if (path == BackendAuthClient.OAuthTokenPath)
             {
                 return Task.FromResult(new HttpResponseMessage(TokenStatusCode)

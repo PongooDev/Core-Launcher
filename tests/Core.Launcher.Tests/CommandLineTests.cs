@@ -144,7 +144,7 @@ public sealed partial class CommandLineTests
         Assert.Contains($"-AUTH_PASSWORD={LaunchArguments.Password}", LaunchArguments.Client(b, 5595, "Player", ""));
         Assert.Contains($"-AUTH_PASSWORD={LaunchArguments.Password}", LaunchArguments.Client(b, 5595, "Player", "   "));
         Assert.Contains($"-AUTH_PASSWORD={LaunchArguments.Password}", LaunchArguments.Client(b, 5595, "Player", null));
-        Assert.Equal("CoreBackend123!", LaunchArguments.Password);
+        Assert.Equal("Core", LaunchArguments.Password);
     }
 
     [Fact]

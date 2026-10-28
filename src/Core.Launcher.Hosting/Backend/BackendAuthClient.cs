@@ -9,6 +9,8 @@ namespace Core.Launcher.Hosting.Backend;
 /// <summary>Status reported by Core-Backend's web portal (/api/portal/status).</summary>
 public sealed record PortalStatus(bool Online, bool RequirePassword, bool AllowRegistration);
 
+/// <summary>Authentication requirements reported by Core-Backend (/core/api/status?username=... or /core/api/auth-requirements?username=...).</summary>
+public sealed record AuthRequirements(bool RequirePassword, bool PasswordRequired, bool AccountExists = false, bool HasPassword = false);
 /// <summary>Result of pre-authenticating credentials against Core-Backend's OAuth endpoint.</summary>
 public sealed record AuthResult(bool Succeeded, string? ErrorMessage = null, string? ErrorCode = null, int StatusCode = 200)
 {
@@ -19,14 +21,76 @@ public sealed record AuthResult(bool Succeeded, string? ErrorMessage = null, str
 }
 
 /// <summary>
-/// Client for Core-Backend's portal and authentication endpoints (/api/portal/status and /account/api/oauth/token).
+/// Client for Core-Backend's portal and authentication endpoints (/api/portal/status, /core/api/status, and /account/api/oauth/token).
 /// Translates Epic-formatted errors and HTTP status codes (such as 429 and 400 legacy accounts) into user-friendly launcher messages.
 /// </summary>
 public static class BackendAuthClient
 {
     public const string PortalStatusPath = "/api/portal/status";
+    public const string StatusPath = "/core/api/status";
+    public const string AuthRequirementsPath = "/core/api/auth-requirements";
     public const string OAuthTokenPath = "/account/api/oauth/token";
 
+    /// <summary>
+    /// Checks authentication requirements for a specific username (GET /core/api/status?username={username}).
+    /// Returns null if the backend is offline or doesn't support requirement detection.
+    /// </summary>
+    public static async Task<AuthRequirements?> GetAuthRequirementsAsync(
+        HttpClient http,
+        BackendEndpoint endpoint,
+        string username,
+        CancellationToken cancellation = default)
+    {
+        try
+        {
+            var trimmedUser = (username ?? "").Trim();
+            var url = $"{endpoint.Url}{StatusPath}?username={Uri.EscapeDataString(trimmedUser)}";
+            using var response = await http.GetAsync(url, cancellation);
+            if (response.IsSuccessStatusCode)
+            {
+                return await ParseRequirementsAsync(response, cancellation);
+            }
+
+            if (response.StatusCode == HttpStatusCode.NotFound)
+            {
+                var altUrl = $"{endpoint.Url}{AuthRequirementsPath}?username={Uri.EscapeDataString(trimmedUser)}";
+                using var altResponse = await http.GetAsync(altUrl, cancellation);
+                if (altResponse.IsSuccessStatusCode)
+                {
+                    return await ParseRequirementsAsync(altResponse, cancellation);
+                }
+            }
+
+            return null;
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static async Task<AuthRequirements?> ParseRequirementsAsync(HttpResponseMessage response, CancellationToken cancellation)
+    {
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellation);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellation);
+        var root = document.RootElement;
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        var requirePassword = root.TryGetProperty("requirePassword", out var rp) && rp.ValueKind is JsonValueKind.True;
+        var passwordRequired = root.TryGetProperty("passwordRequired", out var pr) && pr.ValueKind is JsonValueKind.True;
+        var accountExists = root.TryGetProperty("accountExists", out var ae) && ae.ValueKind is JsonValueKind.True;
+        var hasPassword = root.TryGetProperty("hasPassword", out var hp) && hp.ValueKind is JsonValueKind.True;
+
+        if (requirePassword)
+        {
+            passwordRequired = true;
+        }
+
+        return new AuthRequirements(requirePassword, passwordRequired, accountExists, hasPassword);
+    }
     /// <summary>Queries the portal status endpoint (GET /api/portal/status).</summary>
     public static async Task<PortalStatus?> CheckPortalStatusAsync(HttpClient http, BackendEndpoint endpoint, CancellationToken cancellation = default)
     {

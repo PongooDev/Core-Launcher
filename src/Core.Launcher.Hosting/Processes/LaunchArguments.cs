@@ -7,8 +7,8 @@ namespace Core.Launcher.Hosting.Processes;
 
 public static class LaunchArguments
 {
-    /// <summary>Core-Backend accepts 8+ character passwords, so unconfigured accounts log in with this fallback.</summary>
-    public const string Password = "CoreBackend123!";
+    /// <summary>Core-Backend default 4-letter password fallback for legacy and passwordless accounts.</summary>
+    public const string Password = "Core";
 
     /// <summary>Authorized DedicatedServer OAuth client credentials.</summary>
     public const string DedicatedServerClientId = "ec684b8caddf4013849166972d1ca549";

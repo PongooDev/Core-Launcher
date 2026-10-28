@@ -12,6 +12,7 @@ using Core.Launcher.Hosting.Backend;
 using Core.Launcher.Hosting.Builds;
 using Core.Launcher.Hosting.Components;
 using Core.Launcher.Hosting.Logging;
+using Core.Launcher.Hosting.Processes;
 using Core.Launcher.Hosting.Servers;
 using Core.Launcher.Hosting.Settings;
 
@@ -121,6 +122,12 @@ public sealed partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     public partial string Password { get; set; } = "";
+
+    [ObservableProperty]
+    public partial bool PasswordRequired { get; set; }
+
+    [ObservableProperty]
+    public partial string PasswordHint { get; set; } = "Optional (defaults to Core)";
 
     [ObservableProperty]
     public partial string? RegisterUrl { get; set; }
@@ -376,6 +383,7 @@ public sealed partial class MainViewModel : ObservableObject
             if (backend.State == BackendState.Ready)
             {
                 Toast(remote ? $"Connected to {_host.BackendDescription}" : "Core-Backend is running", "GoodBrush");
+                _ = UpdateAuthRequirementsAsync();
             }
             else if (backend.State is BackendState.Failed or BackendState.Unreachable)
             {
@@ -659,11 +667,44 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
+    partial void OnPlayerNameChanged(string value) => _ = UpdateAuthRequirementsAsync();
+
+    private async Task UpdateAuthRequirementsAsync()
+    {
+        var user = PlayerName.Trim();
+        if (string.IsNullOrWhiteSpace(user))
+        {
+            PasswordRequired = false;
+            PasswordHint = "Optional (defaults to Core)";
+            return;
+        }
+
+        try
+        {
+            var reqs = await _host.GetAuthRequirementsAsync(user);
+            if (reqs is null)
+            {
+                PasswordRequired = false;
+                PasswordHint = "Optional (defaults to Core)";
+                return;
+            }
+
+            PasswordRequired = reqs.PasswordRequired;
+            PasswordHint = reqs.PasswordRequired ? "Required" : "Optional (defaults to Core)";
+        }
+        catch
+        {
+            // Ignore background requirement check failures
+        }
+    }
+
     [RelayCommand]
     private void SavePassword()
     {
         var password = Password.Trim();
-        if (PasswordValidation.Validate(password) is { } error)
+        if (!string.IsNullOrWhiteSpace(password) &&
+            !string.Equals(password, LaunchArguments.Password, StringComparison.OrdinalIgnoreCase) &&
+            PasswordValidation.Validate(password) is { } error)
         {
             Message = error;
             return;
@@ -694,6 +735,7 @@ public sealed partial class MainViewModel : ObservableObject
             var updated = SettingsStore.Clone(_host.Settings);
             updated.PlayerName = name;
             _host.SaveSettings(updated);
+            _ = UpdateAuthRequirementsAsync();
         }
     }
 

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Windows;
 using Core.Launcher.Hosting.Backend;
+using Core.Launcher.Hosting.Processes;
 
 namespace Core.Launcher;
 
@@ -49,7 +50,10 @@ public partial class LoginPrompt : Window
             return;
         }
 
-        if (PasswordValidation.Validate(Password.Password) is { } passwordProblem)
+        var pass = Password.Password.Trim();
+        if (!string.IsNullOrWhiteSpace(pass) &&
+            !string.Equals(pass, LaunchArguments.Password, StringComparison.OrdinalIgnoreCase) &&
+            PasswordValidation.Validate(pass) is { } passwordProblem)
         {
             Error.Text = passwordProblem;
             return;

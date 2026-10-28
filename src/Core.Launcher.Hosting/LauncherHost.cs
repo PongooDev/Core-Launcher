@@ -392,6 +392,17 @@ public sealed class LauncherHost : IAsyncDisposable
     /// <summary>The registration page of the active backend in use (local or friend's).</summary>
     public string? RegisterUrl => Backend.RegisterUrl ?? (BackendEndpoint.TryParse(Settings.Backend.Remote.Address, out var ep, out _) ? $"{ep.Url}/register" : null);
 
+    /// <summary>Checks authentication requirements for the given username against the active backend.</summary>
+    public async Task<AuthRequirements?> GetAuthRequirementsAsync(string username)
+    {
+        var endpoint = Backend.Endpoint ?? (Settings.Backend.UseRemote && BackendEndpoint.TryParse(Settings.Backend.Remote.Address, out var ep, out _) ? ep : null);
+        if (endpoint is null)
+        {
+            return null;
+        }
+
+        return await BackendAuthClient.GetAuthRequirementsAsync(_remoteCheck, endpoint, username);
+    }
     /// <summary>
     /// Starts a client logged in as <paramref name="login"/> (the player's name when null), beside any already running;
     /// throws with a message for the user when it can't. One client per account: a second login would end the first
@@ -412,7 +423,10 @@ public sealed class LauncherHost : IAsyncDisposable
             throw new InvalidOperationException(userProblem);
         }
 
-        if (PasswordValidation.Validate(password) is { } passwordProblem)
+        var isDefaultCorePassword = string.Equals(password, LaunchArguments.Password, StringComparison.OrdinalIgnoreCase);
+
+        if (!string.IsNullOrWhiteSpace(password) && !isDefaultCorePassword &&
+            PasswordValidation.Validate(password) is { } passwordProblem)
         {
             throw new InvalidOperationException(passwordProblem);
         }
@@ -436,10 +450,54 @@ public sealed class LauncherHost : IAsyncDisposable
                 : $"Core-Backend isn't ready: {Backend.Error ?? Backend.State.ToString()}");
         }
 
-        var authResult = await BackendAuthClient.AuthenticateAsync(_remoteCheck, backend, login, password ?? LaunchArguments.Password);
-        if (!authResult.Succeeded && authResult.StatusCode != 0)
+        var requirements = await BackendAuthClient.GetAuthRequirementsAsync(_remoteCheck, backend, login);
+        var passwordRequired = requirements?.PasswordRequired ?? false;
+
+        string? effectivePassword = null;
+        if (passwordRequired)
         {
-            throw new InvalidOperationException(authResult.ErrorMessage);
+            if (string.IsNullOrWhiteSpace(password) || isDefaultCorePassword)
+            {
+                if (requirements is { AccountExists: true, HasPassword: false, RequirePassword: true })
+                {
+                    throw new InvalidOperationException("This account was created before passwords were required. Please ask your server host for a Password Reset Link to secure your account.");
+                }
+
+                throw new InvalidOperationException("A password is required to log into this account.");
+            }
+
+            if (PasswordValidation.Validate(password, required: true) is { } requiredProblem)
+            {
+                throw new InvalidOperationException(requiredProblem);
+            }
+
+            effectivePassword = password;
+            var authResult = await BackendAuthClient.AuthenticateAsync(_remoteCheck, backend, login, effectivePassword);
+            if (!authResult.Succeeded && authResult.StatusCode != 0)
+            {
+                throw new InvalidOperationException(authResult.ErrorMessage);
+            }
+        }
+        else
+        {
+            if (!string.IsNullOrWhiteSpace(password) && !isDefaultCorePassword)
+            {
+                if (PasswordValidation.Validate(password, required: false) is { } customProblem)
+                {
+                    throw new InvalidOperationException(customProblem);
+                }
+
+                effectivePassword = password;
+                var authResult = await BackendAuthClient.AuthenticateAsync(_remoteCheck, backend, login, effectivePassword);
+                if (!authResult.Succeeded && authResult.StatusCode != 0)
+                {
+                    throw new InvalidOperationException(authResult.ErrorMessage);
+                }
+            }
+            else
+            {
+                effectivePassword = LaunchArguments.Password;
+            }
         }
 
         var output = ClientLog(login);
@@ -451,7 +509,7 @@ public sealed class LauncherHost : IAsyncDisposable
 
         WarnAboutSupport(build, output);
 
-        var session = new ClientSession(login, _launcher.Start(new GameStart($"Client {login}", build, build.ClientDlls, LaunchArguments.Client(build, backend, login, password), false, output)));
+        var session = new ClientSession(login, _launcher.Start(new GameStart($"Client {login}", build, build.ClientDlls, LaunchArguments.Client(build, backend, login, effectivePassword), false, output)));
         lock (_gate)
         {
             _clients.Add(session);

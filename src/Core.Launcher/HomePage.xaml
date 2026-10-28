@@ -49,7 +49,10 @@
                             </TextBox.InputBindings>
                         </TextBox>
 
-                        <TextBlock Text="PASSWORD" Style="{StaticResource Heading}" Margin="0,16,0,6" />
+                        <StackPanel Orientation="Horizontal" Margin="0,16,0,6">
+                            <TextBlock Text="PASSWORD" Style="{StaticResource Heading}" Margin="0,0,8,0" />
+                            <TextBlock Text="{Binding PasswordHint}" Style="{StaticResource Subtle}" VerticalAlignment="Center" />
+                        </StackPanel>
                         <PasswordBox x:Name="Password" Width="260" HorizontalAlignment="Left" FontSize="15"
                                      IsEnabled="{Binding ClientRunning, Converter={StaticResource Not}}"
                                      PasswordChanged="OnPasswordChanged" LostFocus="OnPasswordLostFocus">
