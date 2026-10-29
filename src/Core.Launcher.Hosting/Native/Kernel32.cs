@@ -97,6 +97,10 @@ internal static partial class Kernel32
     public static unsafe partial bool WriteProcessMemory(SafeProcessHandle hProcess, nint lpBaseAddress, void* lpBuffer, nuint nSize, out nuint lpNumberOfBytesWritten);
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static unsafe partial bool ReadProcessMemory(SafeProcessHandle hProcess, nint lpBaseAddress, void* lpBuffer, nuint nSize, out nuint lpNumberOfBytesRead);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
     public static partial uint QueueUserAPC(nint pfnAPC, SafeKernelHandle hThread, nint dwData);
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
