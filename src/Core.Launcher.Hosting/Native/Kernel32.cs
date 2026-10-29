@@ -146,6 +146,25 @@ internal static partial class Kernel32
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool GenerateConsoleCtrlEvent(uint dwCtrlEvent, uint dwProcessGroupId);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MODULEINFO
+    {
+        public nint lpBaseOfDll;
+        public uint SizeOfImage;
+        public nint EntryPoint;
+    }
+
+    [LibraryImport("kernel32.dll", EntryPoint = "K32EnumProcessModulesEx", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static unsafe partial bool EnumProcessModulesEx(SafeProcessHandle hProcess, nint* lphModule, uint cb, out uint lpcbNeeded, uint dwFilterFlag);
+
+    [LibraryImport("kernel32.dll", EntryPoint = "K32GetModuleFileNameExW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    public static unsafe partial uint GetModuleFileNameEx(SafeProcessHandle hProcess, nint hModule, char* lpFilename, uint nSize);
+
+    [LibraryImport("kernel32.dll", EntryPoint = "K32GetModuleInformation", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static unsafe partial bool GetModuleInformation(SafeProcessHandle hProcess, nint hModule, out MODULEINFO lpmodinfo, uint cb);
 }
 
 internal sealed class SafeKernelHandle : SafeHandleZeroOrMinusOneIsInvalid
