@@ -94,7 +94,7 @@ public sealed class SettingsAndBuildTests
               "Builds": [
                 { "Name": "My Cert", "Path": {{System.Text.Json.JsonSerializer.Serialize(certFolder)}}, "ClientArguments": "-epicportal", "ServerArguments": "-epicportal -nullrhi" },
                 { "Name": "Cert CL-3532353 (2)", "Path": "Z:\\gone", "ServerArguments": "-epicportal -mcpregion=EU" },
-                { "Name": "Other CL-3757339", "Path": "Z:\\gone", "ServerArguments": "-epicportal" }
+                { "Name": "Other CL-3790078", "Path": "Z:\\gone", "ServerArguments": "-epicportal" }
               ]
             }
             """);
@@ -160,13 +160,13 @@ public sealed class SettingsAndBuildTests
     [Fact]
     public void UnknownBuildHasNoDlls()
     {
-        var build = KnownBuilds.Create(@"F:\Builds\Other", new BuildVersion(4, 19, 0, 3757339, "++Fortnite+Release-1.9"), allowUnsupported: false);
-        Assert.Equal("Fortnite 1.9 CL-3757339", build.Name);
+        var build = KnownBuilds.Create(@"F:\Builds\Other", new BuildVersion(4, 19, 0, 3790078, "++Fortnite+Release-1.10"), allowUnsupported: false);
+        Assert.Equal("Fortnite 1.10 CL-3790078", build.Name);
         Assert.Empty(build.ServerDlls);
         Assert.Empty(build.ClientDlls);
     }
 
-    private static readonly BuildVersion Unsupported = new(4, 19, 0, 3757339, "++Fortnite+Release-1.9");
+    private static readonly BuildVersion Unsupported = new(4, 19, 0, 3790078, "++Fortnite+Release-1.10");
 
     private static BuildSettings Cert(bool allowUnsupported) =>
         KnownBuilds.Create(@"F:\Builds\Cert", BuildVersion.Parse(CertBuildVersion), allowUnsupported);
@@ -200,7 +200,7 @@ public sealed class SettingsAndBuildTests
         using var folder = new TempFolder();
         var path = folder.Combine("settings.json");
         File.WriteAllText(path, """
-            { "Version": 2, "Builds": [ { "Name": "Fortnite 1.9 CL-3757339", "Changelist": 3757339, "ServerArguments": "-epicportal" } ] }
+            { "Version": 2, "Builds": [ { "Name": "Fortnite 1.10 CL-3790078", "Changelist": 3790078, "ServerArguments": "-epicportal" } ] }
             """);
 
         var settings = new SettingsStore(path).Load();
@@ -215,8 +215,8 @@ public sealed class SettingsAndBuildTests
         var build = KnownBuilds.Create(@"F:\Builds\Other", Unsupported, allowUnsupported: true);
         var cert = Cert(allowUnsupported: false);
 
-        Assert.Equal("Fortnite 1.9 CL-3757339", build.Name);
-        Assert.Equal(3757339, build.Changelist);
+        Assert.Equal("Fortnite 1.10 CL-3790078", build.Name);
+        Assert.Equal(3790078, build.Changelist);
         Assert.Equal(@"F:\Builds\Other", build.Path);
         Assert.True(build.CoreDefaultsAdded);
         Assert.Equal(cert.UseHttpProxy, build.UseHttpProxy);
@@ -244,7 +244,7 @@ public sealed class SettingsAndBuildTests
         var build = KnownBuilds.Create(@"F:\Builds\Other", Unsupported, allowUnsupported: false);
         Assert.False(KnownBuilds.CanPlay(build));
         Assert.False(KnownBuilds.CanHost(build));
-        Assert.Contains("doesn't support Fortnite 1.9 CL-3757339 yet", KnownBuilds.NotSupported(build, allowUnsupported: false));
+        Assert.Contains("doesn't support Fortnite 1.10 CL-3790078 yet", KnownBuilds.NotSupported(build, allowUnsupported: false));
         Assert.Contains("Turn on Allow unsupported builds", KnownBuilds.NotSupported(build, allowUnsupported: false));
 
         var settings = new LauncherSettings { Builds = [build] };
@@ -267,7 +267,7 @@ public sealed class SettingsAndBuildTests
         Assert.Contains("Core DLLs turned off", KnownBuilds.NotSupported(build, allowUnsupported: true));
         Assert.DoesNotContain("doesn't support", KnownBuilds.NotSupported(build, allowUnsupported: true));
         Assert.Equal(
-            "Fortnite 1.9 CL-3757339 isn't supported and may not work: Core is only tested on Fortnite 1.1 to 1.8.1, and support for Fortnite 1.8.2 is in progress.",
+            "Fortnite 1.10 CL-3790078 isn't supported and may not work: Core is only tested on Fortnite 1.1 to 1.8.2, and support for Fortnite 1.9 is in progress.",
             KnownBuilds.UnsupportedWarning(build.Name));
     }
 
