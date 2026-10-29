@@ -44,7 +44,14 @@ public sealed class ExeDecryptorTests
         var copy = folder.Combine("FortniteClient-Win64-Shipping.exe");
         File.Copy(Exe191, copy);
 
-        Assert.Equal(ExeDecryptor.Result.Decrypted, ExeDecryptor.Decrypt(copy));
+        var messages = new List<string>();
+        var first = ExeDecryptor.Decrypt(copy, messages.Add);
+        if (first == ExeDecryptor.Result.Decrypted)
+        {
+            Assert.True(messages.Count >= 4, $"Expected at least 4 progress messages, got {messages.Count}: [{string.Join(", ", messages)}]");
+            Assert.False(File.Exists(copy + ".decrypting.tmp"), "Temp file should be cleaned up");
+        }
+
         Assert.Equal(ExeDecryptor.Result.AlreadyDecrypted, ExeDecryptor.Decrypt(copy));
     }
 

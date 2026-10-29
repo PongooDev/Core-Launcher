@@ -38,10 +38,11 @@ public sealed class GameLauncher
 
         try
         {
-            switch (ExeDecryptor.Decrypt(executable))
+            var exeName = Path.GetFileName(executable);
+            switch (ExeDecryptor.Decrypt(executable, status => _log.Write($"{start.Label}: {exeName}: {status}")))
             {
                 case ExeDecryptor.Result.Decrypted:
-                    _log.Write($"Decrypted {Path.GetFileName(executable)}: its .text section is now readable and the entry point bypasses the stub");
+                    _log.Write($"{start.Label}: {exeName} decrypted, the entry point now bypasses the stub");
                     break;
                 case ExeDecryptor.Result.AlreadyDecrypted:
                     break;

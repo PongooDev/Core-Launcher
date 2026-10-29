@@ -115,6 +115,9 @@ internal static partial class Kernel32
     public static partial bool GetExitCodeProcess(SafeProcessHandle hProcess, out uint lpExitCode);
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
+    public static partial uint WaitForSingleObject(SafeProcessHandle hHandle, uint dwMilliseconds);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool CloseHandle(nint hObject);
 

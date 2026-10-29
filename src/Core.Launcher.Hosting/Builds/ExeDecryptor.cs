@@ -34,7 +34,7 @@ public static class ExeDecryptor
     private const int TimeoutMs = 30_000;
     private const ushort DynamicBase = 0x0040;
 
-    public static Result Decrypt(string executable)
+    public static Result Decrypt(string executable, Action<string>? progress = null)
     {
         if (ParsePe(executable) is not { } pe)
             return Result.NotEncrypted;
@@ -53,9 +53,11 @@ public static class ExeDecryptor
         if (CountPrologues(sample) >= PrologueThreshold)
             return Result.AlreadyDecrypted;
 
-        var decrypted = DumpDecryptedText(executable, pe);
+        progress?.Invoke("Encrypted .text section detected, decrypting");
+        var decrypted = DumpDecryptedText(executable, pe, progress);
         FixEntryPoint(decrypted, pe);
 
+        progress?.Invoke($"Writing {decrypted.Length / (1024 * 1024)}MB of decrypted code back to the exe");
         using (var fs = new FileStream(executable, FileMode.Open, FileAccess.Write, FileShare.Read))
         {
             fs.Position = pe.TextFileOffset;
@@ -140,11 +142,12 @@ public static class ExeDecryptor
         return count;
     }
 
-    private static unsafe byte[] DumpDecryptedText(string executable, PeInfo pe)
+    private static unsafe byte[] DumpDecryptedText(string executable, PeInfo pe, Action<string>? progress)
     {
         var tmpPath = executable + ".decrypting.tmp";
         try
         {
+            progress?.Invoke("Copying exe to a temporary file");
             File.Copy(executable, tmpPath, overwrite: true);
 
             using (var fs = new FileStream(tmpPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
@@ -175,6 +178,7 @@ public static class ExeDecryptor
                     if (Kernel32.ResumeThread(thread) == uint.MaxValue)
                         throw new Win32Exception(Marshal.GetLastWin32Error());
 
+                    progress?.Invoke("Waiting for the exe's stub to decrypt the code section");
                     nint textAddress = (nint)(pe.ImageBase + pe.TextRva);
                     nint entryAddress = (nint)(pe.ImageBase + pe.EntryPointRva);
                     var crtPollBuffer = new byte[0x2000];
@@ -201,6 +205,7 @@ public static class ExeDecryptor
                                 $"The exe's code section was not decrypted within {TimeoutMs / 1000}s");
                     }
 
+                    progress?.Invoke($"Reading {pe.TextRawSize / (1024 * 1024)}MB of decrypted code from the process");
                     var decrypted = new byte[pe.TextRawSize];
                     fixed (byte* pBuf = decrypted)
                     {
@@ -217,6 +222,7 @@ public static class ExeDecryptor
                 finally
                 {
                     Kernel32.TerminateProcess(process, 1);
+                    Kernel32.WaitForSingleObject(process, 5000);
                 }
             }
         }
