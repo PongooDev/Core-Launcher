@@ -285,6 +285,9 @@
                                 <TextBlock Text="Battle Royale servers" Style="{StaticResource Label}" />
                                 <TextBox Text="{Binding Settings.Servers.BattleRoyaleInstances, UpdateSourceTrigger=PropertyChanged}" Width="110" HorizontalAlignment="Left" />
                                 <TextBlock Style="{StaticResource Hint}" Text="On builds with Battle Royale (1.7.2 on), these run on top of the servers above, which host Save the World. Each match takes a server of its own." />
+                                <TextBlock Text="Region" Style="{StaticResource Label}" />
+                                <ComboBox ItemsSource="{Binding ServerRegions}" SelectedValuePath="Code" DisplayMemberPath="Name" SelectedValue="{Binding Settings.Servers.Region}" Width="240" HorizontalAlignment="Left" />
+                                <TextBlock Style="{StaticResource Hint}" Text="Players who pick this region in Fortnite's Matchmaking Region setting queue for these servers. Players whose region has no server at all play on another region's. A build's own -McpRegion (Settings → Builds) other than NA wins. Servers take it when they next start." />
                                 <TextBlock Text="Ready timeout (seconds)" Style="{StaticResource Label}" />
                                 <TextBox Text="{Binding Settings.Servers.ReadyTimeoutSeconds, UpdateSourceTrigger=PropertyChanged}" Width="110" HorizontalAlignment="Left" />
                                 <TextBlock Style="{StaticResource Hint}" Text="A server that hasn't logged &quot;Server ready&quot; by then is restarted. 0 waits forever." />

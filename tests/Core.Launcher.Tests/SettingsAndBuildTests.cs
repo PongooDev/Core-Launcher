@@ -28,6 +28,7 @@ public sealed class SettingsAndBuildTests
         Assert.Equal(5595, settings.Backend.Port);
         Assert.Equal(2, settings.Servers.Instances);
         Assert.Equal(180, settings.Servers.ReadyTimeoutSeconds);
+        Assert.Equal("NA", settings.Servers.Region);
         Assert.Equal(DllSource.Release, settings.Dlls.Source);
         Assert.Equal("PongooDev/CoreV2", settings.Dlls.Repository);
         Assert.True(settings.Servers.Enabled);
@@ -51,6 +52,18 @@ public sealed class SettingsAndBuildTests
         Assert.Equal(DllSource.Local, loaded.Dlls.Source);
         Assert.Equal([DllRole.Server], loaded.Builds.Single().ServerDlls);
         Assert.Contains("\"Local\"", File.ReadAllText(store.FilePath));
+    }
+
+    [Fact]
+    public void SettingsSavedBeforeTheServerRegionAdvertiseNa()
+    {
+        using var folder = new TempFolder();
+        var path = folder.Combine("settings.json");
+        File.WriteAllText(path, $$$"""{"Version": {{{SettingsStore.CurrentVersion}}}, "Servers": {"Instances": 1, "Region": null}}""");
+        Assert.Equal("NA", new SettingsStore(path).Load().Servers.Region);
+
+        File.WriteAllText(path, $$$"""{"Version": {{{SettingsStore.CurrentVersion}}}, "Servers": {"Region": " eu "}}""");
+        Assert.Equal("EU", new SettingsStore(path).Load().Servers.Region);
     }
 
     [Fact]

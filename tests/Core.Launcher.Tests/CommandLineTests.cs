@@ -102,6 +102,29 @@ public sealed partial class CommandLineTests
     }
 
     [Fact]
+    public void ServersAdvertiseTheChosenRegionUnlessTheirBuildSetsAnother()
+    {
+        // The default -McpRegion=NA gives way to Settings → Servers → Region (Core-Backend #121).
+        var build = Cert();
+        var server = Split("x.exe " + LaunchArguments.Server(build, 5595, "CoreServer1", region: "EU"));
+        Assert.Single(server, argument => argument.StartsWith("-McpRegion=", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("-McpRegion=EU", server);
+        Assert.Contains("-McpRegion=NA", Split("x.exe " + LaunchArguments.Server(build, 5595, "CoreServer1", region: "NA")));
+        Assert.Contains("-McpRegion=NA", Split("x.exe " + LaunchArguments.Server(build, 5595, "CoreServer1")));
+
+        // A build without one gets it; one whose own arguments name another region keeps that.
+        build.ServerArguments = "-epicapp=Fortnite";
+        Assert.Contains("-McpRegion=OCE", Split("x.exe " + LaunchArguments.Server(build, 5595, "CoreServer1", region: "OCE")));
+        build.ServerArguments = "-epicapp=Fortnite -McpRegion=BR";
+        server = Split("x.exe " + LaunchArguments.Server(build, 5595, "CoreServer1", region: "EU"));
+        Assert.Single(server, argument => argument.StartsWith("-McpRegion=", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("-McpRegion=BR", server);
+
+        Assert.Equal(["NA", "EU", "OCE", "BR", "ASIA"], KnownBuilds.ServerRegions.Select(region => region.Code));
+        Assert.DoesNotContain("-McpRegion", LaunchArguments.Client(Cert(), 5595, "Player"));
+    }
+
+    [Fact]
     public void ServersAlwaysRunNullRhiAndUnattendedAndClientsNever()
     {
         var build = Cert();

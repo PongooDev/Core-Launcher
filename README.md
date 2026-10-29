@@ -137,6 +137,7 @@ Settings are saved in `%LOCALAPPDATA%\Core-Launcher\settings.json`.
 | Host servers | On | Autohost on or off |
 | Servers to keep running | `2` | Save the World's on a build with Battle Royale |
 | Battle Royale servers | `2` | On a build with Battle Royale (1.7.2 on), on top of the servers above; each match takes a server of its own |
+| Region | North America | The region the servers advertise (`-McpRegion=`): North America, Europe, Oceania, Brazil or Asia, as Fortnite's Matchmaking Region setting lists them. Players who pick it queue for these servers; Core-Backend sends players whose region has no server to another region's. A build whose server arguments name a region other than NA keeps its own |
 | Ready timeout | `180` s | `0` waits forever |
 | Server login | `CoreServer{n}` | `{n}` is the server's number, so each server has its own account |
 

@@ -17,6 +17,9 @@ public enum BuildSupport
     Full,
 }
 
+/// <summary>A region servers can advertise: its code for -McpRegion= and the name the client's settings show for it.</summary>
+public sealed record ServerRegion(string Code, string Name);
+
 /// <summary>
 /// Per-build launch settings, keyed by changelist. A build missing here gets the same shape with no DLLs, or Core's
 /// defaults when <see cref="LauncherSettings.AllowUnsupportedBuilds"/> is on.
@@ -78,6 +81,39 @@ public static partial class KnownBuilds
     /// never matches the Cert client's matchMakingRequest (REGION_s EQUAL NA). Core-Docs/Session-Plan.md §6 L1.
     /// </summary>
     public const string CertServerRegion = "-McpRegion=NA";
+
+    /// <summary>
+    /// The regions a server can advertise (<see cref="ServerSettings.Region"/>): the client's Matchmaking Region list, the
+    /// visible Datacenters of its DefaultEngine.ini (1.8.2: NA, EU, OCE; 1.9 and 1.9.1 add BR and ASIA). A player who
+    /// picks one queues for its servers, and Core-Backend sends players whose region has no server to another region's
+    /// (Core-Backend #121).
+    /// </summary>
+    public static IReadOnlyList<ServerRegion> ServerRegions { get; } =
+    [
+        new("NA", "North America"), new("EU", "Europe"), new("OCE", "Oceania"), new("BR", "Brazil"), new("ASIA", "Asia"),
+    ];
+
+    /// <summary>
+    /// The build's server arguments with the hosted servers' region (<see cref="ServerSettings.Region"/>) in place of the
+    /// default <see cref="CertServerRegion"/>. A build whose arguments name another region keeps it: that was set for the
+    /// build by hand.
+    /// </summary>
+    public static string WithServerRegion(string arguments, string? region)
+    {
+        if (string.IsNullOrWhiteSpace(region))
+        {
+            return arguments;
+        }
+
+        var split = Split(arguments);
+        var own = split.FirstOrDefault(argument => SwitchName(argument).Equals("-McpRegion", StringComparison.OrdinalIgnoreCase));
+        if (own is not null && !own.Equals(CertServerRegion, StringComparison.OrdinalIgnoreCase))
+        {
+            return arguments;
+        }
+
+        return string.Join(' ', split.Where(argument => argument != own).Append($"-McpRegion={region.Trim()}"));
+    }
 
     /// <param name="Version">The Fortnite version players call it, for <see cref="SupportSummary"/>.</param>
     /// <param name="FormerNames">Names earlier launchers gave this build, which <see cref="CurrentName"/> renames.</param>

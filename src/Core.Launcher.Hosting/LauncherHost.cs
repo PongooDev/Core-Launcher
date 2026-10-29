@@ -613,7 +613,7 @@ public sealed class LauncherHost : IAsyncDisposable
             var settings = host.Settings;
             var build = settings.FindSelectedBuild()!;
             var battleRoyale = host.HostsBattleRoyale(instance);
-            var arguments = LaunchArguments.Server(build, host.Backend.Port!.Value, settings.Servers.LoginFor(instance), battleRoyale);
+            var arguments = LaunchArguments.Server(build, host.Backend.Port!.Value, settings.Servers.LoginFor(instance), battleRoyale, settings.Servers.Region);
             var output = host.ServerLog(instance);
             output.Write($"(launcher) --- {DateTime.Now:yyyy-MM-dd HH:mm:ss} ---");
             WarnAboutSupport(build, output);

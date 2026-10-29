@@ -30,8 +30,9 @@ public static class LaunchArguments
     public static IReadOnlyList<string> ServerSwitches { get; } = ["-nullrhi", "-unattended", $"-saveddirsuffix={ServerConfig.SavedDirSuffix}"];
 
     /// <param name="battleRoyale">A Battle Royale server (<see cref="KnownBuilds.BattleRoyaleServerArguments"/>).</param>
-    public static string Server(BuildSettings build, int backendPort, string login, bool battleRoyale = false) =>
-        CommandLine.Join([build.ServerArguments, .. Common(build, build.ServerDlls, BackendEndpoint.Local(backendPort), login),
+    /// <param name="region">The region it advertises (<see cref="ServerSettings.Region"/>); null keeps the build's arguments' own.</param>
+    public static string Server(BuildSettings build, int backendPort, string login, bool battleRoyale = false, string? region = null) =>
+        CommandLine.Join([KnownBuilds.WithServerRegion(build.ServerArguments, region), .. Common(build, build.ServerDlls, BackendEndpoint.Local(backendPort), login),
             .. ServerSwitches.Where(name => !HasSwitch(build.ServerArguments, name)), .. battleRoyale ? [KnownBuilds.BattleRoyaleServerArguments] : Array.Empty<string>()]);
 
     private static bool HasSwitch(string arguments, string name) =>

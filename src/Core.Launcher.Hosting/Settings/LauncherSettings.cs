@@ -158,6 +158,13 @@ public sealed class ServerSettings
     /// <summary>A server that hasn't logged "Server ready" by then is restarted; 0 waits forever.</summary>
     public int ReadyTimeoutSeconds { get; set; } = 180;
 
+    /// <summary>
+    /// The region the servers advertise (-McpRegion=, one of <see cref="Core.Launcher.Hosting.Builds.KnownBuilds.ServerRegions"/>):
+    /// players who pick it in the client's Matchmaking Region queue for them. NA by default, the region an untouched
+    /// client queues for. A build whose own server arguments name another region keeps that one.
+    /// </summary>
+    public string Region { get; set; } = "NA";
+
     /// <summary>Server login; {n} is the instance number, so each server has its own account.</summary>
     public string Login { get; set; } = "CoreServer{n}";
 
