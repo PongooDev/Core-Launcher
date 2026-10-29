@@ -7,9 +7,9 @@ using Microsoft.Win32.SafeHandles;
 namespace Core.Launcher.Hosting.Builds;
 
 /// <summary>
-/// Decrypts the .text section of builds 1.9.1 and up whose shipping exe ships with an encrypted code section. A stub
-/// in a second .text section decrypts the main code at startup; this lets the stub run in a throwaway process, reads the
-/// decrypted bytes back, and writes them to disk so the exe runs without the stub and Core's patches survive.
+/// Decrypts builds 1.9.1 and up whose shipping exe ships with encrypted sections. A stub in a second .text section
+/// decrypts the image at startup; this lets the stub run in a throwaway process, reads every affected section back,
+/// and writes them to disk so the exe runs without the stub and Core's patches survive.
 /// </summary>
 public static class ExeDecryptor
 {
@@ -54,24 +54,32 @@ public static class ExeDecryptor
             return Result.AlreadyDecrypted;
 
         progress?.Invoke("Encrypted .text section detected, decrypting");
-        var (decrypted, stub) = DumpDecryptedText(executable, pe, progress);
-        FixEntryPoint(decrypted, pe);
+        var (text, sectionData) = DumpSections(executable, pe, progress);
+        FixEntryPoint(text, pe);
 
-        progress?.Invoke($"Writing {(decrypted.Length + stub.Length) / (1024 * 1024)}MB of decrypted code back to the exe");
+        long totalSize = text.Length;
+        foreach (var data in sectionData)
+            totalSize += data.Length;
+        progress?.Invoke($"Writing {totalSize / (1024 * 1024)}MB of decrypted sections back to the exe");
         using (var fs = new FileStream(executable, FileMode.Open, FileAccess.Write, FileShare.Read))
         {
             fs.Position = pe.TextFileOffset;
-            fs.Write(decrypted);
-            fs.Position = pe.StubFileOffset;
-            fs.Write(stub);
+            fs.Write(text);
+            for (int i = 0; i < pe.Sections.Length; i++)
+            {
+                fs.Position = pe.Sections[i].FileOffset;
+                fs.Write(sectionData[i]);
+            }
         }
 
         return Result.Decrypted;
     }
 
+    private readonly record struct SectionToDump(long FileOffset, uint Rva, int RawSize);
+
     private readonly record struct PeInfo(
         long TextFileOffset, uint TextRva, int TextRawSize,
-        long StubFileOffset, uint StubRva, int StubRawSize,
+        SectionToDump[] Sections,
         uint EntryPointRva, long ImageBase, long DllCharacteristicsOffset);
 
     private static PeInfo? ParsePe(string executable)
@@ -108,37 +116,42 @@ public static class ExeDecryptor
         uint firstTextRva = 0;
         int firstTextRawSize = 0;
         long firstTextFileOffset = 0;
-        uint stubRva = 0;
-        int stubRawSize = 0;
-        long stubFileOffset = 0;
+        var sections = new List<SectionToDump>();
         ReadOnlySpan<byte> textName = ".text\0\0\0"u8;
+        ReadOnlySpan<byte> relocName = ".reloc\0\0"u8;
+        ReadOnlySpan<byte> pdataName = ".pdata\0\0"u8;
 
         for (int i = 0; i < numberOfSections; i++)
         {
             int off = sectionsOffset + i * 40;
             if (off + 40 > read) break;
-            if (header.Slice(off, 8).SequenceEqual(textName))
+            var name = header.Slice(off, 8);
+            uint rva = BinaryPrimitives.ReadUInt32LittleEndian(header[(off + 12)..]);
+            int rawSize = (int)BinaryPrimitives.ReadUInt32LittleEndian(header[(off + 16)..]);
+            long fileOffset = BinaryPrimitives.ReadUInt32LittleEndian(header[(off + 20)..]);
+
+            if (name.SequenceEqual(textName))
             {
                 textCount++;
                 if (textCount == 1)
                 {
-                    firstTextRva = BinaryPrimitives.ReadUInt32LittleEndian(header[(off + 12)..]);
-                    firstTextRawSize = (int)BinaryPrimitives.ReadUInt32LittleEndian(header[(off + 16)..]);
-                    firstTextFileOffset = BinaryPrimitives.ReadUInt32LittleEndian(header[(off + 20)..]);
-                }
-                else if (textCount == 2)
-                {
-                    stubRva = BinaryPrimitives.ReadUInt32LittleEndian(header[(off + 12)..]);
-                    stubRawSize = (int)BinaryPrimitives.ReadUInt32LittleEndian(header[(off + 16)..]);
-                    stubFileOffset = BinaryPrimitives.ReadUInt32LittleEndian(header[(off + 20)..]);
+                    firstTextRva = rva;
+                    firstTextRawSize = rawSize;
+                    firstTextFileOffset = fileOffset;
+                    continue;
                 }
             }
+
+            if (name.SequenceEqual(relocName) || name.SequenceEqual(pdataName))
+                continue;
+
+            if (rawSize > 0)
+                sections.Add(new SectionToDump(fileOffset, rva, rawSize));
         }
 
         return textCount >= 2
             ? new PeInfo(firstTextFileOffset, firstTextRva, firstTextRawSize,
-                stubFileOffset, stubRva, stubRawSize,
-                entryPointRva, imageBase, dllCharOffset)
+                sections.ToArray(), entryPointRva, imageBase, dllCharOffset)
             : null;
     }
 
@@ -156,7 +169,7 @@ public static class ExeDecryptor
         return count;
     }
 
-    private static unsafe (byte[] Text, byte[] Stub) DumpDecryptedText(string executable, PeInfo pe, Action<string>? progress)
+    private static unsafe (byte[] Text, byte[][] SectionData) DumpSections(string executable, PeInfo pe, Action<string>? progress)
     {
         var tmpPath = executable + ".decrypting.tmp";
         try
@@ -193,7 +206,6 @@ public static class ExeDecryptor
                         throw new Win32Exception(Marshal.GetLastWin32Error());
 
                     progress?.Invoke("Waiting for the exe's stub to decrypt the code section");
-                    nint textAddress = (nint)(pe.ImageBase + pe.TextRva);
                     nint entryAddress = (nint)(pe.ImageBase + pe.EntryPointRva);
                     var crtPollBuffer = new byte[0x2000];
                     long deadline = Environment.TickCount64 + TimeoutMs;
@@ -219,31 +231,41 @@ public static class ExeDecryptor
                                 $"The exe's code section was not decrypted within {TimeoutMs / 1000}s");
                     }
 
-                    progress?.Invoke($"Reading {(pe.TextRawSize + pe.StubRawSize) / (1024 * 1024)}MB from the decrypted process");
-                    var decrypted = new byte[pe.TextRawSize];
-                    fixed (byte* pBuf = decrypted)
+                    long totalSize = pe.TextRawSize;
+                    foreach (var section in pe.Sections)
+                        totalSize += section.RawSize;
+                    progress?.Invoke($"Reading {totalSize / (1024 * 1024)}MB from the decrypted process");
+
+                    var text = new byte[pe.TextRawSize];
+                    nint textAddress = (nint)(pe.ImageBase + pe.TextRva);
+                    fixed (byte* pBuf = text)
                     {
                         if (!Kernel32.ReadProcessMemory(process, textAddress, pBuf,
-                                (nuint)decrypted.Length, out var bytesRead))
+                                (nuint)text.Length, out var bytesRead))
                             throw new Win32Exception(Marshal.GetLastWin32Error());
-                        if (bytesRead != (nuint)decrypted.Length)
+                        if (bytesRead != (nuint)text.Length)
                             throw new InvalidOperationException(
-                                $"ReadProcessMemory returned {bytesRead} of {decrypted.Length} bytes");
+                                $"ReadProcessMemory returned {bytesRead} of {text.Length} bytes");
                     }
 
-                    nint stubAddress = (nint)(pe.ImageBase + pe.StubRva);
-                    var stub = new byte[pe.StubRawSize];
-                    fixed (byte* pBuf = stub)
+                    var sectionData = new byte[pe.Sections.Length][];
+                    for (int i = 0; i < pe.Sections.Length; i++)
                     {
-                        if (!Kernel32.ReadProcessMemory(process, stubAddress, pBuf,
-                                (nuint)stub.Length, out var bytesRead))
-                            throw new Win32Exception(Marshal.GetLastWin32Error());
-                        if (bytesRead != (nuint)stub.Length)
-                            throw new InvalidOperationException(
-                                $"ReadProcessMemory returned {bytesRead} of {stub.Length} stub bytes");
+                        var section = pe.Sections[i];
+                        sectionData[i] = new byte[section.RawSize];
+                        nint addr = (nint)(pe.ImageBase + section.Rva);
+                        fixed (byte* pBuf = sectionData[i])
+                        {
+                            if (!Kernel32.ReadProcessMemory(process, addr, pBuf,
+                                    (nuint)section.RawSize, out var bytesRead))
+                                throw new Win32Exception(Marshal.GetLastWin32Error());
+                            if (bytesRead != (nuint)section.RawSize)
+                                throw new InvalidOperationException(
+                                    $"ReadProcessMemory returned {bytesRead} of {section.RawSize} section bytes");
+                        }
                     }
 
-                    return (decrypted, stub);
+                    return (text, sectionData);
                 }
                 finally
                 {
