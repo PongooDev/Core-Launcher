@@ -36,6 +36,7 @@ public sealed class ExeDecryptorTests
     private const string Exe191 = @"F:\Builds\1.9.1\FortniteGame\Binaries\Win64\FortniteClient-Win64-Shipping.exe";
 
 
+
     /// <summary>
     /// The packer appends a blob of code past the real content of every section, so every section has to come back
     /// decrypted and executable. The two exceptions are what the loader owns: the import address table, which it
@@ -90,8 +91,10 @@ public sealed class ExeDecryptorTests
                     $"{name} rewrote IAT byte at rva 0x{byteRva:X}");
             }
 
-            // Executing the appended code faults unless the section it landed in says it may be run.
+            // The stub hands over with the image PAGE_EXECUTE_READWRITE; without the same access the
+            // appended code faults the first time it is executed or patches itself.
             Assert.True((flags & 0x20000000) != 0, $"{name} is not executable (0x{flags:X8})");
+            Assert.True((flags & 0x80000000) != 0, $"{name} is not writable (0x{flags:X8})");
 
             if (name == ".text")
             {

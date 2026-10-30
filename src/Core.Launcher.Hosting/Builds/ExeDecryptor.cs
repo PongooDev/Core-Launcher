@@ -84,10 +84,11 @@ public static class ExeDecryptor
                 fs.Write(merged);
                 written += changed;
 
-                // The stub leaves the whole image PAGE_EXECUTE_READWRITE and runs threads out of the code it
-                // appended, so any section that gained code needs IMAGE_SCN_MEM_EXECUTE: without the stub the
-                // loader would map it read-only and executing it faults.
-                MarkExecutable(fs, section);
+                // The stub hands over with the whole image PAGE_EXECUTE_READWRITE: it runs threads out of the
+                // code it appended, and that code patches a few bytes of .text back into itself. Standing in for
+                // the stub means granting the same access, or the loader maps these sections read-only and the
+                // first such execute or write faults.
+                MarkRunnable(fs, section);
             }
 
             // Clear IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE so the exe loads at its preferred image base. The
@@ -268,12 +269,13 @@ public static class ExeDecryptor
         return changed >= (to - from) * BlobDensity ? (from, to) : null;
     }
 
-    private static void MarkExecutable(FileStream fs, Section section)
+    private static void MarkRunnable(FileStream fs, Section section)
     {
-        if ((section.Characteristics & SectionExecute) != 0) return;
+        uint wanted = section.Characteristics | SectionExecute | SectionWrite;
+        if (wanted == section.Characteristics) return;
 
         Span<byte> dword = stackalloc byte[4];
-        BinaryPrimitives.WriteUInt32LittleEndian(dword, section.Characteristics | SectionExecute);
+        BinaryPrimitives.WriteUInt32LittleEndian(dword, wanted);
         fs.Position = section.HeaderOffset + 36;
         fs.Write(dword);
     }
