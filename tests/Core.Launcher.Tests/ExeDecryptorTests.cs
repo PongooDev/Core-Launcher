@@ -70,8 +70,20 @@ public sealed class ExeDecryptorTests
 
         var result = ExeDecryptor.Decrypt(copy);
         Assert.True(result is ExeDecryptor.Result.Decrypted or ExeDecryptor.Result.AlreadyDecrypted);
+        AssertImportByName(copy, "rand");
+        AssertImportByName(copy, "GetUserNameW");
+    }
 
-        using var fs = new FileStream(copy, FileMode.Open, FileAccess.Read);
+    private static void AssertImportByName(string exe, string function)
+    {
+        var found = ReadImportFunctions(exe);
+        Assert.Contains(function, found);
+    }
+
+    private static HashSet<string> ReadImportFunctions(string exe)
+    {
+
+        using var fs = new FileStream(exe, FileMode.Open, FileAccess.Read);
         Span<byte> header = stackalloc byte[4096];
         fs.ReadExactly(header);
 
@@ -83,7 +95,6 @@ public sealed class ExeDecryptorTests
         uint importRva = BinaryPrimitives.ReadUInt32LittleEndian(header[(opt + 120)..]);
         Assert.True(importRva != 0, "DataDirectory[1] import RVA is 0");
 
-        // Find .idata section
         int sectOff = opt + optSize;
         uint idataRva = 0;
         long idataFileOff = 0;
@@ -108,7 +119,7 @@ public sealed class ExeDecryptorTests
         fs.Position = idataFileOff;
         fs.ReadExactly(idata);
 
-        bool foundRand = false;
+        var found = new HashSet<string>();
         int dOff = (int)(importRva - idataRva);
         while (dOff + 20 <= idata.Length)
         {
@@ -134,8 +145,8 @@ public sealed class ExeDecryptorTests
                             int nameEnd = nameStart;
                             while (nameEnd < idata.Length && idata[nameEnd] != 0) nameEnd++;
                             var funcName = Encoding.ASCII.GetString(idata, nameStart, nameEnd - nameStart);
-                            if (funcName == "rand")
-                                foundRand = true;
+                            if (funcName.Length > 0)
+                                found.Add(funcName);
                         }
                     }
                     iltOff += 8;
@@ -144,7 +155,7 @@ public sealed class ExeDecryptorTests
             dOff += 20;
         }
 
-        Assert.True(foundRand, "\"rand\" not found in any ILT entry of the decrypted exe");
+        return found;
     }
 
     private static byte[] SyntheticExe(int textSections, bool prologuesInFirst = false)
