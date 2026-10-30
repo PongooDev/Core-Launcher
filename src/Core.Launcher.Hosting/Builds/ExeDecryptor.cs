@@ -210,7 +210,12 @@ public static class ExeDecryptor
             }
 
             var si = new Kernel32.STARTUPINFOW { cb = sizeof(Kernel32.STARTUPINFOW) };
-            var cmdLine = $"\"{tmpPath}\"".ToCharArray();
+            // -epicportal stops the game from relaunching itself through the Epic
+            // Games Launcher (which it does when it thinks it was started outside
+            // the portal), and -nullrhi/-nosplash/-nosound keep it from opening a
+            // window or playing audio during the brief moment it runs to decrypt
+            // its own .text.  We terminate it as soon as the decryption is done.
+            var cmdLine = $"\"{tmpPath}\" -epicportal -nullrhi -nosplash -nosound".ToCharArray();
 
             fixed (char* pCmd = cmdLine)
             {
