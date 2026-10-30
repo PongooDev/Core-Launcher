@@ -112,7 +112,14 @@ public static class ExeDecryptor
 
     private record struct ImportEntry(ushort Ordinal, string? ByName);
 
-    private record struct IatGroup(int FirstOffset, int EntryCount, string DllName, ImportEntry[] Entries);
+    private record struct IatGroup(int FirstOffset, int EntryCount, string DllName, ImportEntry[] Entries)
+    {
+        /// <summary>Original FirstThunk RVA from the dumped idata descriptor, or 0 if unknown.
+        /// When non-zero, WriteImportData writes IAT entries at this idata location
+        /// instead of at rdata+FirstOffset, so the Windows loader fills the exact
+        /// slots the game's code already references.</summary>
+        public uint OriginalFirstThunkRva { get; set; }
+    }
 
     private record struct ForwardInfo(ushort Ordinal, string ExportName, string TargetDll, string TargetFunc);
 
@@ -993,10 +1000,7 @@ public static class ExeDecryptor
         int lastGroup = groups.Count - 1;
         int iatSize = groups[lastGroup].FirstOffset + groups[lastGroup].EntryCount * 8 + 8;
 
-        // Deliberately NOT clearing idata: the packer stores additional function-
-        // pointer slots scattered through this section (outside the standard IAT),
-        // and clearing them would null out thunks that the decrypted game code
-        // still calls through.  We only overwrite the specific bytes we write.
+        Array.Clear(idata);
 
         int descriptorCount = groups.Count + 1;
         int descriptorBytes = descriptorCount * 20;
@@ -1041,6 +1045,22 @@ public static class ExeDecryptor
 
         for (int g = 0; g < groups.Count; g++)
         {
+            // Decide where this group's IAT lives: at the original idata slot
+            // if we recovered it (so the game's existing thunks still work), or
+            // at the rdata mirror as a fallback.
+            byte[] iatBuffer;
+            int iatOffset;
+            if (groups[g].OriginalFirstThunkRva != 0)
+            {
+                iatBuffer = idata;
+                iatOffset = (int)(groups[g].OriginalFirstThunkRva - idataRva);
+            }
+            else
+            {
+                iatBuffer = rdata;
+                iatOffset = groups[g].FirstOffset;
+            }
+
             for (int i = 0; i < groups[g].Entries.Length; i++)
             {
                 var entry = groups[g].Entries[i];
@@ -1051,18 +1071,20 @@ public static class ExeDecryptor
                     BinaryPrimitives.WriteUInt16LittleEndian(idata.AsSpan(hnOff), entry.Ordinal);
                     Encoding.ASCII.GetBytes(entry.ByName, idata.AsSpan(hnOff + 2));
                     iltValue = idataRva + (uint)hnOff;
-                    BinaryPrimitives.WriteUInt64LittleEndian(
-                        rdata.AsSpan(groups[g].FirstOffset + i * 8), iltValue);
                 }
                 else
                 {
                     iltValue = OrdinalFlag64 | entry.Ordinal;
-                    BinaryPrimitives.WriteUInt64LittleEndian(
-                        rdata.AsSpan(groups[g].FirstOffset + i * 8), iltValue);
                 }
+                BinaryPrimitives.WriteUInt64LittleEndian(
+                    iatBuffer.AsSpan(iatOffset + i * 8), iltValue);
                 BinaryPrimitives.WriteUInt64LittleEndian(
                     idata.AsSpan(iltOffsets[g] + i * 8), iltValue);
             }
+            // Null-terminate the IAT array at its new location.
+            if (iatOffset + groups[g].Entries.Length * 8 + 8 <= iatBuffer.Length)
+                BinaryPrimitives.WriteUInt64LittleEndian(
+                    iatBuffer.AsSpan(iatOffset + groups[g].Entries.Length * 8), 0UL);
         }
 
         for (int i = 0; i < groups.Count; i++)
@@ -1073,15 +1095,72 @@ public static class ExeDecryptor
             BinaryPrimitives.WriteInt32LittleEndian(idata.AsSpan(d + 8), -1);
             BinaryPrimitives.WriteUInt32LittleEndian(idata.AsSpan(d + 12),
                 idataRva + (uint)dllPositions[groups[i].DllName]);
-            BinaryPrimitives.WriteUInt32LittleEndian(idata.AsSpan(d + 16),
-                rdataRva + (uint)groups[i].FirstOffset);
+            // Prefer the original FirstThunk (the slot the game's code already
+            // references) when we recovered it; fall back to the rdata mirror.
+            uint firstThunk = groups[i].OriginalFirstThunkRva != 0
+                ? groups[i].OriginalFirstThunkRva
+                : rdataRva + (uint)groups[i].FirstOffset;
+            BinaryPrimitives.WriteUInt32LittleEndian(idata.AsSpan(d + 16), firstThunk);
         }
+
+        // Zero the null-terminator descriptor at the end of the array.  We no
+        // longer Array.Clear the whole buffer, so the trailing 20 bytes could
+        // otherwise contain whatever the stub left behind, which the loader
+        // would parse as a bogus 46th descriptor.
+        new Span<byte>(idata, groups.Count * 20, 20).Clear();
 
         foreach (var (name, pos) in dllPositions)
             Encoding.ASCII.GetBytes(name, idata.AsSpan(pos));
 
         int importDirSize = hintNamePos > currentPos ? hintNamePos : descriptorBytes;
         return new ImportInfo(iatSize, importDirSize);
+    }
+
+    private static int AnchorGroupsToOriginalFirstThunks(
+        byte[] idata, uint idataRva, uint importDirRva, byte[] rdata, List<IatGroup> groups)
+    {
+        // Build a map from "first resolved IAT address" to "original FirstThunk RVA"
+        // by walking the dumped idata descriptors.  Each descriptor's FirstThunk
+        // slot still holds a module-range address because the stub resolved it.
+        if (importDirRva < idataRva || importDirRva >= idataRva + (uint)idata.Length)
+            return 0;
+
+        var firstAddrToFt = new Dictionary<ulong, uint>();
+        int offset = (int)(importDirRva - idataRva);
+        while (offset + 20 <= idata.Length)
+        {
+            uint firstThunk = BinaryPrimitives.ReadUInt32LittleEndian(idata.AsSpan(offset + 16));
+            if (firstThunk == 0) break;
+
+            if (firstThunk >= idataRva && firstThunk < idataRva + (uint)idata.Length)
+            {
+                int iatOff = (int)(firstThunk - idataRva);
+                if (iatOff + 8 <= idata.Length)
+                {
+                    ulong first = BinaryPrimitives.ReadUInt64LittleEndian(idata.AsSpan(iatOff));
+                    if (first != 0)
+                        firstAddrToFt[first] = firstThunk;
+                }
+            }
+            offset += 20;
+        }
+
+        // For each rdata group, look up its first entry's resolved address and
+        // record the matching original FirstThunk.  We can still read the first
+        // address from rdata here because WriteImportData has not run yet.
+        int matched = 0;
+        for (int i = 0; i < groups.Count; i++)
+        {
+            if (groups[i].FirstOffset + 8 > rdata.Length) continue;
+            ulong first = BinaryPrimitives.ReadUInt64LittleEndian(
+                rdata.AsSpan(groups[i].FirstOffset));
+            if (firstAddrToFt.TryGetValue(first, out var ft))
+            {
+                groups[i] = groups[i] with { OriginalFirstThunkRva = ft };
+                matched++;
+            }
+        }
+        return matched;
     }
 
     private static int RecoverOriginalDllNames(byte[] rdata, uint rdataRva, uint importDirRva, List<IatGroup> groups)
