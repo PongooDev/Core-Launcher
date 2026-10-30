@@ -109,6 +109,36 @@ internal static partial class Kernel32
     [LibraryImport("kernel32.dll", SetLastError = true)]
     public static partial uint SuspendThread(SafeKernelHandle hThread);
 
+    public const uint TH32CS_SNAPTHREAD = 0x00000004;
+    public const uint THREAD_SUSPEND_RESUME = 0x0002;
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct THREADENTRY32
+    {
+        public uint dwSize;
+        public uint cntUsage;
+        public uint th32ThreadID;
+        public uint th32OwnerProcessID;
+        public int tpBasePri;
+        public int tpDeltaPri;
+        public uint dwFlags;
+    }
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    public static partial SafeKernelHandle CreateToolhelp32Snapshot(uint dwFlags, uint th32ProcessID);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool Thread32First(SafeKernelHandle hSnapshot, ref THREADENTRY32 lpte);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool Thread32Next(SafeKernelHandle hSnapshot, ref THREADENTRY32 lpte);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    public static partial SafeKernelHandle OpenThread(uint dwDesiredAccess,
+        [MarshalAs(UnmanagedType.Bool)] bool bInheritHandle, uint dwThreadId);
+
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool TerminateProcess(SafeProcessHandle hProcess, uint uExitCode);

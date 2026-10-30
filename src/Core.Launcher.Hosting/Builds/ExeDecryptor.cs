@@ -447,12 +447,13 @@ public static class ExeDecryptor
 
                     WaitForTheStub(process, pe, progress);
 
-                    // The stub decrypts the entry wrapper last, so once it is readable the image is done. A short
-                    // settle, then suspend so nothing moves while we read it.
+                    // The stub decrypts the entry wrapper last, so once it is readable the image is done. A
+                    // short settle, then freeze the whole process: the stub decrypts on worker threads too,
+                    // so suspending only the thread we started leaves them writing to the image while we
+                    // read 90MB of it, and the snapshot comes back part decrypted.
                     progress?.Invoke("Letting the decryption settle");
                     Thread.Sleep(300);
-                    if (Kernel32.SuspendThread(thread) == uint.MaxValue)
-                        throw new Win32Exception(Marshal.GetLastWin32Error());
+                    SuspendEveryThread(pi.dwProcessId, progress);
 
                     progress?.Invoke("Reading the decrypted image");
                     var live = new Dictionary<int, byte[]>();
@@ -485,6 +486,33 @@ public static class ExeDecryptor
         {
             try { File.Delete(tmpPath); } catch { }
         }
+    }
+
+    /// <summary>
+    /// Suspends every thread in the throwaway process, so nothing writes to the image while it is read.
+    /// The handles are deliberately left open and the process is killed afterwards.
+    /// </summary>
+    private static void SuspendEveryThread(uint processId, Action<string>? progress)
+    {
+        using var snapshot = Kernel32.CreateToolhelp32Snapshot(Kernel32.TH32CS_SNAPTHREAD, 0);
+        if (snapshot.IsInvalid)
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+
+        var entry = new Kernel32.THREADENTRY32 { dwSize = (uint)Marshal.SizeOf<Kernel32.THREADENTRY32>() };
+        int suspended = 0;
+        for (bool more = Kernel32.Thread32First(snapshot, ref entry); more;
+             more = Kernel32.Thread32Next(snapshot, ref entry))
+        {
+            if (entry.th32OwnerProcessID != processId) continue;
+
+            var handle = Kernel32.OpenThread(Kernel32.THREAD_SUSPEND_RESUME, false, entry.th32ThreadID);
+            if (handle.IsInvalid) continue;
+            if (Kernel32.SuspendThread(handle) != uint.MaxValue) suspended++;
+        }
+
+        if (suspended == 0)
+            throw new InvalidOperationException("Could not suspend any thread of the decryption process");
+        progress?.Invoke($"Froze {suspended} thread(s) to read the image");
     }
 
     /// <summary>
