@@ -246,11 +246,14 @@ public static class ExeDecryptor
                     if (Kernel32.ResumeThread(thread) == uint.MaxValue)
                         throw new Win32Exception(Marshal.GetLastWin32Error());
 
-                    progress?.Invoke("Waiting for the exe's stub to decrypt the code section");
+                    // Poll until the entry wrapper's post-call bytes have been decrypted
+                    // by the stub.  The wrapper is `sub rsp,28 / call stub / add rsp,28
+                    // / jmp __scrt_common_main_seh`; the stub decrypts the second half
+                    // shortly before transferring back.
+                    progress?.Invoke("Waiting for the stub to decrypt the entry wrapper");
                     nint entryAddress = (nint)(pe.ImageBase + pe.EntryPointRva);
-                    var crtPollBuffer = new byte[0x2000];
+                    var wrapperProbe = new byte[22];
                     long deadline = Environment.TickCount64 + TimeoutMs;
-
                     while (true)
                     {
                         Thread.Sleep(PollIntervalMs);
@@ -259,59 +262,30 @@ public static class ExeDecryptor
                             throw new InvalidOperationException(
                                 $"Process exited (0x{exitCode:X}) before decryption completed");
 
-                        fixed (byte* pBuf = crtPollBuffer)
+                        fixed (byte* pBuf = wrapperProbe)
                         {
                             if (Kernel32.ReadProcessMemory(process, entryAddress, pBuf,
-                                    (nuint)crtPollBuffer.Length, out _)
-                                && crtPollBuffer.AsSpan().IndexOf(CrtPrologue) >= 0)
+                                    (nuint)wrapperProbe.Length, out _)
+                                && wrapperProbe[9] == 0x48 && wrapperProbe[10] == 0x83
+                                && wrapperProbe[11] == 0xC4 && wrapperProbe[12] == 0x28
+                                && wrapperProbe[13] == 0xE9)
                                 break;
                         }
 
                         if (Environment.TickCount64 >= deadline)
                             throw new TimeoutException(
-                                $"The exe's code section was not decrypted within {TimeoutMs / 1000}s");
+                                $"The entry wrapper was not decrypted within {TimeoutMs / 1000}s");
                     }
-
-                    // Read the whole first .text so we can locate FF 25 thunks anywhere
-                    // in it (they are typically clustered near the end), then poll any
-                    // one thunk's target: when it holds a module address the stub has
-                    // finished patching the import slots that .text actually calls.
-                    progress?.Invoke("Waiting for the stub to patch import thunks");
                     ulong textStart = (ulong)pe.ImageBase + pe.TextRva;
-                    var textProbe = new byte[pe.TextRawSize];
-                    fixed (byte* pText = textProbe)
-                    {
-                        if (!Kernel32.ReadProcessMemory(process, (nint)textStart, pText,
-                                (nuint)textProbe.Length, out _))
-                            throw new Win32Exception(Marshal.GetLastWin32Error());
-                    }
-                    nint sampleThunkSlot = 0;
-                    for (int j = 0; j < textProbe.Length - 6 && sampleThunkSlot == 0; j++)
-                    {
-                        if (textProbe[j] == 0xFF && textProbe[j + 1] == 0x25)
-                        {
-                            int disp = BinaryPrimitives.ReadInt32LittleEndian(textProbe.AsSpan(j + 2));
-                            ulong rip = textStart + (ulong)(j + 6);
-                            sampleThunkSlot = (nint)(rip + (ulong)disp);
-                        }
-                    }
-                    if (sampleThunkSlot != 0)
-                    {
-                        var slotProbe = new byte[8];
-                        while (Environment.TickCount64 < deadline)
-                        {
-                            Thread.Sleep(PollIntervalMs);
-                            fixed (byte* pBuf = slotProbe)
-                            {
-                                if (Kernel32.ReadProcessMemory(process, sampleThunkSlot, pBuf, 8, out _))
-                                {
-                                    ulong v = BinaryPrimitives.ReadUInt64LittleEndian(slotProbe);
-                                    if (v >= (ulong)pe.ImageBase)
-                                        break;
-                                }
-                            }
-                        }
-                    }
+
+                    // Give the stub a little head-room to finish patching the import
+                    // slots scattered through .idata/.rdata, then SUSPEND the thread
+                    // so later state transitions (CRT init, process self-termination)
+                    // can't invalidate the pages we're about to dump.
+                    progress?.Invoke("Giving the stub time to finish patching imports");
+                    Thread.Sleep(300);
+                    if (Kernel32.SuspendThread(thread) == uint.MaxValue)
+                        throw new Win32Exception(Marshal.GetLastWin32Error());
 
                     long totalSize = pe.TextRawSize;
                     foreach (var section in pe.Sections)
@@ -329,6 +303,7 @@ public static class ExeDecryptor
                             throw new InvalidOperationException(
                                 $"ReadProcessMemory returned {bytesRead} of {text.Length} bytes");
                     }
+
 
                     var sectionData = new byte[pe.Sections.Length][];
                     for (int i = 0; i < pe.Sections.Length; i++)
@@ -1012,7 +987,10 @@ public static class ExeDecryptor
         int lastGroup = groups.Count - 1;
         int iatSize = groups[lastGroup].FirstOffset + groups[lastGroup].EntryCount * 8 + 8;
 
-        Array.Clear(idata);
+        // Deliberately NOT clearing idata: the packer stores additional function-
+        // pointer slots scattered through this section (outside the standard IAT),
+        // and clearing them would null out thunks that the decrypted game code
+        // still calls through.  We only overwrite the specific bytes we write.
 
         int descriptorCount = groups.Count + 1;
         int descriptorBytes = descriptorCount * 20;

@@ -107,6 +107,20 @@ internal static partial class Kernel32
     public static partial uint ResumeThread(SafeKernelHandle hThread);
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
+    public static partial uint SuspendThread(SafeKernelHandle hThread);
+
+    public const uint CONTEXT_AMD64 = 0x00100000;
+    public const uint CONTEXT_CONTROL = CONTEXT_AMD64 | 0x1;
+    public const int ContextFlagsOffset = 0x30;
+    public const int ContextRipOffset = 0xF8;
+    public const int ContextSize = 1232;
+    public const int ContextAlignment = 16;
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static unsafe partial bool GetThreadContext(SafeKernelHandle hThread, byte* lpContext);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool TerminateProcess(SafeProcessHandle hProcess, uint uExitCode);
 
