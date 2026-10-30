@@ -104,7 +104,7 @@ public static class ExeDecryptor
         SectionToDump[] Sections,
         uint EntryPointRva, long ImageBase,
         long DllCharacteristicsOffset, long DataDirectoriesOffset,
-        uint ImportDirRva);
+        uint ImportDirRva, uint IatRva, uint IatSize);
 
     private record struct ImportInfo(int IatSize, int ImportDirectorySize);
 
@@ -147,6 +147,12 @@ public static class ExeDecryptor
         long dataDirOffset = optOffset + 112;
         uint importDirRva = (int)dataDirOffset + 8 < read
             ? BinaryPrimitives.ReadUInt32LittleEndian(header[((int)dataDirOffset + 8)..])
+            : 0;
+        uint iatRva = (int)dataDirOffset + 12 * 8 < read
+            ? BinaryPrimitives.ReadUInt32LittleEndian(header[((int)dataDirOffset + 12 * 8)..])
+            : 0;
+        uint iatSize = (int)dataDirOffset + 12 * 8 + 4 < read
+            ? BinaryPrimitives.ReadUInt32LittleEndian(header[((int)dataDirOffset + 12 * 8 + 4)..])
             : 0;
 
         int sectionsOffset = optOffset + sizeOfOptionalHeader;
@@ -191,7 +197,7 @@ public static class ExeDecryptor
 
         return textCount >= 2
             ? new PeInfo(firstTextFileOffset, firstTextRva, firstTextRawSize,
-                sections.ToArray(), entryPointRva, imageBase, dllCharOffset, dataDirOffset, importDirRva)
+                sections.ToArray(), entryPointRva, imageBase, dllCharOffset, dataDirOffset, importDirRva, iatRva, iatSize)
             : null;
     }
 
