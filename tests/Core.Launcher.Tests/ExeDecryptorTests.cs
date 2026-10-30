@@ -76,6 +76,9 @@ public sealed class ExeDecryptorTests
             int fo = (int)BinaryPrimitives.ReadUInt32LittleEndian(after.AsSpan(s + 20));
             uint flags = BinaryPrimitives.ReadUInt32LittleEndian(after.AsSpan(s + 36));
             if (sz == 0) continue;
+            // The section the decryptor appends for the rebuilt import directory is its own, not the
+            // packer's: it has no blob to restore and holds nothing that runs.
+            if (fo >= before.Length) continue;
 
             long diff = 0, tailDiff = 0;
             for (int k = 0; k < sz; k++)
@@ -119,7 +122,7 @@ public sealed class ExeDecryptorTests
         }
 
         Assert.Equal(2, textSeen);
-        Assert.Equal(numSections - 2, blobsSeen);
+        Assert.Equal(numSections - 3, blobsSeen);
     }
 
     /// <summary>
@@ -233,10 +236,22 @@ public sealed class ExeDecryptorTests
         ushort dllChar = BinaryPrimitives.ReadUInt16LittleEndian(b.AsSpan(opt + 70));
         Assert.True((dllChar & 0x40) == 0, $"DynamicBase still set (0x{dllChar:X4})");
 
-        // The import directory must be left pointing at the original, intact .idata.
+        // The import directory moves into the appended section, because the rebuilt descriptors for the
+        // stub's private table are added to it -- but the original ones have to come along, or the exe
+        // loses the imports it already declared.
         uint importRva = BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(opt + 112 + 8));
         uint origImportRva = BinaryPrimitives.ReadUInt32LittleEndian(File.ReadAllBytes(bak).AsSpan(opt + 112 + 8));
-        Assert.Equal(origImportRva, importRva);
+        Assert.NotEqual(origImportRva, importRva);
+
+        var (dlls, _, thunks) = ReadImports(copy);
+        foreach (var original in new[] { "KERNEL32.dll", "USER32.dll", "WS2_32.dll", "ole32.dll" })
+            Assert.Contains(original, dlls);
+
+        // And the rebuilt descriptors must write into the stub's table, not somewhere of their own.
+        Assert.Contains(thunks, rva => rva is >= 0x400E000 and < 0x400F930);
+
+        // A bound import directory would describe the descriptor list we just replaced.
+        Assert.Equal(0u, BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(opt + 112 + 11 * 8)));
 
         // The entry point keeps the `sub rsp,28 ; call rel32` wrapper FixEntryPoint retargets.
         uint entryRva = BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(opt + 16));
@@ -244,6 +259,60 @@ public sealed class ExeDecryptorTests
         var entry = b.AsSpan(entryFo, 5);
         Assert.True(entry[0] == 0x48 && entry[1] == 0x83 && entry[2] == 0xEC && entry[3] == 0x28 && entry[4] == 0xE8,
             "Entry wrapper prefix not found");
+    }
+
+    /// <summary>
+    /// The packer takes the game's imports out of the import directory and has its stub resolve them into
+    /// a private table, so a bypassed launch would run on whatever addresses the decryption process
+    /// happened to see. Those are only right for that process -- on 1.9.1, 84 of the 762 came out stale --
+    /// so the decryptor rebuilds the table as a real import directory for the loader to fill each launch.
+    /// </summary>
+    [Fact]
+    [Trait("Category", "Integration")]
+    public void Decrypted_191_rebuilds_the_stubs_private_import_table()
+    {
+        var bak = Exe191 + ".bak";
+        if (!File.Exists(bak)) return;
+        using var folder = new TempFolder();
+        var copy = folder.Combine("FortniteClient-Win64-Shipping.exe");
+        File.Copy(bak, copy);
+        Assert.Equal(ExeDecryptor.Result.Decrypted, ExeDecryptor.Decrypt(copy));
+
+        var (dlls, functions, thunks) = ReadImports(copy);
+
+        // Imports the game needs that the packed exe does not declare: they only existed in the
+        // stub's table, and nothing would resolve them if the rebuild had not run.
+        foreach (var hidden in new[] { "rand", "GetUserNameW", "memcpy", "RegCloseKey" })
+            Assert.Contains(hidden, functions);
+        foreach (var module in new[] { "ucrtbase.dll", "MSVCP140.dll", "VCRUNTIME140.dll" })
+            Assert.Contains(module, dlls);
+
+        // Every slot of the table must be covered, so the loader leaves none holding a captured address.
+        var covered = thunks.Where(rva => rva is >= 0x400E000 and < 0x400F930).ToHashSet();
+        Assert.True(covered.Count >= 700, $"only {covered.Count} of the table's slots are imported");
+
+        // No slot may keep the address the decryption process resolved: those point into modules that
+        // move, so a baked one is a call into whatever is mapped there next launch.
+        var b = File.ReadAllBytes(copy);
+        int pe = BinaryPrimitives.ReadInt32LittleEndian(b.AsSpan(0x3C));
+        int opt = pe + 4 + 20;
+        int optSize = BinaryPrimitives.ReadUInt16LittleEndian(b.AsSpan(pe + 4 + 16));
+        int numSections = BinaryPrimitives.ReadUInt16LittleEndian(b.AsSpan(pe + 4 + 2));
+        for (int i = 0; i < numSections; i++)
+        {
+            int s = opt + optSize + i * 40;
+            uint rva = BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(s + 12));
+            int size = (int)BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(s + 16));
+            int fo = (int)BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(s + 20));
+            if (rva > 0x400E000 || rva + (uint)size <= 0x400E000) continue;
+
+            for (uint at = 0x400E000; at < 0x400F930; at += 8)
+            {
+                ulong value = BinaryPrimitives.ReadUInt64LittleEndian(b.AsSpan(fo + (int)(at - rva)));
+                Assert.False(value > 0x7FF000000000,
+                    $"the table at rva 0x{at:X} still holds the captured address 0x{value:X}");
+            }
+        }
     }
 
     [Fact]
@@ -361,82 +430,72 @@ public sealed class ExeDecryptorTests
         Assert.Contains(function, found);
     }
 
-    private static HashSet<string> ReadImportFunctions(string exe)
+    /// <summary>
+    /// Walks the import directory the way the loader does, wherever it lives. The decryptor moves it
+    /// into the section it appends, so nothing here may assume .idata.
+    /// </summary>
+    private static HashSet<string> ReadImportFunctions(string exe) => ReadImports(exe).Functions;
+
+    private static (HashSet<string> Dlls, HashSet<string> Functions, List<uint> FirstThunks) ReadImports(string exe)
     {
-
-        using var fs = new FileStream(exe, FileMode.Open, FileAccess.Read);
-        Span<byte> header = stackalloc byte[4096];
-        fs.ReadExactly(header);
-
-        int pe = BinaryPrimitives.ReadInt32LittleEndian(header[0x3C..]);
+        var b = File.ReadAllBytes(exe);
+        int pe = BinaryPrimitives.ReadInt32LittleEndian(b.AsSpan(0x3C));
         int coff = pe + 4;
-        int numSections = BinaryPrimitives.ReadUInt16LittleEndian(header[(coff + 2)..]);
-        int optSize = BinaryPrimitives.ReadUInt16LittleEndian(header[(coff + 16)..]);
+        int numSections = BinaryPrimitives.ReadUInt16LittleEndian(b.AsSpan(coff + 2));
+        int optSize = BinaryPrimitives.ReadUInt16LittleEndian(b.AsSpan(coff + 16));
         int opt = coff + 20;
-        uint importRva = BinaryPrimitives.ReadUInt32LittleEndian(header[(opt + 120)..]);
+        uint importRva = BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(opt + 120));
         Assert.True(importRva != 0, "DataDirectory[1] import RVA is 0");
 
-        int sectOff = opt + optSize;
-        uint idataRva = 0;
-        long idataFileOff = 0;
-        int idataSize = 0;
+        var sections = new List<(uint Rva, int Size, int FileOff)>();
         for (int i = 0; i < numSections; i++)
         {
-            int s = sectOff + i * 40;
-            var name = Encoding.ASCII.GetString(header.Slice(s, 8)).TrimEnd('\0');
-            if (name == ".idata")
-            {
-                idataRva = BinaryPrimitives.ReadUInt32LittleEndian(header[(s + 12)..]);
-                idataSize = (int)BinaryPrimitives.ReadUInt32LittleEndian(header[(s + 16)..]);
-                idataFileOff = BinaryPrimitives.ReadUInt32LittleEndian(header[(s + 20)..]);
-                break;
-            }
+            int s = opt + optSize + i * 40;
+            sections.Add((BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(s + 12)),
+                (int)BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(s + 16)),
+                (int)BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(s + 20))));
         }
-        Assert.True(idataRva != 0, ".idata not found");
-        Assert.True(importRva >= idataRva && importRva < idataRva + (uint)idataSize,
-            $"Import directory RVA 0x{importRva:X} not in .idata (0x{idataRva:X}..0x{idataRva + (uint)idataSize:X})");
 
-        var idata = new byte[idataSize];
-        fs.Position = idataFileOff;
-        fs.ReadExactly(idata);
-
-        var found = new HashSet<string>();
-        int dOff = (int)(importRva - idataRva);
-        while (dOff + 20 <= idata.Length)
+        int Offset(uint rva)
         {
-            uint origFirstThunk = BinaryPrimitives.ReadUInt32LittleEndian(idata.AsSpan(dOff));
-            uint firstThunk = BinaryPrimitives.ReadUInt32LittleEndian(idata.AsSpan(dOff + 16));
-            if (firstThunk == 0) break;
-
-            Assert.True(origFirstThunk != 0, $"OriginalFirstThunk is 0 for descriptor at .idata+0x{dOff:X}");
-
-            if (origFirstThunk >= idataRva && origFirstThunk < idataRva + (uint)idataSize)
-            {
-                int iltOff = (int)(origFirstThunk - idataRva);
-                while (iltOff + 8 <= idata.Length)
-                {
-                    ulong entry = BinaryPrimitives.ReadUInt64LittleEndian(idata.AsSpan(iltOff));
-                    if (entry == 0) break;
-                    if ((entry & 0x8000000000000000) == 0)
-                    {
-                        uint hnRva = (uint)entry;
-                        if (hnRva >= idataRva && hnRva + 4 < idataRva + (uint)idataSize)
-                        {
-                            int nameStart = (int)(hnRva - idataRva) + 2;
-                            int nameEnd = nameStart;
-                            while (nameEnd < idata.Length && idata[nameEnd] != 0) nameEnd++;
-                            var funcName = Encoding.ASCII.GetString(idata, nameStart, nameEnd - nameStart);
-                            if (funcName.Length > 0)
-                                found.Add(funcName);
-                        }
-                    }
-                    iltOff += 8;
-                }
-            }
-            dOff += 20;
+            foreach (var s in sections)
+                if (rva >= s.Rva && rva < s.Rva + (uint)s.Size)
+                    return s.FileOff + (int)(rva - s.Rva);
+            return -1;
         }
 
-        return found;
+        string? Text(uint rva)
+        {
+            int at = Offset(rva);
+            if (at < 0) return null;
+            int end = Array.IndexOf(b, (byte)0, at);
+            return end > at ? Encoding.ASCII.GetString(b, at, end - at) : null;
+        }
+
+        var dlls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var functions = new HashSet<string>();
+        var firstThunks = new List<uint>();
+        for (int d = Offset(importRva); ; d += 20)
+        {
+            uint originalFirstThunk = BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(d));
+            uint nameRva = BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(d + 12));
+            uint firstThunk = BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(d + 16));
+            if (originalFirstThunk == 0 && firstThunk == 0 && nameRva == 0) break;
+
+            Assert.True(originalFirstThunk != 0, $"OriginalFirstThunk is 0 for the descriptor at 0x{d:X}");
+            if (Text(nameRva) is { } dll) dlls.Add(dll);
+
+            for (int lookup = Offset(originalFirstThunk); ; lookup += 8)
+            {
+                ulong entry = BinaryPrimitives.ReadUInt64LittleEndian(b.AsSpan(lookup));
+                if (entry == 0) break;
+                if ((entry & 0x8000000000000000) == 0 && Text((uint)entry + 2) is { } function)
+                    functions.Add(function);
+                firstThunks.Add(firstThunk + (uint)(lookup - Offset(originalFirstThunk)));
+            }
+        }
+
+        return (dlls, functions, firstThunks);
     }
 
     private static byte[] SyntheticExe(int textSections, bool prologuesInFirst = false)

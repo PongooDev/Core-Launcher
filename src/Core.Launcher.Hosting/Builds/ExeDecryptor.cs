@@ -46,6 +46,14 @@ public static class ExeDecryptor
 
     private const string TextSection = ".text";
 
+    /// <summary>The section holding the import directory rebuilt from the stub's private import table.</summary>
+    private const string ImportSectionName = ".cimp";
+
+    private const uint SectionInitializedData = 0x00000040;
+    private const uint SectionRead = 0x40000000;
+    private const ulong OrdinalFlag = 0x8000000000000000;
+    private const uint ListModulesAll = 0x03;
+
     /// <summary>
     /// How much of a trailing run must have changed for it to be the packer's appended code rather than runtime
     /// state. Its code comes out 80-99% different from the encrypted bytes it replaces, while the stub and the
@@ -62,11 +70,12 @@ public static class ExeDecryptor
             return Result.AlreadyDecrypted;
 
         progress?.Invoke("Packed exe detected, decrypting");
-        var live = DumpDecryptedImage(executable, pe, progress);
+        var (live, exports) = DumpDecryptedImage(executable, pe, progress);
 
         progress?.Invoke("Writing the decrypted image back to the exe");
         long written = 0;
         var code = new List<(Section Section, byte[] Bytes)>();
+        var imports = new List<ImportSlot>();
         using (var fs = new FileStream(executable, FileMode.Open, FileAccess.ReadWrite, FileShare.Read))
         {
             for (int i = 0; i < pe.Sections.Length; i++)
@@ -82,6 +91,7 @@ public static class ExeDecryptor
                 int changed = MergeDecrypted(merged, live[i], section, pe);
                 if (section.Name == TextSection)
                     code.Add((section, merged));
+                FindImportSlots(merged, section, pe, exports, imports);
                 if (changed == 0)
                     continue;
 
@@ -97,6 +107,9 @@ public static class ExeDecryptor
             }
 
             written += UnfixAddendSlots(fs, pe, code, progress);
+
+            // Must come last: it appends a section and rewrites the section table and SizeOfImage.
+            AddImportDirectory(fs, pe, imports, progress);
 
             // Clear IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE so the exe loads at its preferred image base. The
             // decrypted code holds absolute addresses valid only for that base; the stub would normally re-apply
@@ -394,6 +407,326 @@ public static class ExeDecryptor
         return ranges;
     }
 
+    /// <summary>An export of a module loaded into the decryption process.</summary>
+    private readonly record struct Export(string Module, string? Name, ushort Ordinal);
+
+    /// <summary>A slot in the image that the stub filled with an address it resolved itself.</summary>
+    private readonly record struct ImportSlot(uint Rva, Export Export);
+
+    private static unsafe Dictionary<ulong, Export> ReadExports(SafeProcessHandle process, PeInfo pe)
+    {
+        var modules = new nint[4096];
+        uint needed;
+        fixed (nint* p = modules)
+        {
+            if (!Kernel32.EnumProcessModulesEx(process, p, (uint)(modules.Length * sizeof(nint)), out needed,
+                    ListModulesAll))
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+        }
+
+        var exports = new Dictionary<ulong, Export>();
+        var path = new char[1024];
+        int count = Math.Min(modules.Length, (int)(needed / (uint)sizeof(nint)));
+        for (int i = 0; i < count; i++)
+        {
+            nint module = modules[i];
+            if (module == 0 || module == (nint)pe.ImageBase) continue;
+
+            uint length;
+            fixed (char* p = path)
+                length = Kernel32.GetModuleFileNameEx(process, module, p, (uint)path.Length);
+            if (length == 0) continue;
+
+            AddModuleExports(process, (ulong)module, Path.GetFileName(new string(path, 0, (int)length)), exports);
+        }
+        return exports;
+    }
+
+    private static void AddModuleExports(SafeProcessHandle process, ulong module, string moduleName,
+        Dictionary<ulong, Export> exports)
+    {
+        var head = ReadRemote(process, module, 0x1000);
+        if (head is null || head.Length < 0x40 || head[0] != (byte)'M' || head[1] != (byte)'Z') return;
+
+        int pe = BinaryPrimitives.ReadInt32LittleEndian(head.AsSpan(0x3C));
+        int opt = pe + 24;
+        if (pe < 0 || opt + 120 > head.Length) return;
+        if (BinaryPrimitives.ReadUInt16LittleEndian(head.AsSpan(opt)) != 0x20B) return;
+
+        uint dirRva = U32(head, opt + 112), dirSize = U32(head, opt + 116);
+        if (dirRva == 0 || dirSize < 40) return;
+
+        // The export directory, its three tables and its name strings normally all sit inside the directory's
+        // own range, so one read covers them; anything outside it is read on its own.
+        var dir = ReadRemote(process, module + dirRva, (int)dirSize);
+        if (dir is null || dir.Length < 40) return;
+
+        uint ordinalBase = U32(dir, 16), functionCount = U32(dir, 20), nameCount = U32(dir, 24);
+        uint functionsRva = U32(dir, 28), namesRva = U32(dir, 32), ordinalsRva = U32(dir, 36);
+        if (functionCount == 0 || functionCount > 0x10000 || nameCount > functionCount) return;
+
+        byte[]? Read(uint rva, int length) =>
+            rva >= dirRva && (ulong)rva + (ulong)length <= dirRva + (ulong)dir.Length
+                ? dir[(int)(rva - dirRva)..(int)(rva - dirRva + length)]
+                : ReadRemote(process, module + rva, length);
+
+        string? ReadName(uint rva)
+        {
+            byte[]? source = rva >= dirRva && rva < dirRva + (uint)dir.Length
+                ? dir[(int)(rva - dirRva)..]
+                : ReadRemote(process, module + rva, 256);
+            if (source is null) return null;
+            int end = Array.IndexOf(source, (byte)0);
+            return end > 0 ? Encoding.ASCII.GetString(source, 0, end) : null;
+        }
+
+        var functions = Read(functionsRva, (int)functionCount * 4);
+        var names = nameCount == 0 ? [] : Read(namesRva, (int)nameCount * 4);
+        var ordinals = nameCount == 0 ? [] : Read(ordinalsRva, (int)nameCount * 2);
+        if (functions is null || names is null || ordinals is null
+            || functions.Length < functionCount * 4 || names.Length < nameCount * 4 || ordinals.Length < nameCount * 2)
+            return;
+
+        var nameOf = new string?[functionCount];
+        for (int i = 0; i < nameCount; i++)
+        {
+            ushort index = BinaryPrimitives.ReadUInt16LittleEndian(ordinals.AsSpan(i * 2));
+            if (index < functionCount && nameOf[index] is null)
+                nameOf[index] = ReadName(U32(names, i * 4));
+        }
+
+        for (int i = 0; i < functionCount; i++)
+        {
+            uint rva = U32(functions, i * 4);
+            // A forwarder's entry points at a "DLL.Function" string inside the export directory, not at code.
+            if (rva == 0 || (rva >= dirRva && rva < dirRva + dirSize)) continue;
+
+            var export = new Export(moduleName, nameOf[i], (ushort)(i + ordinalBase));
+            ulong address = module + rva;
+            if (!exports.TryGetValue(address, out var known) || (known.Name is null && export.Name is not null))
+                exports[address] = export;
+        }
+    }
+
+    private static unsafe byte[]? ReadRemote(SafeProcessHandle process, ulong address, int length)
+    {
+        if (length <= 0) return [];
+        var buffer = new byte[length];
+        fixed (byte* p = buffer)
+        {
+            bool ok = Kernel32.ReadProcessMemory(process, (nint)address, p, (nuint)length, out var read);
+            if (!ok && read == 0) return null;
+            return read == (nuint)length ? buffer : buffer[..(int)read];
+        }
+    }
+
+    /// <summary>
+    /// Collects the slots in a section that hold the exact address of a loaded module's export. An image cannot
+    /// legitimately contain one -- a DLL's address is unknown when the exe is linked -- so each is an import the stub
+    /// resolved by hand. On 1.9.1 they are the game's whole original IAT: 762 slots at the start of .rdata, which the
+    /// packer took out of the import directory so that only its stub could fill them.
+    /// </summary>
+    private static void FindImportSlots(byte[] bytes, Section section, PeInfo pe,
+        Dictionary<ulong, Export> exports, List<ImportSlot> slots)
+    {
+        if (exports.Count == 0) return;
+        for (int k = 0; k + 8 <= bytes.Length; k += 8)
+        {
+            // A user-mode address never has its top two bytes set, which skips the lookup for nearly all code.
+            if (bytes[k + 6] != 0 || bytes[k + 7] != 0) continue;
+            if (!exports.TryGetValue(BinaryPrimitives.ReadUInt64LittleEndian(bytes.AsSpan(k)), out var export))
+                continue;
+
+            uint rva = section.Rva + (uint)k;
+            if (rva >= pe.IatRva && rva < pe.IatRva + pe.IatSize) continue;
+            slots.Add(new ImportSlot(rva, export));
+        }
+    }
+
+    /// <summary>
+    /// Turns the slots the stub resolved by hand into a real import directory, so the Windows loader fills them on
+    /// every launch. Keeping the addresses the decryption process resolved is not enough: some modules land at a
+    /// different address in every process, and on 1.9.1 84 of the 762 came out stale, so calls through them went
+    /// into whatever happened to be mapped there.
+    /// <para>
+    /// The descriptors, lookup tables and names go in a new section. Each descriptor's FirstThunk is a run of the
+    /// slots themselves, so the loader writes straight into the table the game calls through. The original
+    /// descriptors follow ours, so a search by name finds the game's slot before the stub's.
+    /// </para>
+    /// </summary>
+    private static void AddImportDirectory(FileStream fs, PeInfo pe, List<ImportSlot> slots, Action<string>? progress)
+    {
+        if (slots.Count == 0) return;
+
+        var header = new byte[0x1000];
+        fs.Position = 0;
+        int headerLength = fs.Read(header);
+
+        int coff = BinaryPrimitives.ReadInt32LittleEndian(header.AsSpan(0x3C)) + 4;
+        int sectionCount = BinaryPrimitives.ReadUInt16LittleEndian(header.AsSpan(coff + 2));
+        int opt = coff + 20;
+        int sectionTable = opt + BinaryPrimitives.ReadUInt16LittleEndian(header.AsSpan(coff + 16));
+        uint sectionAlignment = U32(header, opt + 32), fileAlignment = U32(header, opt + 36);
+        uint sizeOfHeaders = U32(header, opt + 60);
+        int importDirectory = opt + 112 + 1 * 8;
+        int boundImportDirectory = opt + 112 + 11 * 8;
+        int newHeader = sectionTable + sectionCount * 40;
+
+        uint firstRaw = uint.MaxValue, imageEnd = 0;
+        for (int i = 0; i < sectionCount; i++)
+        {
+            int s = sectionTable + i * 40;
+            uint virtualSize = U32(header, s + 8), va = U32(header, s + 12);
+            uint rawSize = U32(header, s + 16), raw = U32(header, s + 20);
+            if (raw != 0) firstRaw = Math.Min(firstRaw, raw);
+            imageEnd = Math.Max(imageEnd, va + Math.Max(virtualSize, rawSize));
+        }
+        if (newHeader + 40 > Math.Min(Math.Min(sizeOfHeaders, firstRaw), (uint)headerLength)
+            || header.AsSpan(newHeader, 40).IndexOfAnyExcept((byte)0) >= 0)
+            throw new InvalidOperationException("No free entry in the section table for the rebuilt import directory");
+
+        // A descriptor covers one contiguous run of thunks from one module.
+        slots.Sort((a, b) => a.Rva.CompareTo(b.Rva));
+        var runs = new List<List<ImportSlot>>();
+        foreach (var slot in slots)
+        {
+            if (runs.Count > 0 && runs[^1][^1].Rva + 8 == slot.Rva
+                && string.Equals(runs[^1][^1].Export.Module, slot.Export.Module, StringComparison.OrdinalIgnoreCase))
+                runs[^1].Add(slot);
+            else
+                runs.Add([slot]);
+        }
+
+        var original = ReadImportDescriptors(fs, pe, U32(header, importDirectory));
+
+        // Layout: descriptors (ours, the originals, a null one), lookup tables, hint/name entries, module names.
+        uint sectionVa = Align(imageEnd, sectionAlignment);
+        int descriptorBytes = (runs.Count + original.Count + 1) * 20;
+        int offset = (descriptorBytes + 7) & ~7;
+        var lookupTables = new int[runs.Count];
+        for (int r = 0; r < runs.Count; r++)
+        {
+            lookupTables[r] = offset;
+            offset += (runs[r].Count + 1) * 8;
+        }
+        var nameEntries = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var slot in slots)
+        {
+            if (slot.Export.Name is not { } name || nameEntries.ContainsKey(name)) continue;
+            nameEntries[name] = offset;
+            offset += (2 + name.Length + 1 + 1) & ~1;
+        }
+        var moduleNames = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var run in runs)
+        {
+            if (moduleNames.ContainsKey(run[0].Export.Module)) continue;
+            moduleNames[run[0].Export.Module] = offset;
+            offset += run[0].Export.Module.Length + 1;
+        }
+        int virtualSizeOfSection = offset;
+        var data = new byte[Align((uint)virtualSizeOfSection, fileAlignment)];
+
+        int d = 0;
+        for (int r = 0; r < runs.Count; r++, d += 20)
+        {
+            W32(data, d, sectionVa + (uint)lookupTables[r]);
+            // TimeDateStamp stays 0: anything else tells the loader the table is already bound, and it would keep
+            // the stale addresses sitting in it.
+            W32(data, d + 12, sectionVa + (uint)moduleNames[runs[r][0].Export.Module]);
+            W32(data, d + 16, runs[r][0].Rva);
+        }
+        foreach (var descriptor in original)
+        {
+            descriptor.CopyTo(data, d);
+            d += 20;
+        }
+
+        for (int r = 0; r < runs.Count; r++)
+        {
+            for (int j = 0; j < runs[r].Count; j++)
+            {
+                var export = runs[r][j].Export;
+                ulong entry = export.Name is { } name ? sectionVa + (uint)nameEntries[name] : OrdinalFlag | export.Ordinal;
+                BinaryPrimitives.WriteUInt64LittleEndian(data.AsSpan(lookupTables[r] + j * 8), entry);
+            }
+        }
+        foreach (var (name, at) in nameEntries)
+            Encoding.ASCII.GetBytes(name, data.AsSpan(at + 2));
+        foreach (var (module, at) in moduleNames)
+            Encoding.ASCII.GetBytes(module, data.AsSpan(at));
+
+        // Clear the slots we have just declared as imports. The loader fills them before the exe runs, so
+        // the value on disk is never read -- but keeping the address the decryption process resolved would
+        // turn a slot some descriptor failed to cover into a quiet call into the wrong module, instead of
+        // a null call that says exactly what went wrong.
+        Span<byte> empty = stackalloc byte[8];
+        foreach (var slot in slots)
+        {
+            long at = pe.FileOffsetOf(slot.Rva);
+            if (at < 0) continue;
+            fs.Position = at;
+            fs.Write(empty);
+        }
+
+        uint rawPointer = Align((uint)fs.Length, fileAlignment);
+        fs.SetLength(rawPointer);
+        fs.Position = rawPointer;
+        fs.Write(data);
+
+        var sectionHeader = new byte[40];
+        Encoding.ASCII.GetBytes(ImportSectionName, sectionHeader);
+        W32(sectionHeader, 8, (uint)virtualSizeOfSection);
+        W32(sectionHeader, 12, sectionVa);
+        W32(sectionHeader, 16, (uint)data.Length);
+        W32(sectionHeader, 20, rawPointer);
+        W32(sectionHeader, 36, SectionInitializedData | SectionRead | SectionWrite);
+        fs.Position = newHeader;
+        fs.Write(sectionHeader);
+
+        Span<byte> field = stackalloc byte[8];
+        BinaryPrimitives.WriteUInt16LittleEndian(field, (ushort)(sectionCount + 1));
+        fs.Position = coff + 2;
+        fs.Write(field[..2]);
+        BinaryPrimitives.WriteUInt32LittleEndian(field, Align(sectionVa + (uint)virtualSizeOfSection, sectionAlignment));
+        fs.Position = opt + 56;
+        fs.Write(field[..4]);
+        BinaryPrimitives.WriteUInt32LittleEndian(field, sectionVa);
+        BinaryPrimitives.WriteUInt32LittleEndian(field[4..], (uint)descriptorBytes);
+        fs.Position = importDirectory;
+        fs.Write(field);
+        // A bound import directory would describe the old descriptor list; the loader must resolve from scratch.
+        field.Clear();
+        fs.Position = boundImportDirectory;
+        fs.Write(field);
+
+        progress?.Invoke($"Rebuilt {slots.Count} hand-resolved imports from {moduleNames.Count} modules as a real import directory");
+    }
+
+    private static List<byte[]> ReadImportDescriptors(FileStream fs, PeInfo pe, uint importRva)
+    {
+        var descriptors = new List<byte[]>();
+        long offset = importRva == 0 ? -1 : pe.FileOffsetOf(importRva);
+        if (offset < 0) return descriptors;
+
+        while (true)
+        {
+            var descriptor = new byte[20];
+            fs.Position = offset + descriptors.Count * 20L;
+            fs.ReadExactly(descriptor);
+            if (descriptor.AsSpan().IndexOfAnyExcept((byte)0) < 0) return descriptors;
+            descriptors.Add(descriptor);
+            if (descriptors.Count > 4096)
+                throw new InvalidOperationException("The import directory has no terminating descriptor");
+        }
+    }
+
+    private static uint U32(byte[] bytes, int at) => BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(at));
+
+    private static void W32(byte[] bytes, int at, uint value) =>
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(at), value);
+
+    private static uint Align(uint value, uint alignment) => (value + alignment - 1) / alignment * alignment;
+
     private static void MarkRunnable(FileStream fs, Section section)
     {
         uint wanted = section.Characteristics | SectionExecute | SectionWrite;
@@ -405,7 +738,7 @@ public static class ExeDecryptor
         fs.Write(dword);
     }
 
-    private static unsafe Dictionary<int, byte[]> DumpDecryptedImage(
+    private static unsafe (Dictionary<int, byte[]> Sections, Dictionary<ulong, Export> Exports) DumpDecryptedImage(
         string executable, PeInfo pe, Action<string>? progress)
     {
         var tmpPath = executable + ".decrypting.tmp";
@@ -473,7 +806,12 @@ public static class ExeDecryptor
                         live[i] = buf;
                     }
 
-                    return live;
+                    // Every export of every module the stub loaded, so the addresses it resolved into its
+                    // private import table can be turned back into names: it wipes its own name strings.
+                    progress?.Invoke("Reading the exports of the loaded modules");
+                    var exports = ReadExports(process, pe);
+
+                    return (live, exports);
                 }
                 finally
                 {
