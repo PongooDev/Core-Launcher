@@ -655,18 +655,12 @@ public static class ExeDecryptor
         foreach (var (module, at) in moduleNames)
             Encoding.ASCII.GetBytes(module, data.AsSpan(at));
 
-        // Clear the slots we have just declared as imports. The loader fills them before the exe runs, so
-        // the value on disk is never read -- but keeping the address the decryption process resolved would
-        // turn a slot some descriptor failed to cover into a quiet call into the wrong module, instead of
-        // a null call that says exactly what went wrong.
-        Span<byte> empty = stackalloc byte[8];
-        foreach (var slot in slots)
-        {
-            long at = pe.FileOffsetOf(slot.Rva);
-            if (at < 0) continue;
-            fs.Position = at;
-            fs.Write(empty);
-        }
+        // The addresses the decryption process resolved stay in the table, and must. LdrpSnapIAT works
+        // out how much of the IAT to snap by walking FirstThunk until it reads a zero, so a run of
+        // cleared slots is an empty run: zeroing them for tidiness made the loader snap nothing at all
+        // and left the whole table null. The zeros already between the runs are the terminators that
+        // give each descriptor its length, so the table is left exactly as the stub laid it out, and
+        // the loader overwrites every slot it covers before the exe runs.
 
         uint rawPointer = Align((uint)fs.Length, fileAlignment);
         fs.SetLength(rawPointer);

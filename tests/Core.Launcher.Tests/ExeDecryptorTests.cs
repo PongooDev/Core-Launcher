@@ -291,8 +291,10 @@ public sealed class ExeDecryptorTests
         var covered = thunks.Where(rva => rva is >= 0x400E000 and < 0x400F930).ToHashSet();
         Assert.True(covered.Count >= 700, $"only {covered.Count} of the table's slots are imported");
 
-        // No slot may keep the address the decryption process resolved: those point into modules that
-        // move, so a baked one is a call into whatever is mapped there next launch.
+        // Every covered slot must still be non-zero. LdrpSnapIAT sizes the run it snaps by walking
+        // FirstThunk until it reads a zero, so clearing the slots makes each run look empty and the
+        // loader fills none of them -- the zeros already between the runs are what gives each
+        // descriptor its length.
         var b = File.ReadAllBytes(copy);
         int pe = BinaryPrimitives.ReadInt32LittleEndian(b.AsSpan(0x3C));
         int opt = pe + 4 + 20;
@@ -306,12 +308,19 @@ public sealed class ExeDecryptorTests
             int fo = (int)BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(s + 20));
             if (rva > 0x400E000 || rva + (uint)size <= 0x400E000) continue;
 
-            for (uint at = 0x400E000; at < 0x400F930; at += 8)
+            foreach (uint at in covered)
             {
                 ulong value = BinaryPrimitives.ReadUInt64LittleEndian(b.AsSpan(fo + (int)(at - rva)));
-                Assert.False(value > 0x7FF000000000,
-                    $"the table at rva 0x{at:X} still holds the captured address 0x{value:X}");
+                Assert.NotEqual(0UL, value);
             }
+
+            // And the gaps between runs must stay zero, or a descriptor's run would swallow the next.
+            int terminators = 0;
+            for (uint at = 0x400E000; at < 0x400F930; at += 8)
+                if (!covered.Contains(at)
+                    && BinaryPrimitives.ReadUInt64LittleEndian(b.AsSpan(fo + (int)(at - rva))) == 0)
+                    terminators++;
+            Assert.True(terminators >= 20, $"only {terminators} run terminators left in the table");
         }
     }
 
