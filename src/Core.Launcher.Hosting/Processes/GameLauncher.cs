@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using Core.Launcher.Hosting.Builds;
 using Core.Launcher.Hosting.Dlls;
 using Core.Launcher.Hosting.Logging;
@@ -34,23 +33,6 @@ public sealed class GameLauncher
         if (PeImage.CheckX64(executable, dll: false) is { } problem)
         {
             throw new InvalidOperationException(problem);
-        }
-
-        try
-        {
-            var exeName = Path.GetFileName(executable);
-            switch (ExeDecryptor.Decrypt(executable, status => _log.Write($"{start.Label}: {exeName}: {status}")))
-            {
-                case ExeDecryptor.Result.Decrypted:
-                    _log.Write($"{start.Label}: {exeName} decrypted, the entry point now bypasses the stub");
-                    break;
-                case ExeDecryptor.Result.AlreadyDecrypted:
-                    break;
-            }
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or Win32Exception or TimeoutException)
-        {
-            _log.Write($"Couldn't decrypt {Path.GetFileName(executable)} ({ex.Message}); launch continues");
         }
 
         if (start.Dlls.Contains(DllRole.Server))

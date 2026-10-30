@@ -97,47 +97,10 @@ internal static partial class Kernel32
     public static unsafe partial bool WriteProcessMemory(SafeProcessHandle hProcess, nint lpBaseAddress, void* lpBuffer, nuint nSize, out nuint lpNumberOfBytesWritten);
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static unsafe partial bool ReadProcessMemory(SafeProcessHandle hProcess, nint lpBaseAddress, void* lpBuffer, nuint nSize, out nuint lpNumberOfBytesRead);
-
-    [LibraryImport("kernel32.dll", SetLastError = true)]
     public static partial uint QueueUserAPC(nint pfnAPC, SafeKernelHandle hThread, nint dwData);
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
     public static partial uint ResumeThread(SafeKernelHandle hThread);
-
-    [LibraryImport("kernel32.dll", SetLastError = true)]
-    public static partial uint SuspendThread(SafeKernelHandle hThread);
-
-    public const uint TH32CS_SNAPTHREAD = 0x00000004;
-    public const uint THREAD_SUSPEND_RESUME = 0x0002;
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct THREADENTRY32
-    {
-        public uint dwSize;
-        public uint cntUsage;
-        public uint th32ThreadID;
-        public uint th32OwnerProcessID;
-        public int tpBasePri;
-        public int tpDeltaPri;
-        public uint dwFlags;
-    }
-
-    [LibraryImport("kernel32.dll", SetLastError = true)]
-    public static partial SafeKernelHandle CreateToolhelp32Snapshot(uint dwFlags, uint th32ProcessID);
-
-    [LibraryImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool Thread32First(SafeKernelHandle hSnapshot, ref THREADENTRY32 lpte);
-
-    [LibraryImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool Thread32Next(SafeKernelHandle hSnapshot, ref THREADENTRY32 lpte);
-
-    [LibraryImport("kernel32.dll", SetLastError = true)]
-    public static partial SafeKernelHandle OpenThread(uint dwDesiredAccess,
-        [MarshalAs(UnmanagedType.Bool)] bool bInheritHandle, uint dwThreadId);
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -146,9 +109,6 @@ internal static partial class Kernel32
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool GetExitCodeProcess(SafeProcessHandle hProcess, out uint lpExitCode);
-
-    [LibraryImport("kernel32.dll", SetLastError = true)]
-    public static partial uint WaitForSingleObject(SafeProcessHandle hHandle, uint dwMilliseconds);
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -179,25 +139,6 @@ internal static partial class Kernel32
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool GenerateConsoleCtrlEvent(uint dwCtrlEvent, uint dwProcessGroupId);
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct MODULEINFO
-    {
-        public nint lpBaseOfDll;
-        public uint SizeOfImage;
-        public nint EntryPoint;
-    }
-
-    [LibraryImport("kernel32.dll", EntryPoint = "K32EnumProcessModulesEx", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static unsafe partial bool EnumProcessModulesEx(SafeProcessHandle hProcess, nint* lphModule, uint cb, out uint lpcbNeeded, uint dwFilterFlag);
-
-    [LibraryImport("kernel32.dll", EntryPoint = "K32GetModuleFileNameExW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
-    public static unsafe partial uint GetModuleFileNameEx(SafeProcessHandle hProcess, nint hModule, char* lpFilename, uint nSize);
-
-    [LibraryImport("kernel32.dll", EntryPoint = "K32GetModuleInformation", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static unsafe partial bool GetModuleInformation(SafeProcessHandle hProcess, nint hModule, out MODULEINFO lpmodinfo, uint cb);
 }
 
 internal sealed class SafeKernelHandle : SafeHandleZeroOrMinusOneIsInvalid
