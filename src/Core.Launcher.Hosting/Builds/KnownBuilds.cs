@@ -57,7 +57,7 @@ public static partial class KnownBuilds
     /// <summary>Fortnite 1.9.1, ++Fortnite+Release-Cert CL-3775276 on UE 4.16.0: smoke grenades and the end of Fortnitemares.</summary>
     public const int Fortnite191 = 3775276;
 
-    /// <summary>Fortnite 1.10, ++Fortnite+Release-Cert CL-3790078 on UE 4.19.0: the first build on UE 4.19.</summary>
+    /// <summary>Fortnite 1.10, ++Fortnite+Release-Cert CL-3790078 on UE 4.19.0: fixed Mutant Storm targets, the 50v50 mode and the Winter Bus, on the first UE 4.19 build.</summary>
     public const int Fortnite110 = 3790078;
 
     /// <summary>
