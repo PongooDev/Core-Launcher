@@ -44,6 +44,8 @@ public static class ExeDecryptor
     /// </summary>
     private const int BlobGap = 64;
 
+    private const string TextSection = ".text";
+
     /// <summary>
     /// How much of a trailing run must have changed for it to be the packer's appended code rather than runtime
     /// state. Its code comes out 80-99% different from the encrypted bytes it replaces, while the stub and the
@@ -64,6 +66,7 @@ public static class ExeDecryptor
 
         progress?.Invoke("Writing the decrypted image back to the exe");
         long written = 0;
+        var code = new List<(Section Section, byte[] Bytes)>();
         using (var fs = new FileStream(executable, FileMode.Open, FileAccess.ReadWrite, FileShare.Read))
         {
             for (int i = 0; i < pe.Sections.Length; i++)
@@ -77,6 +80,8 @@ public static class ExeDecryptor
                     FixEntryPoint(live[i], pe, section);
 
                 int changed = MergeDecrypted(merged, live[i], section, pe);
+                if (section.Name == TextSection)
+                    code.Add((section, merged));
                 if (changed == 0)
                     continue;
 
@@ -90,6 +95,8 @@ public static class ExeDecryptor
                 // first such execute or write faults.
                 MarkRunnable(fs, section);
             }
+
+            written += UnfixAddendSlots(fs, pe, code, progress);
 
             // Clear IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE so the exe loads at its preferred image base. The
             // decrypted code holds absolute addresses valid only for that base; the stub would normally re-apply
@@ -115,8 +122,18 @@ public static class ExeDecryptor
 
     private readonly record struct PeInfo(
         Section[] Sections, int FirstTextIndex,
-        uint EntryPointRva, long ImageBase,
-        long DllCharacteristicsOffset, uint IatRva, uint IatSize);
+        uint EntryPointRva, long ImageBase, uint SizeOfImage,
+        long DllCharacteristicsOffset, uint IatRva, uint IatSize,
+        uint ExceptionRva, uint ExceptionSize)
+    {
+        public long FileOffsetOf(uint rva)
+        {
+            foreach (var section in Sections)
+                if (rva >= section.Rva && rva < section.Rva + section.RawSize)
+                    return section.FileOffset + (rva - section.Rva);
+            return -1;
+        }
+    }
 
     private static PeInfo? ParsePe(string executable)
     {
@@ -145,7 +162,14 @@ public static class ExeDecryptor
 
         uint entryPointRva = BinaryPrimitives.ReadUInt32LittleEndian(header[(optOffset + 16)..]);
         long imageBase = BinaryPrimitives.ReadInt64LittleEndian(header[(optOffset + 24)..]);
+        uint sizeOfImage = BinaryPrimitives.ReadUInt32LittleEndian(header[(optOffset + 56)..]);
         long dllCharOffset = optOffset + 70;
+
+        // DataDirectory[3] is the exception directory: the RUNTIME_FUNCTION table, which says
+        // exactly where every real function starts and ends.
+        int exceptionDirOffset = optOffset + 112 + 3 * 8;
+        uint exceptionRva = BinaryPrimitives.ReadUInt32LittleEndian(header[exceptionDirOffset..]);
+        uint exceptionSize = BinaryPrimitives.ReadUInt32LittleEndian(header[(exceptionDirOffset + 4)..]);
 
         // DataDirectory[12] is the import address table: the one part of the image the Windows loader rewrites on
         // every launch, so it is the one part we must not take from the throwaway process.
@@ -181,7 +205,8 @@ public static class ExeDecryptor
         }
 
         return textCount >= 2
-            ? new PeInfo(sections.ToArray(), firstTextIndex, entryPointRva, imageBase, dllCharOffset, iatRva, iatSize)
+            ? new PeInfo(sections.ToArray(), firstTextIndex, entryPointRva, imageBase, sizeOfImage,
+                dllCharOffset, iatRva, iatSize, exceptionRva, exceptionSize)
             : null;
     }
 
@@ -267,6 +292,106 @@ public static class ExeDecryptor
                 changed++;
 
         return changed >= (to - from) * BlobDensity ? (from, to) : null;
+    }
+
+    /// <summary>
+    /// Puts back the addend slots the stub converted from RVAs to absolute addresses.
+    /// <para>
+    /// The packer keeps a few qwords in the gaps between functions and adds the image base to them
+    /// at use time: <c>add rax, cs:qword_7F1A18</c> then an indirect jump. Its stub also converts
+    /// those slots to absolute as it decrypts, so a snapshot taken at the handoff has both halves
+    /// applied; the image base then goes on a second time at runtime and the jump lands one image
+    /// base too high, in unmapped memory. Subtracting the base restores what the use site expects.
+    /// </para>
+    /// <para>
+    /// Slots are found by how they are used, not by what they hold: a slot that merely contains an
+    /// image address may be the packer's own copy of the image base, which has to stay absolute.
+    /// On 1.9.1 exactly one slot in the image is the target of such an add.
+    /// </para>
+    /// </summary>
+    private static long UnfixAddendSlots(FileStream fs, PeInfo pe,
+        List<(Section Section, byte[] Bytes)> code, Action<string>? progress)
+    {
+        var functions = ReadFunctionRanges(fs, pe);
+        if (functions.Length == 0) return 0;
+
+        Span<byte> qword = stackalloc byte[8];
+        long fixedUp = 0;
+        foreach (var (section, bytes) in code)
+        {
+            foreach (uint target in AddendTargets(bytes, section.Rva, pe, functions))
+            {
+                long offset = pe.FileOffsetOf(target);
+                if (offset < 0) continue;
+
+                fs.Position = offset;
+                fs.ReadExactly(qword);
+                ulong value = BinaryPrimitives.ReadUInt64LittleEndian(qword);
+                if (value <= (ulong)pe.ImageBase || value >= (ulong)pe.ImageBase + pe.SizeOfImage)
+                    continue;
+
+                BinaryPrimitives.WriteUInt64LittleEndian(qword, value - (ulong)pe.ImageBase);
+                fs.Position = offset;
+                fs.Write(qword);
+                fixedUp += 8;
+                progress?.Invoke($"Restored the addend at RVA 0x{target:X} to 0x{value - (ulong)pe.ImageBase:X}");
+            }
+        }
+        return fixedUp;
+    }
+
+    /// <summary>Every <c>add r64, [rip+disp32]</c> target that sits outside all real functions.</summary>
+    private static IEnumerable<uint> AddendTargets(byte[] bytes, uint sectionRva, PeInfo pe,
+        (uint Begin, uint End)[] functions)
+    {
+        for (int i = 0; i < bytes.Length - 7; i++)
+        {
+            // REX.W (48, or 4C for r8-r15) + 03 /r with mod=00 rm=101 is add r64, [rip+disp32].
+            if ((bytes[i] != 0x48 && bytes[i] != 0x4C) || bytes[i + 1] != 0x03) continue;
+            if ((bytes[i + 2] & 0xC7) != 0x05) continue;
+
+            int displacement = BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(i + 3));
+            long target = sectionRva + i + 7L + displacement;
+            if (target <= 0 || target >= pe.SizeOfImage || target % 8 != 0) continue;
+            if (InFunction(functions, (uint)target)) continue;
+
+            yield return (uint)target;
+        }
+    }
+
+    private static bool InFunction((uint Begin, uint End)[] functions, uint rva)
+    {
+        int low = 0, high = functions.Length - 1;
+        while (low <= high)
+        {
+            int mid = (low + high) / 2;
+            if (rva < functions[mid].Begin) high = mid - 1;
+            else if (rva >= functions[mid].End) low = mid + 1;
+            else return true;
+        }
+        return false;
+    }
+
+    private static (uint Begin, uint End)[] ReadFunctionRanges(FileStream fs, PeInfo pe)
+    {
+        long offset = pe.FileOffsetOf(pe.ExceptionRva);
+        if (offset < 0 || pe.ExceptionSize == 0) return [];
+
+        var table = new byte[pe.ExceptionSize];
+        fs.Position = offset;
+        fs.ReadExactly(table);
+
+        var functions = new List<(uint, uint)>(table.Length / 12);
+        for (int i = 0; i + 12 <= table.Length; i += 12)
+        {
+            uint begin = BinaryPrimitives.ReadUInt32LittleEndian(table.AsSpan(i));
+            uint end = BinaryPrimitives.ReadUInt32LittleEndian(table.AsSpan(i + 4));
+            if (end > begin) functions.Add((begin, end));
+        }
+
+        var ranges = functions.ToArray();
+        Array.Sort(ranges, (a, b) => a.Item1.CompareTo(b.Item1));
+        return ranges;
     }
 
     private static void MarkRunnable(FileStream fs, Section section)

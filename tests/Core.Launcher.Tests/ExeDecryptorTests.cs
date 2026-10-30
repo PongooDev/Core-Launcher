@@ -122,6 +122,98 @@ public sealed class ExeDecryptorTests
         Assert.Equal(numSections - 2, blobsSeen);
     }
 
+    /// <summary>
+    /// The packer adds the image base to a few qwords in the gaps between functions, and its stub
+    /// also converts them to absolute while decrypting. Both halves end up applied in a snapshot, so
+    /// the decryptor has to subtract the base back off, or the indirect jump lands one image base
+    /// high in unmapped memory. On 1.9.1 exactly one slot in the image is used this way.
+    /// </summary>
+    [Fact]
+    [Trait("Category", "Integration")]
+    public void Decrypted_191_leaves_no_addend_slot_holding_an_absolute_address()
+    {
+        var bak = Exe191 + ".bak";
+        if (!File.Exists(bak)) return;
+        using var folder = new TempFolder();
+        var copy = folder.Combine("FortniteClient-Win64-Shipping.exe");
+        File.Copy(bak, copy);
+        Assert.Equal(ExeDecryptor.Result.Decrypted, ExeDecryptor.Decrypt(copy));
+
+        var b = File.ReadAllBytes(copy);
+        int pe = BinaryPrimitives.ReadInt32LittleEndian(b.AsSpan(0x3C));
+        int numSections = BinaryPrimitives.ReadUInt16LittleEndian(b.AsSpan(pe + 4 + 2));
+        int optSize = BinaryPrimitives.ReadUInt16LittleEndian(b.AsSpan(pe + 4 + 16));
+        int opt = pe + 4 + 20;
+        ulong imageBase = BinaryPrimitives.ReadUInt64LittleEndian(b.AsSpan(opt + 24));
+        uint sizeOfImage = BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(opt + 56));
+        uint pdataRva = BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(opt + 112 + 3 * 8));
+        uint pdataSize = BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(opt + 112 + 3 * 8 + 4));
+
+        var sections = new List<(string Name, uint Rva, int Size, int FileOff)>();
+        for (int i = 0; i < numSections; i++)
+        {
+            int s = opt + optSize + i * 40;
+            sections.Add((Encoding.ASCII.GetString(b, s, 8).TrimEnd('\0'),
+                BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(s + 12)),
+                (int)BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(s + 16)),
+                (int)BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(s + 20))));
+        }
+
+        int Offset(uint rva)
+        {
+            foreach (var s in sections)
+                if (rva >= s.Rva && rva < s.Rva + (uint)s.Size)
+                    return s.FileOff + (int)(rva - s.Rva);
+            return -1;
+        }
+
+        var functions = new List<(uint Begin, uint End)>();
+        for (int i = Offset(pdataRva); i + 12 <= Offset(pdataRva) + pdataSize; i += 12)
+        {
+            uint begin = BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(i));
+            uint end = BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(i + 4));
+            if (end > begin) functions.Add((begin, end));
+        }
+        functions.Sort((x, y) => x.Begin.CompareTo(y.Begin));
+        bool InFunction(uint rva) => functions.BinarySearch((rva, rva),
+            Comparer<(uint Begin, uint End)>.Create((x, y) => x.Begin <= y.Begin && y.Begin < x.End ? 0
+                : x.Begin.CompareTo(y.Begin))) >= 0;
+
+        int found = 0;
+        foreach (var s in sections.Where(s => s.Name == ".text"))
+        {
+            for (int i = 0; i < s.Size - 7; i++)
+            {
+                int at = s.FileOff + i;
+                if ((b[at] != 0x48 && b[at] != 0x4C) || b[at + 1] != 0x03) continue;
+                if ((b[at + 2] & 0xC7) != 0x05) continue;
+
+                int disp = BinaryPrimitives.ReadInt32LittleEndian(b.AsSpan(at + 3));
+                long target = s.Rva + i + 7L + disp;
+                if (target <= 0 || target >= sizeOfImage || target % 8 != 0) continue;
+                if (InFunction((uint)target)) continue;
+
+                int off = Offset((uint)target);
+                if (off < 0) continue;
+                ulong value = BinaryPrimitives.ReadUInt64LittleEndian(b.AsSpan(off));
+                if (value <= imageBase || value >= imageBase + sizeOfImage) continue;
+
+                Assert.Fail($"addend slot at rva 0x{target:X} still holds the absolute 0x{value:X}; "
+                            + $"adding the image base again gives 0x{value + imageBase:X}");
+                found++;
+            }
+        }
+
+        // The scan must still be finding the construct: if it silently matches nothing the exe
+        // would pass this test while the crash came back.
+        var packed = File.ReadAllBytes(bak);
+        Assert.NotEqual(
+            BinaryPrimitives.ReadUInt64LittleEndian(packed.AsSpan(Offset(0x7F1A18))),
+            BinaryPrimitives.ReadUInt64LittleEndian(b.AsSpan(Offset(0x7F1A18))));
+        Assert.Equal(0x12B4030UL, BinaryPrimitives.ReadUInt64LittleEndian(b.AsSpan(Offset(0x7F1A18))));
+        _ = found;
+    }
+
     [Fact]
     [Trait("Category", "Integration")]
     public void Decrypted_191_keeps_the_original_import_directory_and_pins_the_base()
