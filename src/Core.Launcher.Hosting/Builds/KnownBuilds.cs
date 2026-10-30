@@ -57,6 +57,9 @@ public static partial class KnownBuilds
     /// <summary>Fortnite 1.9.1, ++Fortnite+Release-Cert CL-3775276 on UE 4.16.0: smoke grenades and the end of Fortnitemares.</summary>
     public const int Fortnite191 = 3775276;
 
+    /// <summary>Fortnite 1.10, ++Fortnite+Release-Cert CL-3790078 on UE 4.19.0: the first build on UE 4.19.</summary>
+    public const int Fortnite110 = 3790078;
+
     /// <summary>
     /// What a Battle Royale server gets. Core takes the map and playlist from the build's own data (on 1.7.2 the Battle
     /// Royale zone theme's Athena_Terrain and solo playlist; the match's playlist comes with its assignment) and
@@ -84,7 +87,7 @@ public static partial class KnownBuilds
 
     /// <summary>
     /// The regions a server can advertise (<see cref="ServerSettings.Region"/>): the client's Matchmaking Region list, the
-    /// visible Datacenters of its DefaultEngine.ini (1.8.2: NA, EU, OCE; 1.9 and 1.9.1 add BR and ASIA). A player who
+    /// visible Datacenters of its DefaultEngine.ini (1.8.2: NA, EU, OCE; 1.9 and later add BR and ASIA). A player who
     /// picks one queues for its servers, and Core-Backend sends players whose region has no server to another region's
     /// (Core-Backend #121).
     /// </summary>
@@ -131,7 +134,8 @@ public static partial class KnownBuilds
         new(Fortnite181, "1.8.1", "Fortnite 1.8.1 (CL-3729133)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite182, "1.8.2", "Fortnite 1.8.2 (CL-3741772)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite19, "1.9", "Fortnite 1.9 (CL-3757339)", BuildSupport.Full, [], BattleRoyale: true),
-        new(Fortnite191, "1.9.1", "Fortnite 1.9.1 (CL-3775276)", BuildSupport.InProgress, [], BattleRoyale: true),
+        new(Fortnite191, "1.9.1", "Fortnite 1.9.1 (CL-3775276)", BuildSupport.Full, [], BattleRoyale: true),
+        new(Fortnite110, "1.10", "Fortnite 1.10 (CL-3790078)", BuildSupport.InProgress, [], BattleRoyale: true),
     ];
 
     private static KnownBuild? Find(int changelist) => Array.Find(Builds, build => build.Changelist == changelist);
