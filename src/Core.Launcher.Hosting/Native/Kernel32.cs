@@ -103,40 +103,11 @@ internal static partial class Kernel32
     [LibraryImport("kernel32.dll", SetLastError = true)]
     public static partial uint QueueUserAPC(nint pfnAPC, SafeKernelHandle hThread, nint dwData);
 
-    [StructLayout(LayoutKind.Sequential)]
-    public struct MEMORY_BASIC_INFORMATION
-    {
-        public nint BaseAddress;
-        public nint AllocationBase;
-        public uint AllocationProtect;
-        public uint __alignment1;
-        public nuint RegionSize;
-        public uint State;
-        public uint Protect;
-        public uint Type;
-        public uint __alignment2;
-    }
-
-    [LibraryImport("kernel32.dll", SetLastError = true)]
-    public static partial nuint VirtualQueryEx(SafeProcessHandle hProcess, nint lpAddress,
-        out MEMORY_BASIC_INFORMATION lpBuffer, nuint dwLength);
-
     [LibraryImport("kernel32.dll", SetLastError = true)]
     public static partial uint ResumeThread(SafeKernelHandle hThread);
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
     public static partial uint SuspendThread(SafeKernelHandle hThread);
-
-    public const uint CONTEXT_AMD64 = 0x00100000;
-    public const uint CONTEXT_CONTROL = CONTEXT_AMD64 | 0x1;
-    public const int ContextFlagsOffset = 0x30;
-    public const int ContextRipOffset = 0xF8;
-    public const int ContextSize = 1232;
-    public const int ContextAlignment = 16;
-
-    [LibraryImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static unsafe partial bool GetThreadContext(SafeKernelHandle hThread, byte* lpContext);
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

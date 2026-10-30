@@ -36,9 +36,14 @@ public sealed class ExeDecryptorTests
     private const string Exe191 = @"F:\Builds\1.9.1\FortniteGame\Binaries\Win64\FortniteClient-Win64-Shipping.exe";
 
 
+    /// <summary>
+    /// The packer appends a blob of code past the real content of every section, so every section has to come back
+    /// decrypted and executable. The two exceptions are what the loader owns: the import address table, which it
+    /// refills on each launch, and the globals in .data that the stub has already written runtime pointers into.
+    /// </summary>
     [Fact]
     [Trait("Category", "Integration")]
-    public void Decrypted_191_rewrites_only_the_stub_decrypted_sections()
+    public void Decrypted_191_restores_every_appended_blob_but_not_loader_state()
     {
         var bak = Exe191 + ".bak";
         if (!File.Exists(bak)) return;
@@ -52,45 +57,66 @@ public sealed class ExeDecryptorTests
         int pe = BinaryPrimitives.ReadInt32LittleEndian(after.AsSpan(0x3C));
         int numSections = BinaryPrimitives.ReadUInt16LittleEndian(after.AsSpan(pe + 4 + 2));
         int optSize = BinaryPrimitives.ReadUInt16LittleEndian(after.AsSpan(pe + 4 + 16));
-        int sectOff = pe + 4 + 20 + optSize;
+        int opt = pe + 4 + 20;
+        int sectOff = opt + optSize;
 
-        // The stub-decrypted sections (both .text and .rdata) must be replaced,
-        // and nothing else may change — the import directory in particular.
-        int textSeen = 0;
-        bool sawRdata = false;
+        uint iatRva = BinaryPrimitives.ReadUInt32LittleEndian(after.AsSpan(opt + 112 + 12 * 8));
+        uint iatSize = BinaryPrimitives.ReadUInt32LittleEndian(after.AsSpan(opt + 112 + 12 * 8 + 4));
+        Assert.True(iatSize > 0, "no IAT data directory to protect");
+
+        const int TailWindow = 0x200;
+        int textSeen = 0, blobsSeen = 0;
         for (int i = 0; i < numSections; i++)
         {
             int s = sectOff + i * 40;
             var name = Encoding.ASCII.GetString(after, s, 8).TrimEnd('\0');
-            int fo = (int)BinaryPrimitives.ReadUInt32LittleEndian(after.AsSpan(s + 20));
+            uint rva = BinaryPrimitives.ReadUInt32LittleEndian(after.AsSpan(s + 12));
             int sz = (int)BinaryPrimitives.ReadUInt32LittleEndian(after.AsSpan(s + 16));
+            int fo = (int)BinaryPrimitives.ReadUInt32LittleEndian(after.AsSpan(s + 20));
+            uint flags = BinaryPrimitives.ReadUInt32LittleEndian(after.AsSpan(s + 36));
             if (sz == 0) continue;
 
-            long diff = 0;
+            long diff = 0, tailDiff = 0;
             for (int k = 0; k < sz; k++)
-                if (before[fo + k] != after[fo + k]) diff++;
+            {
+                if (before[fo + k] == after[fo + k]) continue;
+                diff++;
+                if (k >= sz - TailWindow) tailDiff++;
+
+                // Nothing inside the IAT may be baked in: those slots hold the addresses the
+                // throwaway process resolved, which are meaningless to the next launch.
+                uint byteRva = rva + (uint)k;
+                Assert.False(byteRva >= iatRva && byteRva < iatRva + iatSize,
+                    $"{name} rewrote IAT byte at rva 0x{byteRva:X}");
+            }
+
+            // Executing the appended code faults unless the section it landed in says it may be run.
+            Assert.True((flags & 0x20000000) != 0, $"{name} is not executable (0x{flags:X8})");
 
             if (name == ".text")
             {
+                // Both .text sections are encrypted wholesale: the first holds the game, the second
+                // the stub's own code. Only the second ships partly in plaintext, so it alone has no
+                // appended blob — the packer has no reason to hide code in the section it decrypts from.
                 textSeen++;
                 Assert.True(diff > sz / 10, $".text #{textSeen} barely changed ({diff}/{sz}) — not decrypted?");
+                continue;
             }
-            else if (name == ".rdata")
-            {
-                sawRdata = true;
-                Assert.True(diff > 0, ".rdata was not rewritten");
-                // The stub runs threads out of the blob it decrypts into .rdata,
-                // so the section has to be marked executable.
-                uint flags = BinaryPrimitives.ReadUInt32LittleEndian(after.AsSpan(s + 36));
-                Assert.True((flags & 0x20000000) != 0, $".rdata is not executable (0x{flags:X8})");
-            }
+
+            // Every other section carries a blob of code the packer appended past its real content.
+            Assert.True(tailDiff > 0, $"{name} has no decrypted blob at its tail");
+            blobsSeen++;
+
+            // .rdata also holds whole blocks of moved code, so it is the only one that may
+            // differ away from the end.
+            if (name == ".rdata")
+                Assert.True(diff > tailDiff, ".rdata has only its tail blob — the moved code is missing");
             else
-            {
-                Assert.True(diff == 0, $"{name} changed ({diff} bytes) — it should have been left alone");
-            }
+                Assert.Equal(tailDiff, diff);
         }
+
         Assert.Equal(2, textSeen);
-        Assert.True(sawRdata, ".rdata not found");
+        Assert.Equal(numSections - 2, blobsSeen);
     }
 
     [Fact]
