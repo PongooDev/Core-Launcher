@@ -37,6 +37,52 @@ public sealed class ExeDecryptorTests
 
     [Fact]
     [Trait("Category", "Integration")]
+    public void Decrypted_191_decrypts_both_text_sections()
+    {
+        var bak = Exe191 + ".bak";
+        if (!File.Exists(bak)) return;
+        using var folder = new TempFolder();
+        var copy = folder.Combine("FortniteClient-Win64-Shipping.exe");
+        File.Copy(bak, copy);
+        Assert.Equal(ExeDecryptor.Result.Decrypted, ExeDecryptor.Decrypt(copy));
+
+        var before = File.ReadAllBytes(bak);
+        var after = File.ReadAllBytes(copy);
+        int pe = BinaryPrimitives.ReadInt32LittleEndian(after.AsSpan(0x3C));
+        int numSections = BinaryPrimitives.ReadUInt16LittleEndian(after.AsSpan(pe + 4 + 2));
+        int optSize = BinaryPrimitives.ReadUInt16LittleEndian(after.AsSpan(pe + 4 + 16));
+        int sectOff = pe + 4 + 20 + optSize;
+
+        // Both .text sections must have been replaced with decrypted code, and
+        // nothing else may change (the import directory in particular).
+        int textSeen = 0;
+        for (int i = 0; i < numSections; i++)
+        {
+            int s = sectOff + i * 40;
+            var name = Encoding.ASCII.GetString(after, s, 8).TrimEnd('\0');
+            int fo = (int)BinaryPrimitives.ReadUInt32LittleEndian(after.AsSpan(s + 20));
+            int sz = (int)BinaryPrimitives.ReadUInt32LittleEndian(after.AsSpan(s + 16));
+            if (sz == 0) continue;
+
+            long diff = 0;
+            for (int k = 0; k < sz; k++)
+                if (before[fo + k] != after[fo + k]) diff++;
+
+            if (name == ".text")
+            {
+                textSeen++;
+                Assert.True(diff > sz / 10, $"{name} #{textSeen} barely changed ({diff}/{sz}) — not decrypted?");
+            }
+            else
+            {
+                Assert.True(diff == 0, $"{name} changed ({diff} bytes) — only .text should be rewritten");
+            }
+        }
+        Assert.Equal(2, textSeen);
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
     public void Decrypted_191_keeps_the_original_import_directory_and_pins_the_base()
     {
         var bak = Exe191 + ".bak";

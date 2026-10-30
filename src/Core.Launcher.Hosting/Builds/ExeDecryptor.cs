@@ -57,22 +57,30 @@ public static class ExeDecryptor
             return Result.AlreadyDecrypted;
 
         progress?.Invoke("Encrypted .text section detected, decrypting");
-        var text = DumpDecryptedText(executable, pe, progress);
+        var (text, secondText) = DumpDecryptedText(executable, pe, progress);
         FixEntryPoint(text, pe);
 
-        // Only the first .text is encrypted.  Every other section (.rdata, .data,
-        // .idata, .rsrc, …) is ordinary on-disk data, and the on-disk import
-        // directory is already valid — its IAT/ILT point at intact hint/name
-        // strings, so the Windows loader resolves all imports normally once the
-        // stub is bypassed.  We therefore write back ONLY the decrypted .text and
-        // leave everything else untouched, which avoids baking in the runtime
-        // state (resolved pointers, wiped names, half-initialised globals) that
-        // the stub and early game startup leave in the dumped sections.
-        progress?.Invoke($"Writing {text.Length / (1024 * 1024)}MB of decrypted .text back to the exe");
+        // Only the two .text sections are encrypted; every other section is
+        // ordinary on-disk data, and the on-disk import directory is already
+        // valid — its IAT/ILT point at intact hint/name strings, so the Windows
+        // loader resolves all imports normally once the stub is bypassed.  We
+        // therefore write back ONLY the decrypted code and leave the rest
+        // untouched, which avoids baking in the runtime state (resolved
+        // pointers, wiped names, half-initialised globals) the stub and early
+        // game startup leave behind in the other dumped sections.
+        long written = text.Length + (secondText?.Length ?? 0);
+        progress?.Invoke($"Writing {written / (1024 * 1024)}MB of decrypted code back to the exe");
         using (var fs = new FileStream(executable, FileMode.Open, FileAccess.ReadWrite, FileShare.Read))
         {
             fs.Position = pe.TextFileOffset;
             fs.Write(text);
+
+            if (secondText is not null)
+            {
+                int idx = Array.FindIndex(pe.Sections, s => s.Name == ".text");
+                fs.Position = pe.Sections[idx].FileOffset;
+                fs.Write(secondText);
+            }
 
             // Clear IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE so the exe loads at its
             // preferred image base.  The decrypted .text holds absolute addresses
@@ -189,7 +197,7 @@ public static class ExeDecryptor
         return count;
     }
 
-    private static unsafe byte[] DumpDecryptedText(
+    private static unsafe (byte[] FirstText, byte[]? SecondText) DumpDecryptedText(
         string executable, PeInfo pe, Action<string>? progress)
     {
         var tmpPath = executable + ".decrypting.tmp";
@@ -287,7 +295,31 @@ public static class ExeDecryptor
                                 $"ReadProcessMemory returned {bytesRead} of {text.Length} bytes");
                     }
 
-                    return text;
+                    // The packer encrypts BOTH .text sections: the first holds the
+                    // game's code, the second holds the stub itself plus a large
+                    // block of encrypted game code after it (on 1.9.1 roughly 45%
+                    // of the section differs once the stub has run).  Jumping into
+                    // that block while it is still encrypted raises
+                    // STATUS_PRIVILEGED_INSTRUCTION, so it has to come back too.
+                    byte[]? secondText = null;
+                    int secondTextIdx = Array.FindIndex(pe.Sections, s => s.Name == ".text");
+                    if (secondTextIdx >= 0)
+                    {
+                        var sec = pe.Sections[secondTextIdx];
+                        progress?.Invoke($"Reading {sec.RawSize / (1024 * 1024)}MB of the decrypted second .text");
+                        secondText = new byte[sec.RawSize];
+                        fixed (byte* pBuf = secondText)
+                        {
+                            if (!Kernel32.ReadProcessMemory(process, (nint)(pe.ImageBase + sec.Rva), pBuf,
+                                    (nuint)sec.RawSize, out var read2))
+                                throw new Win32Exception(Marshal.GetLastWin32Error());
+                            if (read2 != (nuint)sec.RawSize)
+                                throw new InvalidOperationException(
+                                    $"ReadProcessMemory returned {read2} of {sec.RawSize} second .text bytes");
+                        }
+                    }
+
+                    return (text, secondText);
                 }
                 finally
                 {
