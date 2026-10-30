@@ -1034,6 +1034,42 @@ public static class ExeDecryptor
 
         int stringsPos = iltPos;
 
+        // Build every idata byte range that must stay clear of the DLL name and
+        // hint/name payload: the FF 25 thunk targets, plus each anchored group's
+        // whole IAT (which the loader fills with pointers the game reads back).
+        // A reader byte placed on any of these would corrupt an import.
+        var reserved = new List<(int Start, int End)>();
+        if (reservedSlotMax > reservedSlotMin)
+            reserved.Add((reservedSlotMin, reservedSlotMax));
+        foreach (var group in groups)
+        {
+            if (group.OriginalFirstThunkRva != 0)
+            {
+                int start = (int)(group.OriginalFirstThunkRva - idataRva);
+                reserved.Add((start, start + (group.EntryCount + 1) * 8));
+            }
+        }
+        reserved.Sort((a, b) => a.Start.CompareTo(b.Start));
+
+        int SkipReserved(int pos, int size)
+        {
+            bool moved = true;
+            while (moved)
+            {
+                moved = false;
+                foreach (var (start, end) in reserved)
+                {
+                    if (pos < end && pos + size > start)
+                    {
+                        pos = end;
+                        if (pos % 2 != 0) pos++;
+                        moved = true;
+                    }
+                }
+            }
+            return pos;
+        }
+
         var dllPositions = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         int currentPos = stringsPos;
         foreach (var group in groups)
@@ -1041,13 +1077,7 @@ public static class ExeDecryptor
             if (!dllPositions.ContainsKey(group.DllName))
             {
                 int nameSize = Encoding.ASCII.GetByteCount(group.DllName) + 1;
-                if (reservedSlotMax > reservedSlotMin
-                    && currentPos < reservedSlotMax
-                    && currentPos + nameSize > reservedSlotMin)
-                {
-                    currentPos = reservedSlotMax;
-                    if (currentPos % 2 != 0) currentPos++;
-                }
+                currentPos = SkipReserved(currentPos, nameSize);
                 dllPositions[group.DllName] = currentPos;
                 currentPos += nameSize;
                 if (currentPos % 2 != 0) currentPos++;
@@ -1056,6 +1086,10 @@ public static class ExeDecryptor
 
         int hintNamePos = currentPos;
         var hintNameOffsets = new Dictionary<(int groupIdx, int entryIdx), int>();
+        // Reuse one hint/name block per distinct function name — the same symbol
+        // imported from several DLLs (GetLastError, GetProcAddress, …) needs only
+        // one copy, which keeps the payload inside .idata.
+        var hintNameByName = new Dictionary<string, int>(StringComparer.Ordinal);
         for (int g = 0; g < groups.Count; g++)
         {
             for (int i = 0; i < groups[g].Entries.Length; i++)
@@ -1063,22 +1097,24 @@ public static class ExeDecryptor
                 var entry = groups[g].Entries[i];
                 if (entry.ByName != null)
                 {
+                    if (hintNameByName.TryGetValue(entry.ByName, out int existing))
+                    {
+                        hintNameOffsets[(g, i)] = existing;
+                        continue;
+                    }
                     if (hintNamePos % 2 != 0) hintNamePos++;
                     int entrySize = 2 + Encoding.ASCII.GetByteCount(entry.ByName) + 1;
-                    // Skip past the IAT slot range so this hint/name block doesn't
-                    // overlap with any address a game-side FF 25 thunk reads.
-                    if (reservedSlotMax > reservedSlotMin
-                        && hintNamePos < reservedSlotMax
-                        && hintNamePos + entrySize > reservedSlotMin)
-                    {
-                        hintNamePos = reservedSlotMax;
-                        if (hintNamePos % 2 != 0) hintNamePos++;
-                    }
+                    hintNamePos = SkipReserved(hintNamePos, entrySize);
                     hintNameOffsets[(g, i)] = hintNamePos;
+                    hintNameByName[entry.ByName] = hintNamePos;
                     hintNamePos += entrySize;
                 }
             }
         }
+
+        if (hintNamePos > idata.Length)
+            throw new InvalidOperationException(
+                $"Reconstructed import names ({hintNamePos} bytes) overflow .idata ({idata.Length} bytes)");
 
         for (int g = 0; g < groups.Count; g++)
         {

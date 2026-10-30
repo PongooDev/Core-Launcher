@@ -37,6 +37,76 @@ public sealed class ExeDecryptorTests
 
     [Fact]
     [Trait("Category", "Integration")]
+    public void Decrypted_191_import_names_are_all_intact()
+    {
+        var bak = Exe191 + ".bak";
+        if (!File.Exists(bak)) return;
+        File.Copy(bak, Exe191, true);
+        using var folder = new TempFolder();
+        var copy = folder.Combine("FortniteClient-Win64-Shipping.exe");
+        File.Copy(Exe191, copy);
+        ExeDecryptor.Decrypt(copy);
+
+        var bytes = File.ReadAllBytes(copy);
+        int pe = BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(0x3C));
+        int numSections = BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(pe + 4 + 2));
+        int optSize = BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(pe + 4 + 16));
+        int opt = pe + 4 + 20;
+        uint importRva = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(opt + 120));
+
+        var sects = new List<(string Name, uint Rva, int Size, int FileOff)>();
+        int sectOff = opt + optSize;
+        for (int i = 0; i < numSections; i++)
+        {
+            int s = sectOff + i * 40;
+            sects.Add((Encoding.ASCII.GetString(bytes, s, 8).TrimEnd('\0'),
+                BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(s + 12)),
+                (int)BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(s + 16)),
+                (int)BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(s + 20))));
+        }
+
+        int RvaToOff(uint rva)
+        {
+            foreach (var s in sects)
+                if (rva >= s.Rva && rva < s.Rva + (uint)s.Size)
+                    return s.FileOff + (int)(rva - s.Rva);
+            return -1;
+        }
+
+        // Walk descriptors exactly like the loader: for every by-name ILT entry,
+        // the hint/name must be a readable, printable, NUL-terminated string.
+        int descOff = RvaToOff(importRva);
+        int checkedNames = 0;
+        var bad = new List<string>();
+        while (true)
+        {
+            uint oft = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(descOff));
+            uint ft = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(descOff + 16));
+            if (oft == 0 && ft == 0) break;
+            int iltOff = RvaToOff(oft);
+            for (int e = 0; ; e++)
+            {
+                ulong ilt = BinaryPrimitives.ReadUInt64LittleEndian(bytes.AsSpan(iltOff + e * 8));
+                if (ilt == 0) break;
+                if ((ilt & 0x8000000000000000) != 0) continue; // ordinal
+                int hnOff = RvaToOff((uint)ilt);
+                Assert.True(hnOff >= 0, $"hint/name RVA 0x{(uint)ilt:X} not in any section");
+                int ns = hnOff + 2;
+                int ne = ns;
+                while (ne < bytes.Length && bytes[ne] != 0) ne++;
+                string name = Encoding.ASCII.GetString(bytes, ns, ne - ns);
+                checkedNames++;
+                bool ok = name.Length is > 0 and < 512 && name.All(c => c is >= (char)0x20 and <= (char)0x7E);
+                if (!ok) bad.Add($"0x{(uint)ilt:X}='{name}'");
+            }
+            descOff += 20;
+        }
+
+        Assert.True(bad.Count == 0, $"{bad.Count}/{checkedNames} corrupted names: {string.Join(", ", bad.Take(10))}");
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
     public void Decrypts_the_191_exe_and_detects_it_on_rerun()
     {
         if (!File.Exists(Exe191))
