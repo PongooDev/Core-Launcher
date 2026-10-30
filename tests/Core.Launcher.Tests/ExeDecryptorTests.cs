@@ -35,9 +35,10 @@ public sealed class ExeDecryptorTests
 
     private const string Exe191 = @"F:\Builds\1.9.1\FortniteGame\Binaries\Win64\FortniteClient-Win64-Shipping.exe";
 
+
     [Fact]
     [Trait("Category", "Integration")]
-    public void Decrypted_191_decrypts_both_text_sections()
+    public void Decrypted_191_rewrites_only_the_stub_decrypted_sections()
     {
         var bak = Exe191 + ".bak";
         if (!File.Exists(bak)) return;
@@ -53,9 +54,10 @@ public sealed class ExeDecryptorTests
         int optSize = BinaryPrimitives.ReadUInt16LittleEndian(after.AsSpan(pe + 4 + 16));
         int sectOff = pe + 4 + 20 + optSize;
 
-        // Both .text sections must have been replaced with decrypted code, and
-        // nothing else may change (the import directory in particular).
+        // The stub-decrypted sections (both .text and .rdata) must be replaced,
+        // and nothing else may change — the import directory in particular.
         int textSeen = 0;
+        bool sawRdata = false;
         for (int i = 0; i < numSections; i++)
         {
             int s = sectOff + i * 40;
@@ -71,14 +73,24 @@ public sealed class ExeDecryptorTests
             if (name == ".text")
             {
                 textSeen++;
-                Assert.True(diff > sz / 10, $"{name} #{textSeen} barely changed ({diff}/{sz}) — not decrypted?");
+                Assert.True(diff > sz / 10, $".text #{textSeen} barely changed ({diff}/{sz}) — not decrypted?");
+            }
+            else if (name == ".rdata")
+            {
+                sawRdata = true;
+                Assert.True(diff > 0, ".rdata was not rewritten");
+                // The stub runs threads out of the blob it decrypts into .rdata,
+                // so the section has to be marked executable.
+                uint flags = BinaryPrimitives.ReadUInt32LittleEndian(after.AsSpan(s + 36));
+                Assert.True((flags & 0x20000000) != 0, $".rdata is not executable (0x{flags:X8})");
             }
             else
             {
-                Assert.True(diff == 0, $"{name} changed ({diff} bytes) — only .text should be rewritten");
+                Assert.True(diff == 0, $"{name} changed ({diff} bytes) — it should have been left alone");
             }
         }
         Assert.Equal(2, textSeen);
+        Assert.True(sawRdata, ".rdata not found");
     }
 
     [Fact]

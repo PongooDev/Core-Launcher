@@ -103,6 +103,24 @@ internal static partial class Kernel32
     [LibraryImport("kernel32.dll", SetLastError = true)]
     public static partial uint QueueUserAPC(nint pfnAPC, SafeKernelHandle hThread, nint dwData);
 
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MEMORY_BASIC_INFORMATION
+    {
+        public nint BaseAddress;
+        public nint AllocationBase;
+        public uint AllocationProtect;
+        public uint __alignment1;
+        public nuint RegionSize;
+        public uint State;
+        public uint Protect;
+        public uint Type;
+        public uint __alignment2;
+    }
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    public static partial nuint VirtualQueryEx(SafeProcessHandle hProcess, nint lpAddress,
+        out MEMORY_BASIC_INFORMATION lpBuffer, nuint dwLength);
+
     [LibraryImport("kernel32.dll", SetLastError = true)]
     public static partial uint ResumeThread(SafeKernelHandle hThread);
 
