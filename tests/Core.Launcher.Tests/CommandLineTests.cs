@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Core.Launcher.Hosting.Backend;
 using Core.Launcher.Hosting.Builds;
 using Core.Launcher.Hosting.Dlls;
 using Core.Launcher.Hosting.Processes;
@@ -154,6 +155,23 @@ public sealed partial class CommandLineTests
 
         build.ServerDlls = [DllRole.Server];
         Assert.DoesNotContain("-CoreBackend", LaunchArguments.Server(build, 6000, "CoreServer1"));
+    }
+
+    [Fact]
+    public void ServersHostingForAFriendsBackendAreSentToIt()
+    {
+        var build = Cert();
+        build.UseHttpProxy = true;
+        var friend = new BackendEndpoint("203.0.113.7", 5600);
+        var server = Split("x.exe " + LaunchArguments.Server(build, friend, "CoreServer-DESKTOP7-1", region: "EU"));
+        Assert.Contains("-httpproxy=203.0.113.7:5600", server);
+        Assert.Contains("-CoreBackend=http://203.0.113.7:5600", server);
+        Assert.Contains("-AUTH_LOGIN=CoreServer-DESKTOP7-1", server);
+        Assert.Contains("-McpRegion=EU", server);
+        Assert.DoesNotContain(server, argument => argument.Contains("127.0.0.1", StringComparison.Ordinal));
+
+        // This PC's own backend is unchanged.
+        Assert.Equal(LaunchArguments.Server(build, BackendEndpoint.Local(5595), "CoreServer1"), LaunchArguments.Server(build, 5595, "CoreServer1"));
     }
 
     [Fact]

@@ -53,12 +53,21 @@
 
     <DockPanel>
         <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
-            <CheckBox DockPanel.Dock="Right" Style="{StaticResource Switch}" Content="Host servers" IsChecked="{Binding Hosting}" VerticalAlignment="Center"
-                      IsEnabled="{Binding CanHost}" ToolTip="Off while you play on a friend's backend" ToolTipService.ShowOnDisabled="True" ToolTipService.IsEnabled="{Binding UsingRemote}" />
+            <CheckBox DockPanel.Dock="Right" Style="{StaticResource Switch}" Content="Host servers" IsChecked="{Binding Hosting}" VerticalAlignment="Center" />
             <TextBlock Text="Servers" Style="{StaticResource PageTitle}" />
         </DockPanel>
         <TextBlock DockPanel.Dock="Top" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,0,0,18" MaxWidth="760" HorizontalAlignment="Left"
                    Text="The launcher keeps these servers running so a free one is always ready for a match. A server that doesn't report ready in time, or stops, is started again." />
+
+        <Border DockPanel.Dock="Top" Style="{StaticResource Panel}" Padding="18,12" Margin="0,0,0,18" MaxWidth="760" HorizontalAlignment="Left"
+                Visibility="{Binding RemoteHosting, Converter={StaticResource Visible}}">
+            <StackPanel>
+                <TextBlock Text="Hosting for a friend's backend" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,4" />
+                <TextBlock Text="{Binding RemoteHostingText}" Style="{StaticResource Muted}" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding HostingRefusal}" Foreground="{StaticResource BadBrush}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,8,0,0"
+                           Visibility="{Binding HostingRefused, Converter={StaticResource Visible}}" />
+            </StackPanel>
+        </Border>
 
         <Border DockPanel.Dock="Top" Style="{StaticResource Panel}" Padding="18,12" Margin="0,0,0,18"
                 Visibility="{Binding Hosting, Converter={StaticResource Visible}}">

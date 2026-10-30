@@ -149,6 +149,7 @@ public sealed class SettingsStore
         settings.Servers.ReadyTimeoutSeconds = Math.Max(0, settings.Servers.ReadyTimeoutSeconds);
         // Settings saved before the region existed have none: NA, what their servers advertised.
         settings.Servers.Region = string.IsNullOrWhiteSpace(settings.Servers.Region) ? "NA" : settings.Servers.Region.Trim().ToUpperInvariant();
+        settings.Servers.RemoteName = settings.Servers.RemoteName?.Trim() ?? "";
         settings.Backend.Port = Math.Clamp(settings.Backend.Port, 0, 65535);
         settings.Backend.Remote ??= new RemoteBackend();
         settings.Backend.SavedRemotes ??= [];

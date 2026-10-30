@@ -117,8 +117,9 @@ public sealed class BackendSettings
     public string DataFolder { get; set; } = "";
 
     /// <summary>
-    /// Play on a friend's backend (<see cref="Remote"/>) instead of this PC's: no backend runs here, clients are sent to
-    /// theirs, and this PC hosts no servers. <see cref="Source"/> stays what "my own backend" means.
+    /// Play on a friend's backend (<see cref="Remote"/>) instead of this PC's: no backend runs here and clients are sent to
+    /// theirs. Servers hosted here then host for theirs too, once their backend trusts this PC's IP (Core-Launcher #6).
+    /// <see cref="Source"/> stays what "my own backend" means.
     /// </summary>
     public bool UseRemote { get; set; }
 
@@ -165,10 +166,38 @@ public sealed class ServerSettings
     /// </summary>
     public string Region { get; set; } = "NA";
 
+    public const string DefaultLogin = "CoreServer{n}";
+
     /// <summary>Server login; {n} is the instance number, so each server has its own account.</summary>
-    public string Login { get; set; } = "CoreServer{n}";
+    public string Login { get; set; } = DefaultLogin;
+
+    /// <summary>
+    /// This PC's name in its servers' logins on a friend's backend (<see cref="RemoteLoginFor"/>); empty uses the
+    /// computer's name. Letters and digits only, up to <see cref="MaxPcNameLength"/>; anything else is dropped.
+    /// </summary>
+    public string RemoteName { get; set; } = "";
+
+    public const int MaxPcNameLength = 10;
 
     public string LoginFor(int instance) => Login.Replace("{n}", instance.ToString(), StringComparison.Ordinal);
+
+    /// <summary>
+    /// Server <paramref name="instance"/>'s login on a friend's backend. The friend's own servers are CoreServer{n}, so
+    /// with the default <see cref="Login"/> this PC's are CoreServer-&lt;PC&gt;-{n} (which Core-Backend also takes as a
+    /// server account): servers on both PCs would share accounts otherwise. A login changed from the default is used
+    /// as it is.
+    /// </summary>
+    public string RemoteLoginFor(int instance, string machineName) =>
+        string.Equals(Login, DefaultLogin, StringComparison.OrdinalIgnoreCase)
+            ? $"CoreServer-{PcName(RemoteName.Length > 0 ? RemoteName : machineName)}-{instance}"
+            : LoginFor(instance);
+
+    /// <summary>The ASCII letters and digits of <paramref name="name"/>, at most <see cref="MaxPcNameLength"/>; "PC" when none are left.</summary>
+    public static string PcName(string? name)
+    {
+        var kept = new string([.. (name ?? "").Where(char.IsAsciiLetterOrDigit).Take(MaxPcNameLength)]);
+        return kept.Length > 0 ? kept : "PC";
+    }
 
     /// <summary>Whether server <paramref name="instance"/> (from 1) hosts Battle Royale on a build that has it: the ones after <see cref="Instances"/>.</summary>
     public bool HostsBattleRoyale(int instance) => instance > Instances;

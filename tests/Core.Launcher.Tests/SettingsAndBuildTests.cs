@@ -1,3 +1,4 @@
+using Core.Launcher.Hosting;
 using Core.Launcher.Hosting.Builds;
 using Core.Launcher.Hosting.Dlls;
 using Core.Launcher.Hosting.Settings;
@@ -127,6 +128,36 @@ public sealed class SettingsAndBuildTests
     public void ServerLoginNumbersEachInstance()
     {
         Assert.Equal("CoreServer2", new ServerSettings().LoginFor(2));
+    }
+
+    [Fact]
+    public void ServersOnAFriendsBackendLogInUnderThisPcsName()
+    {
+        // The friend's own servers are CoreServer{n}: this PC's are CoreServer-<PC>-{n}, which Core-Backend takes as server accounts.
+        var servers = new ServerSettings();
+        Assert.Equal("CoreServer-DESKTOP7AB-1", servers.RemoteLoginFor(1, "DESKTOP-7AB"));
+        Assert.Equal("CoreServer-ABCDEFGHIJ-12", servers.RemoteLoginFor(12, "ABCDEFGHIJKLMNOP"));
+        Assert.Equal("CoreServer-PC-3", servers.RemoteLoginFor(3, "-_- ."));
+
+        servers.RemoteName = "Tom's PC 2";
+        Assert.Equal("CoreServer-TomsPC2-2", servers.RemoteLoginFor(2, "DESKTOP-7AB"));
+
+        // A login changed from the default is the player's choice: used as it is.
+        servers.Login = "CoreServer10{n}";
+        Assert.Equal("CoreServer102", servers.RemoteLoginFor(2, "DESKTOP-7AB"));
+    }
+
+    [Fact]
+    public void RunningServersMoveWhenTheBackendTheyLogInToChanges()
+    {
+        BackendSettings Local() => new();
+        BackendSettings Friend(string address) => new() { UseRemote = true, Remote = new RemoteBackend { Name = "Sam", Address = address } };
+
+        Assert.True(LauncherHost.ServersMove(Local(), Friend("203.0.113.7")));
+        Assert.True(LauncherHost.ServersMove(Friend("203.0.113.7"), Local()));
+        Assert.True(LauncherHost.ServersMove(Friend("203.0.113.7"), Friend("203.0.113.8")));
+        Assert.False(LauncherHost.ServersMove(Friend("203.0.113.7"), Friend(" 203.0.113.7 ")));
+        Assert.False(LauncherHost.ServersMove(Local(), new BackendSettings { Remote = new RemoteBackend { Address = "203.0.113.7" } }));
     }
 
     [Fact]

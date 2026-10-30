@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using Core.Launcher.Hosting.Backend;
 using Core.Launcher.Hosting.Servers;
 using Microsoft.Extensions.Time.Testing;
 
@@ -108,6 +109,39 @@ public sealed class BackendSessionsTests
 
         // A listing from another backend port isn't used.
         Assert.Equal(SessionCheck.Pending, sessions.Check(6000, "CoreServer1", Started, [7777]));
+    }
+
+    [Fact]
+    public async Task AFriendsBackendIsAskedAtItsAddressAndARefusalIsShown()
+    {
+        var friend = new BackendEndpoint("203.0.113.7", 5600);
+        const string friendUrl = "http://203.0.113.7:5600/core/api/sessions";
+        using var sessions = Sessions();
+
+        // A backend that doesn't trust this PC's IP answers 403 (Core-Backend #125). Not asked yet: the first look starts a read.
+        _routes[friendUrl] = () => new HttpResponseMessage(HttpStatusCode.Forbidden);
+        Assert.Equal(HostingAccess.Unknown, sessions.Access(friend));
+        await WaitForAsync(() => sessions.Access(friend) == HostingAccess.Refused);
+
+        // Once it does, its listing is read, and this PC's servers are found in it by their own login.
+        _routes[friendUrl] = () => Json($"[{Session("CoreServer1", 7777, Started.AddSeconds(40))},{Session("CoreServer-DESKTOP7-1", 7777, Started.AddSeconds(40))}]");
+        _time.Advance(BackendSessions.PollInterval);
+        await WaitForAsync(() => sessions.Access(friend) == HostingAccess.Allowed);
+        Assert.Equal(SessionCheck.Listed, sessions.Check(friend, "CoreServer-DESKTOP7-1", Started, [7777]));
+        Assert.Equal(SessionCheck.Pending, sessions.Check(friend, "CoreServer-DESKTOP7-2", Started, [7777]));
+
+        // A listing from another backend isn't used.
+        Assert.Equal(SessionCheck.Pending, sessions.Check(Port, "CoreServer1", Started, [7777]));
+    }
+
+    [Fact]
+    public async Task AnUnreachableFriendIsNotARefusal()
+    {
+        var friend = new BackendEndpoint("203.0.113.7", 5595);
+        _routes["http://203.0.113.7:5595/core/api/sessions"] = () => throw new HttpRequestException("No connection could be made");
+        using var sessions = Sessions();
+        await sessions.RefreshAsync(friend, TestContext.Current.CancellationToken);
+        Assert.Equal(HostingAccess.Unknown, sessions.Access(friend));
     }
 
     private static async Task WaitForAsync(Func<bool> condition)

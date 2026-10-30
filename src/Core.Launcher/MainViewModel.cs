@@ -95,12 +95,23 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     public partial BackendChoice? SelectedBackendChoice { get; set; }
 
-    /// <summary>Playing on a friend's backend: no backend or servers run here.</summary>
+    /// <summary>Playing on a friend's backend: no backend runs here, and servers here host for theirs (Core-Launcher #6).</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanHost))]
     public partial bool UsingRemote { get; set; }
 
-    public bool CanHost => !UsingRemote;
+    /// <summary>Servers here host for a friend's backend: what that needs on their side.</summary>
+    [ObservableProperty]
+    public partial string RemoteHostingText { get; set; } = "";
+
+    [ObservableProperty]
+    public partial bool RemoteHosting { get; set; }
+
+    /// <summary>The friend's backend refused this PC's servers (403), and what to do about it.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HostingRefused))]
+    public partial string? HostingRefusal { get; set; }
+
+    public bool HostingRefused => HostingRefusal is not null;
 
     [ObservableProperty]
     public partial string HostingOffText { get; set; } = "";
@@ -274,8 +285,11 @@ public sealed partial class MainViewModel : ObservableObject
             HasBattleRoyale = _host.BuildHasBattleRoyale;
             UsingRemote = settings.Backend.UseRemote;
             HostingOffText = UsingRemote
-                ? $"You're playing on {_host.BackendDescription}: its servers host the matches. Switch to your own backend to host here."
+                ? $"You're playing on {_host.BackendDescription}. Turn on Host servers to host matches for it from this PC: your friend adds this PC's public IP under Settings → Trusted Hosting IPs in their admin panel first."
                 : "Turn on Host servers to keep game servers ready for matches.";
+            RemoteHostingText = UsingRemote
+                ? $"Hosting for {_host.BackendDescription} as {_host.ServerLogin(1)}, {_host.ServerLogin(2)}, ... Your friend needs remote access on (admin panel → Friends) and this PC's public IP under Settings → Trusted Hosting IPs in their admin panel. Players are sent to this PC's IP: for players on the internet, forward UDP 7777 and 15000 and up here."
+                : "";
             RefreshBackendChoices(settings.Backend);
             ClientRunning = _host.ClientFor(settings.PlayerName) is not null;
             RefreshClients();
@@ -340,10 +354,18 @@ public sealed partial class MainViewModel : ObservableObject
             _lastSlots[slot.Instance] = slot.State;
         }
 
+        var refusal = _host.Servers.Enabled ? _host.HostingRefusal : null;
+        if (refusal is not null && HostingRefusal is null)
+        {
+            Toast(refusal, "BadBrush");
+        }
+
+        HostingRefusal = refusal;
+        RemoteHosting = UsingRemote && _host.Servers.Enabled;
         var ready = slots.Count(slot => slot.State == ServerState.Ready);
         ServersSummary = _host.Servers.Enabled ? $"{ready} / {slots.Count} ready" : "Off";
-        ServersDetail = UsingRemote ? "Off while you play on a friend's backend"
-            : !_host.Servers.Enabled ? "Hosting is off"
+        ServersDetail = !_host.Servers.Enabled ? "Hosting is off"
+            : refusal is not null ? $"Refused by {_host.BackendDescription}: this PC's IP isn't one of its Trusted Hosting IPs"
             : slots.FirstOrDefault(slot => slot.State == ServerState.Starting) is { } booting ? $"Server {booting.Instance} is booting"
             : slots.FirstOrDefault(slot => slot.State == ServerState.Registering) is { } registering ? $"Server {registering.Instance} is registering its matchmaking session"
             : slots.FirstOrDefault(slot => slot.ProcessId is null) is { } waiting ? Capitalize(waiting.Note)

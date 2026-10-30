@@ -114,8 +114,25 @@ public sealed class LauncherHost : IAsyncDisposable
 
     public bool AnythingRunning => GamesRunning || Backend.ProcessId is not null;
 
-    /// <summary>Playing on a friend's backend: nothing is hosted here.</summary>
+    /// <summary>Playing on a friend's backend: no backend runs here, and servers here host for theirs.</summary>
     public bool UsingRemote => Settings.Backend.UseRemote;
+
+    /// <summary>Server <paramref name="instance"/>'s login: CoreServer-&lt;PC&gt;-{n} on a friend's backend (<see cref="ServerSettings.RemoteLoginFor"/>).</summary>
+    public string ServerLogin(int instance) => ServerLogin(Settings, instance);
+
+    private static string ServerLogin(LauncherSettings settings, int instance) =>
+        settings.Backend.UseRemote ? settings.Servers.RemoteLoginFor(instance, Environment.MachineName) : settings.Servers.LoginFor(instance);
+
+    /// <summary>
+    /// Why a friend's backend won't take this PC's servers, when it has said so: its Trusted Hosting IPs don't have this
+    /// PC's IP (it answers 403). Null otherwise, and always on this PC's own backend.
+    /// </summary>
+    public string? HostingRefusal => Settings.Backend.UseRemote && Backend.Endpoint is { } friend && _sessions.Access(friend) == HostingAccess.Refused
+        ? RefusalMessage(BackendDescription)
+        : null;
+
+    public static string RefusalMessage(string backend) =>
+        $"{backend} refused this PC's servers (403): ask your friend to add this PC's public IP under Settings → Trusted Hosting IPs in their admin panel";
 
     /// <summary>The launcher installs and runs Core-Backend itself (not a folder, an outside one or a friend's).</summary>
     private static bool ManagesBackend(BackendSettings settings) => !settings.UseRemote && settings.Source == BackendSource.Managed;
@@ -364,10 +381,23 @@ public sealed class LauncherHost : IAsyncDisposable
         }
 
         Servers.Configure(KnownBuilds.ServerCount(settings.Servers, settings.FindSelectedBuild()), TimeSpan.FromSeconds(settings.Servers.ReadyTimeoutSeconds));
-        // On a friend's backend their servers host the matches: servers here would log in to it with the same accounts
-        // as theirs (CoreServer1, ...) and take over their sessions.
-        Servers.SetEnabled(settings.Servers.Enabled && !settings.Backend.UseRemote);
+        // On a friend's backend the servers here host for theirs (Core-Launcher #6), under logins of their own
+        // (ServerSettings.RemoteLoginFor), once it trusts this PC's IP.
+        Servers.SetEnabled(settings.Servers.Enabled);
+        if (previous is not null && ServersMove(previous.Backend, settings.Backend))
+        {
+            Log.Write("The servers' backend changed, restarting them");
+            foreach (var slot in Servers.Slots.Where(slot => slot.ProcessId is not null))
+            {
+                Servers.Restart(slot.Instance);
+            }
+        }
     }
+
+    /// <summary>Whether running servers log in to another backend now: between this PC's and a friend's, or another friend's.</summary>
+    public static bool ServersMove(BackendSettings previous, BackendSettings current) =>
+        previous.UseRemote != current.UseRemote
+        || (current.UseRemote && !string.Equals(previous.Remote.Address.Trim(), current.Remote.Address.Trim(), StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Checks a friend's backend address without switching to it (Settings → Test connection).</summary>
     public async Task<RemoteBackendStatus> CheckRemoteAsync(string address, CancellationToken cancellation = default)
@@ -595,17 +625,44 @@ public sealed class LauncherHost : IAsyncDisposable
                 return KnownBuilds.NotSupported(build, host.Settings.AllowUnsupportedBuilds);
             }
 
-            if (host.Settings.Backend.UseRemote)
-            {
-                return "playing on a friend's backend";
-            }
-
             if (host.CheckingForUpdates)
             {
                 return "checking for updates";
             }
 
-            return host.Backend.State == BackendState.Ready && host.Backend.Port is not null && !host.Backend.Target.Remote ? null : "waiting for the backend";
+            if (Backend() is not { } backend)
+            {
+                return host.Settings.Backend.UseRemote ? $"waiting for {host.BackendDescription}" : "waiting for the backend";
+            }
+
+            if (!host.Settings.Backend.UseRemote)
+            {
+                return null;
+            }
+
+            // A friend's backend answers GET /core/api/sessions only to the PCs it trusts to host (Core-Backend #125):
+            // ask it first, so a refusal shows here instead of as servers that fail to log in.
+            return host._sessions.Access(backend) switch
+            {
+                HostingAccess.Allowed => null,
+                HostingAccess.Refused => RefusalMessage(host.BackendDescription),
+                _ => $"asking {host.BackendDescription} whether this PC may host for it",
+            };
+        }
+
+        /// <summary>
+        /// The backend the servers log in to: this PC's, or the friend's in use. The one the settings name, not the previous
+        /// one while a switch restarts the backend.
+        /// </summary>
+        private BackendEndpoint? Backend()
+        {
+            var settings = host.Settings.Backend;
+            if (host.Backend.Endpoint is not { } endpoint || host.Backend.Target.Remote != settings.UseRemote)
+            {
+                return null;
+            }
+
+            return !settings.UseRemote || (BackendEndpoint.TryParse(settings.Remote.Address, out var friend, out _) && friend == endpoint) ? endpoint : null;
         }
 
         public IServerInstance Start(int instance)
@@ -613,9 +670,15 @@ public sealed class LauncherHost : IAsyncDisposable
             var settings = host.Settings;
             var build = settings.FindSelectedBuild()!;
             var battleRoyale = host.HostsBattleRoyale(instance);
-            var arguments = LaunchArguments.Server(build, host.Backend.Port!.Value, settings.Servers.LoginFor(instance), battleRoyale, settings.Servers.Region);
+            var backend = Backend() ?? throw new InvalidOperationException("The backend isn't ready");
+            var arguments = LaunchArguments.Server(build, backend, ServerLogin(settings, instance), battleRoyale, settings.Servers.Region);
             var output = host.ServerLog(instance);
             output.Write($"(launcher) --- {DateTime.Now:yyyy-MM-dd HH:mm:ss} ---");
+            if (settings.Backend.UseRemote)
+            {
+                output.Write($"(launcher) Hosting for {host.BackendDescription} ({backend.Url}) as {ServerLogin(settings, instance)}");
+            }
+
             WarnAboutSupport(build, output);
             WriteServerConfig();
             return host._launcher.Start(new GameStart($"Server {instance}", build, build.ServerDlls, arguments, true, output));
@@ -638,8 +701,8 @@ public sealed class LauncherHost : IAsyncDisposable
         }
 
         public SessionCheck Session(int instance, DateTimeOffset startedAt, IReadOnlyList<int> ports) =>
-            host.Backend.State == BackendState.Ready && host.Backend.Port is { } port && !host.Backend.Target.Remote
-                ? host._sessions.Check(port, host.Settings.Servers.LoginFor(instance), startedAt, ports)
+            Backend() is { } backend
+                ? host._sessions.Check(backend, ServerLogin(host.Settings, instance), startedAt, ports)
                 : SessionCheck.Pending;
     }
 }

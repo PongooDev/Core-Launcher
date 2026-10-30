@@ -32,7 +32,11 @@ public static class LaunchArguments
     /// <param name="battleRoyale">A Battle Royale server (<see cref="KnownBuilds.BattleRoyaleServerArguments"/>).</param>
     /// <param name="region">The region it advertises (<see cref="ServerSettings.Region"/>); null keeps the build's arguments' own.</param>
     public static string Server(BuildSettings build, int backendPort, string login, bool battleRoyale = false, string? region = null) =>
-        CommandLine.Join([KnownBuilds.WithServerRegion(build.ServerArguments, region), .. Common(build, build.ServerDlls, BackendEndpoint.Local(backendPort), login),
+        Server(build, BackendEndpoint.Local(backendPort), login, battleRoyale, region);
+
+    /// <summary>A server for the backend at <paramref name="backend"/>: this PC's, or a friend's that trusts this PC's IP.</summary>
+    public static string Server(BuildSettings build, BackendEndpoint backend, string login, bool battleRoyale = false, string? region = null) =>
+        CommandLine.Join([KnownBuilds.WithServerRegion(build.ServerArguments, region), .. Common(build, build.ServerDlls, backend, login),
             .. ServerSwitches.Where(name => !HasSwitch(build.ServerArguments, name)), .. battleRoyale ? [KnownBuilds.BattleRoyaleServerArguments] : Array.Empty<string>()]);
 
     private static bool HasSwitch(string arguments, string name) =>

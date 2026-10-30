@@ -94,9 +94,22 @@ backend instead of running their own.
 2. Press **Play**. You log in to the host's backend with your player name (a new account there the first time), and
    matchmaking sends you to the host's servers.
 
-While you play on a friend's backend the launcher runs no backend and hosts no servers (they would log in with the same
-server accounts as the host's), and the admin panel stays on the host's PC. You need the same Fortnite build as the
-host. Choose **My own backend** to go back.
+While you play on a friend's backend the launcher runs no backend, and the admin panel stays on the host's PC. You need
+the same Fortnite build as the host. Choose **My own backend** to go back.
+
+**Hosting servers for a friend's backend** (more servers, or servers in another region): with **Host servers** on, a
+launcher on a friend's backend hosts its servers for that backend (Core-Launcher #6):
+
+1. The host turns on remote access (above) and, in the admin panel's **Settings** → **Trusted Hosting IPs**, adds your
+   PC's IP: your public IP over the internet, or your network/VPN address on theirs. Until then their backend refuses
+   your servers (403), and the Servers page says so.
+2. Your servers log in to the host's backend as `CoreServer-<your PC name>-{n}` (Settings → Servers → **PC name on a
+   friend's backend**; empty uses your computer's name), so they don't share accounts with the host's own
+   `CoreServer{n}`, and register with the **Region** set there.
+3. Players are sent to your PC's IP: for players on the internet, forward UDP 7777 and 15000 and up to your PC.
+
+This needs a Core-Backend with Trusted Hosting IPs and `CoreServer-<PC>-{n}` logins (Core-Backend #125 and later;
+the launcher's managed backend updates itself).
 
 Core doesn't check passwords, so anyone who can reach a host's backend can log in with any name: hosts should only
 share the address with people they trust.
