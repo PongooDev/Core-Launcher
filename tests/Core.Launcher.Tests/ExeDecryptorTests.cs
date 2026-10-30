@@ -37,6 +37,38 @@ public sealed class ExeDecryptorTests
 
     [Fact]
     [Trait("Category", "Integration")]
+    public void Decrypted_191_keeps_the_original_import_directory_and_pins_the_base()
+    {
+        var bak = Exe191 + ".bak";
+        if (!File.Exists(bak)) return;
+        using var folder = new TempFolder();
+        var copy = folder.Combine("FortniteClient-Win64-Shipping.exe");
+        File.Copy(bak, copy);
+        Assert.Equal(ExeDecryptor.Result.Decrypted, ExeDecryptor.Decrypt(copy));
+
+        var b = File.ReadAllBytes(copy);
+        int pe = BinaryPrimitives.ReadInt32LittleEndian(b.AsSpan(0x3C));
+        int opt = pe + 4 + 20;
+
+        // DynamicBase (0x40) must be cleared so the exe loads at its preferred base.
+        ushort dllChar = BinaryPrimitives.ReadUInt16LittleEndian(b.AsSpan(opt + 70));
+        Assert.True((dllChar & 0x40) == 0, $"DynamicBase still set (0x{dllChar:X4})");
+
+        // The import directory must be left pointing at the original, intact .idata.
+        uint importRva = BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(opt + 112 + 8));
+        uint origImportRva = BinaryPrimitives.ReadUInt32LittleEndian(File.ReadAllBytes(bak).AsSpan(opt + 112 + 8));
+        Assert.Equal(origImportRva, importRva);
+
+        // The entry point keeps the `sub rsp,28 ; call rel32` wrapper FixEntryPoint retargets.
+        uint entryRva = BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(opt + 16));
+        int entryFo = (int)entryRva - 0x1000 + 0x600;
+        var entry = b.AsSpan(entryFo, 5);
+        Assert.True(entry[0] == 0x48 && entry[1] == 0x83 && entry[2] == 0xEC && entry[3] == 0x28 && entry[4] == 0xE8,
+            "Entry wrapper prefix not found");
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
     public void Decrypted_191_import_names_are_all_intact()
     {
         var bak = Exe191 + ".bak";
