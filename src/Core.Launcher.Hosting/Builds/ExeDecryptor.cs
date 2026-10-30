@@ -272,20 +272,41 @@ public static class ExeDecryptor
                                 $"The exe's code section was not decrypted within {TimeoutMs / 1000}s");
                     }
 
-                    int rdataCheckIdx = Array.FindIndex(pe.Sections, s => s.Name == ".rdata");
-                    if (rdataCheckIdx >= 0)
+                    // Read the whole first .text so we can locate FF 25 thunks anywhere
+                    // in it (they are typically clustered near the end), then poll any
+                    // one thunk's target: when it holds a module address the stub has
+                    // finished patching the import slots that .text actually calls.
+                    progress?.Invoke("Waiting for the stub to patch import thunks");
+                    ulong textStart = (ulong)pe.ImageBase + pe.TextRva;
+                    var textProbe = new byte[pe.TextRawSize];
+                    fixed (byte* pText = textProbe)
                     {
-                        nint rdataProbeAddr = (nint)(pe.ImageBase + pe.Sections[rdataCheckIdx].Rva);
-                        var iatProbe = new byte[8];
+                        if (!Kernel32.ReadProcessMemory(process, (nint)textStart, pText,
+                                (nuint)textProbe.Length, out _))
+                            throw new Win32Exception(Marshal.GetLastWin32Error());
+                    }
+                    nint sampleThunkSlot = 0;
+                    for (int j = 0; j < textProbe.Length - 6 && sampleThunkSlot == 0; j++)
+                    {
+                        if (textProbe[j] == 0xFF && textProbe[j + 1] == 0x25)
+                        {
+                            int disp = BinaryPrimitives.ReadInt32LittleEndian(textProbe.AsSpan(j + 2));
+                            ulong rip = textStart + (ulong)(j + 6);
+                            sampleThunkSlot = (nint)(rip + (ulong)disp);
+                        }
+                    }
+                    if (sampleThunkSlot != 0)
+                    {
+                        var slotProbe = new byte[8];
                         while (Environment.TickCount64 < deadline)
                         {
                             Thread.Sleep(PollIntervalMs);
-                            fixed (byte* pBuf = iatProbe)
+                            fixed (byte* pBuf = slotProbe)
                             {
-                                if (Kernel32.ReadProcessMemory(process, rdataProbeAddr, pBuf, 8, out _))
+                                if (Kernel32.ReadProcessMemory(process, sampleThunkSlot, pBuf, 8, out _))
                                 {
-                                    ulong first = BinaryPrimitives.ReadUInt64LittleEndian(iatProbe);
-                                    if (first > (ulong)pe.ImageBase)
+                                    ulong v = BinaryPrimitives.ReadUInt64LittleEndian(slotProbe);
+                                    if (v >= (ulong)pe.ImageBase)
                                         break;
                                 }
                             }
