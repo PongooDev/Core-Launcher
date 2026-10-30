@@ -340,7 +340,7 @@ public static class ExeDecryptor
                     int idataIdx = Array.FindIndex(pe.Sections, s => s.Name == ".idata");
                     if (rdataIdx >= 0 && idataIdx >= 0)
                     {
-                        imports = ReconstructImports(process, pe, sectionData, rdataIdx, idataIdx, progress);
+                        imports = ReconstructImports(process, pe, text, sectionData, rdataIdx, idataIdx, progress);
                     }
 
                     return (text, sectionData, imports);
@@ -359,7 +359,7 @@ public static class ExeDecryptor
     }
 
     private static unsafe ImportInfo ReconstructImports(
-        SafeProcessHandle process, PeInfo pe, byte[][] sectionData,
+        SafeProcessHandle process, PeInfo pe, byte[] text, byte[][] sectionData,
         int rdataIdx, int idataIdx, Action<string>? progress)
     {
         var rdata = sectionData[rdataIdx];
@@ -434,6 +434,14 @@ public static class ExeDecryptor
         progress?.Invoke("Matching resolved IAT entries to module exports");
         var groups = ParseResolvedIat(process, rdata, ordinalsByDll, reverseNames, forwardsByDll, modules);
 
+        // Match each group to its original FirstThunk in .idata by comparing
+        // first-entry addresses.  Setting FirstThunk to the original slot (not
+        // the .rdata mirror) is what makes the Windows loader fill the exact
+        // locations the game's compiled .text already references.
+        int redirected = pe.ImportDirRva != 0
+            ? AnchorGroupsToOriginalFirstThunks(idata, pe.Sections[idataIdx].Rva, pe.ImportDirRva, rdata, groups)
+            : 0;
+
         int renamed = pe.ImportDirRva != 0
             ? RecoverOriginalDllNames(rdata, pe.Sections[rdataIdx].Rva, pe.ImportDirRva, groups)
             : 0;
@@ -442,10 +450,21 @@ public static class ExeDecryptor
         foreach (var g in groups)
             totalEntries += g.Entries.Length;
         progress?.Invoke($"Reconstructing imports: {groups.Count} DLLs, {totalEntries} functions" +
-            (renamed > 0 ? $" ({renamed} DLL name(s) recovered from original import directory)" : ""));
+            (redirected > 0 ? $", {redirected} anchored to original FirstThunks" : "") +
+            (renamed > 0 ? $", {renamed} DLL name(s) recovered" : ""));
+
+        // Discover the exact .idata byte range every FF 25 import thunk in the
+        // first .text aims at.  WriteImportData must not place hint/name chunks
+        // on top of this range: the loader fills those slots from our descriptors,
+        // but any extra bytes we write at the same offsets would be interpreted
+        // by the game's thunks as a function pointer and crash.
+        var (slotMin, slotMax) = FindIdataThunkSlotRange(text, pe.TextRva,
+            pe.Sections[idataIdx].Rva, idata.Length);
+        if (slotMax > slotMin)
+            progress?.Invoke($"Thunk slots live at idata+0x{slotMin:X}..0x{slotMax:X}");
 
         return WriteImportData(rdata, idata, groups,
-            pe.Sections[rdataIdx].Rva, pe.Sections[idataIdx].Rva);
+            pe.Sections[rdataIdx].Rva, pe.Sections[idataIdx].Rva, slotMin, slotMax);
     }
 
     private static unsafe List<LoadedModule> EnumerateModules(SafeProcessHandle process, long exeImageBase)
@@ -995,7 +1014,7 @@ public static class ExeDecryptor
 
     private static ImportInfo WriteImportData(
         byte[] rdata, byte[] idata, List<IatGroup> groups,
-        uint rdataRva, uint idataRva)
+        uint rdataRva, uint idataRva, int reservedSlotMin = 0, int reservedSlotMax = 0)
     {
         int lastGroup = groups.Count - 1;
         int iatSize = groups[lastGroup].FirstOffset + groups[lastGroup].EntryCount * 8 + 8;
@@ -1021,8 +1040,16 @@ public static class ExeDecryptor
         {
             if (!dllPositions.ContainsKey(group.DllName))
             {
+                int nameSize = Encoding.ASCII.GetByteCount(group.DllName) + 1;
+                if (reservedSlotMax > reservedSlotMin
+                    && currentPos < reservedSlotMax
+                    && currentPos + nameSize > reservedSlotMin)
+                {
+                    currentPos = reservedSlotMax;
+                    if (currentPos % 2 != 0) currentPos++;
+                }
                 dllPositions[group.DllName] = currentPos;
-                currentPos += Encoding.ASCII.GetByteCount(group.DllName) + 1;
+                currentPos += nameSize;
                 if (currentPos % 2 != 0) currentPos++;
             }
         }
@@ -1037,8 +1064,18 @@ public static class ExeDecryptor
                 if (entry.ByName != null)
                 {
                     if (hintNamePos % 2 != 0) hintNamePos++;
+                    int entrySize = 2 + Encoding.ASCII.GetByteCount(entry.ByName) + 1;
+                    // Skip past the IAT slot range so this hint/name block doesn't
+                    // overlap with any address a game-side FF 25 thunk reads.
+                    if (reservedSlotMax > reservedSlotMin
+                        && hintNamePos < reservedSlotMax
+                        && hintNamePos + entrySize > reservedSlotMin)
+                    {
+                        hintNamePos = reservedSlotMax;
+                        if (hintNamePos % 2 != 0) hintNamePos++;
+                    }
                     hintNameOffsets[(g, i)] = hintNamePos;
-                    hintNamePos += 2 + Encoding.ASCII.GetByteCount(entry.ByName) + 1;
+                    hintNamePos += entrySize;
                 }
             }
         }
@@ -1161,6 +1198,38 @@ public static class ExeDecryptor
             }
         }
         return matched;
+    }
+
+    /// <summary>
+    /// Scans the decrypted first .text for `FF 25` indirect-jump thunks whose
+    /// target lies inside .idata, and populates each slot with a resolved
+    /// function pointer.  These are the "embedded" IAT slots the packer
+    /// overlays on top of hint/name strings — the stub would normally fill
+    /// them at runtime, but it doesn't finish within the window we dump in,
+    /// so the game crashes jumping through them unless we fill them ourselves.
+    /// </summary>
+    /// <summary>
+    /// Scans the min and max idata offsets that .text's FF 25 indirect-jump
+    /// thunks target.  All in-image indirect jumps go through these slots,
+    /// so if WriteImportData writes anything other than loader-fillable IAT
+    /// entries into this range the game crashes jumping through it.
+    /// </summary>
+    private static (int MinOffset, int MaxOffset) FindIdataThunkSlotRange(
+        byte[] text, uint textRva, uint idataRva, int idataSize)
+    {
+        int min = int.MaxValue;
+        int max = int.MinValue;
+        for (int i = 0; i + 6 <= text.Length; i++)
+        {
+            if (text[i] != 0xFF || text[i + 1] != 0x25) continue;
+            int disp = BinaryPrimitives.ReadInt32LittleEndian(text.AsSpan(i + 2));
+            long targetRva = (long)textRva + i + 6 + disp;
+            if (targetRva < idataRva || targetRva + 8 > idataRva + idataSize) continue;
+            int slotOff = (int)(targetRva - idataRva);
+            if (slotOff < min) min = slotOff;
+            if (slotOff + 8 > max) max = slotOff + 8;
+        }
+        return min == int.MaxValue ? (0, 0) : (min, max);
     }
 
     private static int RecoverOriginalDllNames(byte[] rdata, uint rdataRva, uint importDirRva, List<IatGroup> groups)
