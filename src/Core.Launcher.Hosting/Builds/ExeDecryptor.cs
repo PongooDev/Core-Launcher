@@ -103,7 +103,8 @@ public static class ExeDecryptor
         long TextFileOffset, uint TextRva, int TextRawSize,
         SectionToDump[] Sections,
         uint EntryPointRva, long ImageBase,
-        long DllCharacteristicsOffset, long DataDirectoriesOffset);
+        long DllCharacteristicsOffset, long DataDirectoriesOffset,
+        uint ImportDirRva);
 
     private record struct ImportInfo(int IatSize, int ImportDirectorySize);
 
@@ -144,6 +145,9 @@ public static class ExeDecryptor
         long imageBase = BinaryPrimitives.ReadInt64LittleEndian(header[(optOffset + 24)..]);
         long dllCharOffset = optOffset + 70;
         long dataDirOffset = optOffset + 112;
+        uint importDirRva = (int)dataDirOffset + 8 < read
+            ? BinaryPrimitives.ReadUInt32LittleEndian(header[((int)dataDirOffset + 8)..])
+            : 0;
 
         int sectionsOffset = optOffset + sizeOfOptionalHeader;
         int textCount = 0;
@@ -187,7 +191,7 @@ public static class ExeDecryptor
 
         return textCount >= 2
             ? new PeInfo(firstTextFileOffset, firstTextRva, firstTextRawSize,
-                sections.ToArray(), entryPointRva, imageBase, dllCharOffset, dataDirOffset)
+                sections.ToArray(), entryPointRva, imageBase, dllCharOffset, dataDirOffset, importDirRva)
             : null;
     }
 
@@ -266,6 +270,26 @@ public static class ExeDecryptor
                         if (Environment.TickCount64 >= deadline)
                             throw new TimeoutException(
                                 $"The exe's code section was not decrypted within {TimeoutMs / 1000}s");
+                    }
+
+                    int rdataCheckIdx = Array.FindIndex(pe.Sections, s => s.Name == ".rdata");
+                    if (rdataCheckIdx >= 0)
+                    {
+                        nint rdataProbeAddr = (nint)(pe.ImageBase + pe.Sections[rdataCheckIdx].Rva);
+                        var iatProbe = new byte[8];
+                        while (Environment.TickCount64 < deadline)
+                        {
+                            Thread.Sleep(PollIntervalMs);
+                            fixed (byte* pBuf = iatProbe)
+                            {
+                                if (Kernel32.ReadProcessMemory(process, rdataProbeAddr, pBuf, 8, out _))
+                                {
+                                    ulong first = BinaryPrimitives.ReadUInt64LittleEndian(iatProbe);
+                                    if (first > (ulong)pe.ImageBase)
+                                        break;
+                                }
+                            }
+                        }
                     }
 
                     long totalSize = pe.TextRawSize;
@@ -401,10 +425,15 @@ public static class ExeDecryptor
         progress?.Invoke("Matching resolved IAT entries to module exports");
         var groups = ParseResolvedIat(process, rdata, ordinalsByDll, reverseNames, forwardsByDll, modules);
 
+        int renamed = pe.ImportDirRva != 0
+            ? RecoverOriginalDllNames(rdata, pe.Sections[rdataIdx].Rva, pe.ImportDirRva, groups)
+            : 0;
+
         int totalEntries = 0;
         foreach (var g in groups)
             totalEntries += g.Entries.Length;
-        progress?.Invoke($"Reconstructing imports: {groups.Count} DLLs, {totalEntries} functions");
+        progress?.Invoke($"Reconstructing imports: {groups.Count} DLLs, {totalEntries} functions" +
+            (renamed > 0 ? $" ({renamed} DLL name(s) recovered from original import directory)" : ""));
 
         return WriteImportData(rdata, idata, groups,
             pe.Sections[rdataIdx].Rva, pe.Sections[idataIdx].Rva);
@@ -613,12 +642,23 @@ public static class ExeDecryptor
                 if (ordMap2.ContainsKey(a))
                     accountedAddresses.Add(a);
             var imports = new ImportEntry[addresses.Count];
+
+            string? ExportName(ulong matchedAddr, ushort ord)
+            {
+                if (reverseNames.TryGetValue(bestDll, out var rn) && rn.TryGetValue(matchedAddr, out var n))
+                    return n;
+                if (fwdList != null)
+                    foreach (var f in fwdList)
+                        if (f.Ordinal == ord) return f.ExportName;
+                return null;
+            }
+
             for (int i = 0; i < addresses.Count; i++)
             {
                 ulong addr = addresses[i];
                 if (ordMap2.TryGetValue(addr, out var ordinal))
                 {
-                    imports[i] = new ImportEntry(ordinal, null);
+                    imports[i] = new ImportEntry(ordinal, ExportName(addr, ordinal));
                     continue;
                 }
 
@@ -634,7 +674,7 @@ public static class ExeDecryptor
                 {
                     if (ordMap2.TryGetValue(unshimmed, out ordinal))
                     {
-                        imports[i] = new ImportEntry(ordinal, null);
+                        imports[i] = new ImportEntry(ordinal, ExportName(unshimmed, ordinal));
                         continue;
                     }
 
@@ -657,7 +697,7 @@ public static class ExeDecryptor
                     {
                         if (ordMap2.TryGetValue(origAddr, out ordinal))
                         {
-                            imports[i] = new ImportEntry(ordinal, null);
+                            imports[i] = new ImportEntry(ordinal, ExportName(origAddr, ordinal));
                             continue;
                         }
 
@@ -676,7 +716,7 @@ public static class ExeDecryptor
                     {
                         if (ordMap2.TryGetValue(origAddr2, out ordinal))
                         {
-                            imports[i] = new ImportEntry(ordinal, null);
+                            imports[i] = new ImportEntry(ordinal, ExportName(origAddr2, ordinal));
                             continue;
                         }
 
@@ -955,7 +995,16 @@ public static class ExeDecryptor
 
         int descriptorCount = groups.Count + 1;
         int descriptorBytes = descriptorCount * 20;
-        int stringsPos = descriptorBytes;
+
+        var iltOffsets = new int[groups.Count];
+        int iltPos = descriptorBytes;
+        for (int g = 0; g < groups.Count; g++)
+        {
+            iltOffsets[g] = iltPos;
+            iltPos += (groups[g].EntryCount + 1) * 8;
+        }
+
+        int stringsPos = iltPos;
 
         var dllPositions = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         int currentPos = stringsPos;
@@ -990,26 +1039,32 @@ public static class ExeDecryptor
             for (int i = 0; i < groups[g].Entries.Length; i++)
             {
                 var entry = groups[g].Entries[i];
+                ulong iltValue;
                 if (entry.ByName != null)
                 {
                     int hnOff = hintNameOffsets[(g, i)];
+                    BinaryPrimitives.WriteUInt16LittleEndian(idata.AsSpan(hnOff), entry.Ordinal);
                     Encoding.ASCII.GetBytes(entry.ByName, idata.AsSpan(hnOff + 2));
-                    uint hnRva = idataRva + (uint)hnOff;
+                    iltValue = idataRva + (uint)hnOff;
                     BinaryPrimitives.WriteUInt64LittleEndian(
-                        rdata.AsSpan(groups[g].FirstOffset + i * 8), hnRva);
+                        rdata.AsSpan(groups[g].FirstOffset + i * 8), iltValue);
                 }
                 else
                 {
+                    iltValue = OrdinalFlag64 | entry.Ordinal;
                     BinaryPrimitives.WriteUInt64LittleEndian(
-                        rdata.AsSpan(groups[g].FirstOffset + i * 8),
-                        OrdinalFlag64 | entry.Ordinal);
+                        rdata.AsSpan(groups[g].FirstOffset + i * 8), iltValue);
                 }
+                BinaryPrimitives.WriteUInt64LittleEndian(
+                    idata.AsSpan(iltOffsets[g] + i * 8), iltValue);
             }
         }
 
         for (int i = 0; i < groups.Count; i++)
         {
             int d = i * 20;
+            BinaryPrimitives.WriteUInt32LittleEndian(idata.AsSpan(d + 0),
+                idataRva + (uint)iltOffsets[i]);
             BinaryPrimitives.WriteInt32LittleEndian(idata.AsSpan(d + 8), -1);
             BinaryPrimitives.WriteUInt32LittleEndian(idata.AsSpan(d + 12),
                 idataRva + (uint)dllPositions[groups[i].DllName]);
@@ -1022,6 +1077,47 @@ public static class ExeDecryptor
 
         int importDirSize = hintNamePos > currentPos ? hintNamePos : descriptorBytes;
         return new ImportInfo(iatSize, importDirSize);
+    }
+
+    private static int RecoverOriginalDllNames(byte[] rdata, uint rdataRva, uint importDirRva, List<IatGroup> groups)
+    {
+        if (importDirRva < rdataRva || importDirRva >= rdataRva + (uint)rdata.Length)
+            return 0;
+
+        var groupByFirstThunk = new Dictionary<uint, int>();
+        for (int i = 0; i < groups.Count; i++)
+            groupByFirstThunk[rdataRva + (uint)groups[i].FirstOffset] = i;
+
+        int recovered = 0;
+        int offset = (int)(importDirRva - rdataRva);
+        while (offset + 20 <= rdata.Length)
+        {
+            uint firstThunk = BinaryPrimitives.ReadUInt32LittleEndian(rdata.AsSpan(offset + 16));
+            if (firstThunk == 0) break;
+
+            uint nameRva = BinaryPrimitives.ReadUInt32LittleEndian(rdata.AsSpan(offset + 12));
+
+            if (groupByFirstThunk.TryGetValue(firstThunk, out int groupIdx) &&
+                nameRva >= rdataRva && nameRva < rdataRva + (uint)rdata.Length)
+            {
+                int nameOff = (int)(nameRva - rdataRva);
+                int end = nameOff;
+                while (end < rdata.Length && rdata[end] >= 0x20 && rdata[end] <= 0x7E)
+                    end++;
+
+                if (end > nameOff && end < rdata.Length && rdata[end] == 0)
+                {
+                    string original = Encoding.ASCII.GetString(rdata, nameOff, end - nameOff);
+                    if (!string.Equals(original, groups[groupIdx].DllName, StringComparison.OrdinalIgnoreCase))
+                        recovered++;
+                    groups[groupIdx] = groups[groupIdx] with { DllName = original };
+                }
+            }
+
+            offset += 20;
+        }
+
+        return recovered;
     }
 
     private static void FixEntryPoint(byte[] decryptedText, PeInfo pe)
