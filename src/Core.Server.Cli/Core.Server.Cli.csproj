@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>CoreServerHost</AssemblyName>
+    <RootNamespace>Core.Server.Cli</RootNamespace>
+    <ApplicationIcon>..\Core.Launcher\Assets\Core.ico</ApplicationIcon>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(_IsPublishing)' == 'true'">
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Core.Launcher.Hosting\Core.Launcher.Hosting.csproj" />
+    <InternalsVisibleTo Include="Core.Launcher.Tests" />
+  </ItemGroup>
+</Project>
+

@@ -173,6 +173,20 @@ The previous run's `Launcher.log` and `Backend.log` are kept as `*.previous.log`
 
 - In setup, **Advanced** (or later, Settings) points the launcher at your own Core-Backend checkout and your own DLL folder, such as `CoreV2\x64\Release`. Local DLLs are copied (with their `.pdb`) before each start, so you can rebuild Core V2 while servers run, and restarts pick up the new build.
 - `CoreLauncher.exe --data <folder>` keeps settings, downloads and logs in that folder instead of `%LOCALAPPDATA%\Core-Launcher`.
+- **Dedicated CLI Server Hoster (`CoreServerHost.exe`)**: A lightweight, standalone console application for hosting dedicated game servers without the GUI. Features a clean, monochrome terminal dashboard (system and process RAM/CPU monitoring, direct clickable admin panel link, server slot status table). It connects to an existing backend (local or friend's) and configures via `settings.ini` in its folder:
+  ```
+  CoreServerHost.exe
+  CoreServerHost.exe --servers 2 --br-servers 2 --backend http://127.0.0.1:5595 --login MyServer_{n}
+  ```
+  Configure `settings.ini` settings: `BuildPath`, `BackendUrl`, `Region`, `StandardServers`, `BattleRoyaleServers`, `ServerLogin` (defaults to `CoreServer{n}`), `PcName`, `ReadyTimeout`, and `AllowUnsupportedBuilds`.
+
+  Interactive keyboard shortcuts while running:
+  - `n`: Create a new server (pick Save The World or Battle Royale)
+  - `d`: Remove a server (pick which active slot to stop and remove)
+  - `c`: Open `settings.ini` in Notepad
+  - `a`: Open Admin Panel dashboard in default browser
+  - `l`: Open logs folder in File Explorer
+  - `Ctrl+C`: Stop all servers and exit cleanly
 
 ### Building
 
@@ -182,9 +196,10 @@ Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download).
 dotnet build
 dotnet test
 dotnet publish src/Core.Launcher -c Release -o artifacts/publish
+dotnet publish src/Core.Server.Cli -c Release -o artifacts/publish
 ```
 
-`dotnet publish` makes one self-contained `CoreLauncher.exe`. `dotnet test` also runs the real Core-Backend when `CORE_BACKEND_DIR` points at a checkout, and the full download-and-install path when `CORE_LAUNCHER_NETWORK_TESTS=1`.
+`dotnet publish` makes self-contained `CoreLauncher.exe` and `CoreServerHost.exe`. `dotnet test` also runs the real Core-Backend when `CORE_BACKEND_DIR` points at a checkout, and the full download-and-install path when `CORE_LAUNCHER_NETWORK_TESTS=1`.
 
 ### Releasing
 
