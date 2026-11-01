@@ -8,6 +8,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Core.Launcher.Hosting\Core.Launcher.Hosting.csproj" />
+    <ProjectReference Include="..\..\src\Core.Server.Cli\Core.Server.Cli.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.11.0" />

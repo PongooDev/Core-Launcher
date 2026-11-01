@@ -135,6 +135,57 @@ public sealed class ServerPool : IDisposable
         Tick();
     }
 
+    /// <summary>Stops a specific server slot on purpose and removes it from the pool.</summary>
+    public bool RemoveSlot(int instance)
+    {
+        Slot? removedSlot;
+        lock (_gate)
+        {
+            removedSlot = _slots.FirstOrDefault(slot => slot.Instance == instance);
+            if (removedSlot is null)
+            {
+                return false;
+            }
+
+            _log.Write($"Server {instance}: removal requested");
+            removedSlot.Removing = true;
+            removedSlot.Stop(StopReason.Removed);
+            _slots.Remove(removedSlot);
+
+            // Renumber remaining slots so instances remain contiguous 1..N
+            for (var i = 0; i < _slots.Count; i++)
+            {
+                _slots[i].Instance = i + 1;
+            }
+
+            if (Instances > _slots.Count)
+            {
+                Instances = _slots.Count;
+            }
+        }
+
+        if (removedSlot.Server is { } server)
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await server.Finished;
+                }
+                catch
+                {
+                }
+                finally
+                {
+                    server.Dispose();
+                }
+            });
+        }
+
+        Tick();
+        return true;
+    }
+
     public void Tick()
     {
         bool changed;
@@ -397,7 +448,7 @@ public sealed class ServerPool : IDisposable
 
     private sealed class Slot(int instance)
     {
-        public int Instance { get; } = instance;
+        public int Instance { get; set; } = instance;
 
         public IServerInstance? Server { get; set; }
 
