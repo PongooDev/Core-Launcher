@@ -22,6 +22,11 @@ public sealed class GameServerStarter : IServerStarter
     private readonly Action<string>? _onEvent;
     private readonly Dictionary<int, bool> _slotTypes = [];
 
+    // The login each slot's server was started with. Removing a slot renumbers the ones after it while their servers
+    // keep running, so their session checks use the login they started with, and a new server takes a login no running
+    // server has.
+    private readonly Dictionary<int, string> _logins = [];
+
     public void SetSlotType(int instance, bool isBattleRoyale)
     {
         lock (_slotTypes)
@@ -34,14 +39,19 @@ public sealed class GameServerStarter : IServerStarter
     {
         lock (_slotTypes)
         {
-            _slotTypes.Remove(instance);
-            var higher = _slotTypes.Keys.Where(k => k > instance).OrderBy(k => k).ToList();
-            foreach (var k in higher)
-            {
-                var val = _slotTypes[k];
-                _slotTypes.Remove(k);
-                _slotTypes[k - 1] = val;
-            }
+            Shift(_slotTypes, instance);
+            Shift(_logins, instance);
+        }
+    }
+
+    private static void Shift<T>(Dictionary<int, T> byInstance, int removed)
+    {
+        byInstance.Remove(removed);
+        foreach (var k in byInstance.Keys.Where(k => k > removed).OrderBy(k => k).ToList())
+        {
+            var val = byInstance[k];
+            byInstance.Remove(k);
+            byInstance[k - 1] = val;
         }
     }
 
@@ -89,7 +99,7 @@ public sealed class GameServerStarter : IServerStarter
     public IServerInstance Start(int instance)
     {
         var battleRoyale = HostsBattleRoyale(instance);
-        var login = ServerLogin(instance);
+        var login = TakeLogin(instance);
         var arguments = LaunchArguments.Server(_build, _endpoint, login, battleRoyale, _config.Region);
         var output = ServerLog(instance);
 
@@ -109,7 +119,32 @@ public sealed class GameServerStarter : IServerStarter
     }
 
     public SessionCheck Session(int instance, DateTimeOffset startedAt, IReadOnlyList<int> ports) =>
-        _sessions.Check(_endpoint, ServerLogin(instance), startedAt, ports);
+        _sessions.Check(_endpoint, StartedLogin(instance), startedAt, ports);
+
+    private string StartedLogin(int instance)
+    {
+        lock (_slotTypes)
+        {
+            return _logins.TryGetValue(instance, out var login) ? login : ServerLogin(instance);
+        }
+    }
+
+    // The slot's own login, or while a renumbered server still runs with it, the first one no running server has.
+    private string TakeLogin(int instance)
+    {
+        lock (_slotTypes)
+        {
+            _logins.Remove(instance);
+            var login = ServerLogin(instance);
+            for (var n = 1; _logins.ContainsValue(login); n++)
+            {
+                login = ServerLogin(n);
+            }
+
+            _logins[instance] = login;
+            return login;
+        }
+    }
 
     public bool HostsBattleRoyale(int instance)
     {
