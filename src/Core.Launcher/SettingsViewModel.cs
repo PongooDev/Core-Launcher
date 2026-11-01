@@ -170,9 +170,6 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public LauncherSettings Settings { get; }
 
-    /// <summary>The regions the Servers tab offers (<see cref="ServerSettings.Region"/>).</summary>
-    public IReadOnlyList<ServerRegion> ServerRegions => KnownBuilds.ServerRegions;
-
     public ObservableCollection<BuildEditor> Builds { get; } = [];
 
     [ObservableProperty]

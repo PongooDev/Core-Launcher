@@ -29,7 +29,6 @@ public sealed class SettingsAndBuildTests
         Assert.Equal(5595, settings.Backend.Port);
         Assert.Equal(2, settings.Servers.Instances);
         Assert.Equal(180, settings.Servers.ReadyTimeoutSeconds);
-        Assert.Equal("NA", settings.Servers.Region);
         Assert.Equal(DllSource.Release, settings.Dlls.Source);
         Assert.Equal("PongooDev/CoreV2", settings.Dlls.Repository);
         Assert.True(settings.Servers.Enabled);
@@ -56,15 +55,18 @@ public sealed class SettingsAndBuildTests
     }
 
     [Fact]
-    public void SettingsSavedBeforeTheServerRegionAdvertiseNa()
+    public void SettingsSavedWithTheOldServerRegionStillLoadAndDropIt()
     {
+        // The region moved to the backend's admin panel (Core-Launcher #8): a saved one is ignored and not saved again.
         using var folder = new TempFolder();
-        var path = folder.Combine("settings.json");
-        File.WriteAllText(path, $$$"""{"Version": {{{SettingsStore.CurrentVersion}}}, "Servers": {"Instances": 1, "Region": null}}""");
-        Assert.Equal("NA", new SettingsStore(path).Load().Servers.Region);
+        var store = new SettingsStore(folder.Combine("settings.json"));
+        File.WriteAllText(store.FilePath, $$$"""{"Version": {{{SettingsStore.CurrentVersion}}}, "Servers": {"Instances": 1, "Region": "EU"}}""");
+        var settings = store.Load();
+        Assert.Equal(1, settings.Servers.Instances);
 
-        File.WriteAllText(path, $$$"""{"Version": {{{SettingsStore.CurrentVersion}}}, "Servers": {"Region": " eu "}}""");
-        Assert.Equal("EU", new SettingsStore(path).Load().Servers.Region);
+        store.Save(settings);
+        Assert.DoesNotContain("Region", File.ReadAllText(store.FilePath));
+        Assert.Equal(1, store.Load().Servers.Instances);
     }
 
     [Fact]

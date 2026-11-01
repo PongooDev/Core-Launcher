@@ -107,7 +107,7 @@ public sealed partial class CommandLineTests
     [Fact]
     public void ServersAdvertiseTheChosenRegionUnlessTheirBuildSetsAnother()
     {
-        // The default -McpRegion=NA gives way to Settings → Servers → Region (Core-Backend #121).
+        // The default -McpRegion=NA gives way to the backend's first Server Region (Core-Backend #121, #142; Core-Launcher #8).
         var build = Cert();
         var server = Split("x.exe " + LaunchArguments.Server(build, 5595, "CoreServer1", region: "EU"));
         Assert.Single(server, argument => argument.StartsWith("-McpRegion=", StringComparison.OrdinalIgnoreCase));
@@ -122,6 +122,8 @@ public sealed partial class CommandLineTests
         server = Split("x.exe " + LaunchArguments.Server(build, 5595, "CoreServer1", region: "EU"));
         Assert.Single(server, argument => argument.StartsWith("-McpRegion=", StringComparison.OrdinalIgnoreCase));
         Assert.Contains("-McpRegion=BR", server);
+        Assert.Equal("BR", KnownBuilds.OwnServerRegion(build.ServerArguments));
+        Assert.Null(KnownBuilds.OwnServerRegion(Cert().ServerArguments));
 
         Assert.Equal(["NA", "EU", "OCE", "BR", "ASIA"], KnownBuilds.ServerRegions.Select(region => region.Code));
         Assert.DoesNotContain("-McpRegion", LaunchArguments.Client(Cert(), 5595, "Player"));

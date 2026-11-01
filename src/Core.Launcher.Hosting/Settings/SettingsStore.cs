@@ -147,8 +147,6 @@ public sealed class SettingsStore
         settings.Servers.Instances = Math.Clamp(settings.Servers.Instances, 0, MaxInstances);
         settings.Servers.BattleRoyaleInstances = Math.Clamp(settings.Servers.BattleRoyaleInstances, 0, MaxInstances);
         settings.Servers.ReadyTimeoutSeconds = Math.Max(0, settings.Servers.ReadyTimeoutSeconds);
-        // Settings saved before the region existed have none: NA, what their servers advertised.
-        settings.Servers.Region = string.IsNullOrWhiteSpace(settings.Servers.Region) ? "NA" : settings.Servers.Region.Trim().ToUpperInvariant();
         settings.Servers.RemoteName = settings.Servers.RemoteName?.Trim() ?? "";
         settings.Backend.Port = Math.Clamp(settings.Backend.Port, 0, 65535);
         settings.Backend.Remote ??= new RemoteBackend();

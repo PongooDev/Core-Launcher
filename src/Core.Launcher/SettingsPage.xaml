@@ -285,9 +285,7 @@
                                 <TextBlock Text="Battle Royale servers" Style="{StaticResource Label}" />
                                 <TextBox Text="{Binding Settings.Servers.BattleRoyaleInstances, UpdateSourceTrigger=PropertyChanged}" Width="110" HorizontalAlignment="Left" />
                                 <TextBlock Style="{StaticResource Hint}" Text="On builds with Battle Royale (1.7.2 on), these run on top of the servers above, which host Save the World. Each match takes a server of its own." />
-                                <TextBlock Text="Region" Style="{StaticResource Label}" />
-                                <ComboBox ItemsSource="{Binding ServerRegions}" SelectedValuePath="Code" DisplayMemberPath="Name" SelectedValue="{Binding Settings.Servers.Region}" Width="240" HorizontalAlignment="Left" />
-                                <TextBlock Style="{StaticResource Hint}" Text="Players who pick this region in Fortnite's Matchmaking Region setting queue for these servers. Players whose region has no server at all play on another region's. A build's own -McpRegion (Settings → Builds) other than NA wins. Servers take it when they next start." />
+                                <TextBlock Style="{StaticResource Hint}" Text="The servers' region is the first of the Server Regions on the backend's admin panel (Matchmaking), or NA when none is ticked; a friend's backend gives its own. A build's own -McpRegion (Settings → Builds) other than NA wins. Servers take it when they next start." />
                                 <TextBlock Text="Ready timeout (seconds)" Style="{StaticResource Label}" />
                                 <TextBox Text="{Binding Settings.Servers.ReadyTimeoutSeconds, UpdateSourceTrigger=PropertyChanged}" Width="110" HorizontalAlignment="Left" />
                                 <TextBlock Style="{StaticResource Hint}" Text="A server that hasn't logged &quot;Server ready&quot; by then is restarted. 0 waits forever." />
@@ -297,7 +295,7 @@
                                 <TextBlock Text="PC name on a friend's backend" Style="{StaticResource Label}" />
                                 <TextBox Text="{Binding Settings.Servers.RemoteName, UpdateSourceTrigger=PropertyChanged}" Width="240" HorizontalAlignment="Left" />
                                 <TextBlock Style="{StaticResource Hint}" Text="On a friend's backend these servers log in as CoreServer-&lt;this name&gt;-{n} (letters and digits, up to 10; empty uses this computer's name), so they don't share accounts with your friend's own CoreServer{n}. A Server login changed from CoreServer{n} is used as it is." />
-                                <TextBlock Style="{StaticResource Hint}" Margin="0,10,0,0" Text="To host for a friend's backend (Settings → Backend), your friend turns on remote access (admin panel → Friends) and adds this PC's public IP under Settings → Trusted Hosting IPs in their admin panel; until then it refuses these servers (403), which the Servers page shows. Players are sent to this PC's IP, so forward UDP 7777 and 15000 and up for players on the internet. The Region above is the one the servers register with." />
+                                <TextBlock Style="{StaticResource Hint}" Margin="0,10,0,0" Text="To host for a friend's backend (Settings → Backend), your friend turns on remote access (admin panel → Friends) and adds this PC's public IP under Settings → Trusted Hosting IPs in their admin panel; until then it refuses these servers (403), which the Servers page shows. Players are sent to this PC's IP, so forward UDP 7777 and 15000 and up for players on the internet." />
                             </StackPanel>
                         </Border>
                     </StackPanel>

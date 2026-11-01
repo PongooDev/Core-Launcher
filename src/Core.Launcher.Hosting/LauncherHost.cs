@@ -32,6 +32,7 @@ public sealed class LauncherHost : IAsyncDisposable
     private readonly HttpClient _http = GitHubClient.CreateHttpClient();
     private readonly BackendSessions _sessions = new(BackendSessions.CreateHttpClient(), TimeProvider.System);
     private readonly HttpClient _remoteCheck = RemoteBackendCheck.CreateHttpClient();
+    private readonly BackendRegion _region = new(RemoteBackendCheck.CreateHttpClient(), TimeProvider.System);
     private readonly GameLauncher _launcher;
     private readonly Dictionary<int, LogChannel> _serverLogs = [];
     private readonly Dictionary<string, LogChannel> _clientLogs = new(StringComparer.OrdinalIgnoreCase);
@@ -594,6 +595,7 @@ public sealed class LauncherHost : IAsyncDisposable
         Servers.Dispose();
         _sessions.Dispose();
         _remoteCheck.Dispose();
+        _region.Dispose();
         _http.Dispose();
         _job.Dispose();
         Log.Write("Stopped");
@@ -635,19 +637,23 @@ public sealed class LauncherHost : IAsyncDisposable
                 return host.Settings.Backend.UseRemote ? $"waiting for {host.BackendDescription}" : "waiting for the backend";
             }
 
-            if (!host.Settings.Backend.UseRemote)
-            {
-                return null;
-            }
-
             // A friend's backend answers GET /core/api/sessions only to the PCs it trusts to host (Core-Backend #125):
             // ask it first, so a refusal shows here instead of as servers that fail to log in.
-            return host._sessions.Access(backend) switch
+            if (host.Settings.Backend.UseRemote)
             {
-                HostingAccess.Allowed => null,
-                HostingAccess.Refused => RefusalMessage(host.BackendDescription),
-                _ => $"asking {host.BackendDescription} whether this PC may host for it",
-            };
+                switch (host._sessions.Access(backend))
+                {
+                    case HostingAccess.Refused:
+                        return RefusalMessage(host.BackendDescription);
+                    case HostingAccess.Unknown:
+                        return $"asking {host.BackendDescription} whether this PC may host for it";
+                }
+            }
+
+            // The servers' region is the backend's first Server Region (Core-Launcher #8): ask it before the first starts.
+            return host._region.Region(backend) is null
+                ? $"asking {(host.Settings.Backend.UseRemote ? host.BackendDescription : "the backend")} for its Server Regions"
+                : null;
         }
 
         /// <summary>
@@ -671,13 +677,19 @@ public sealed class LauncherHost : IAsyncDisposable
             var build = settings.FindSelectedBuild()!;
             var battleRoyale = host.HostsBattleRoyale(instance);
             var backend = Backend() ?? throw new InvalidOperationException("The backend isn't ready");
-            var arguments = LaunchArguments.Server(build, backend, ServerLogin(settings, instance), battleRoyale, settings.Servers.Region);
+            // The admin panel's first Server Region (Core-Backend #142), NA when none is ticked; a build's own -McpRegion wins.
+            var region = host._region.Region(backend) ?? BackendRegion.DefaultRegion;
+            var arguments = LaunchArguments.Server(build, backend, ServerLogin(settings, instance), battleRoyale, region);
             var output = host.ServerLog(instance);
             output.Write($"(launcher) --- {DateTime.Now:yyyy-MM-dd HH:mm:ss} ---");
             if (settings.Backend.UseRemote)
             {
                 output.Write($"(launcher) Hosting for {host.BackendDescription} ({backend.Url}) as {ServerLogin(settings, instance)}");
             }
+
+            output.Write(KnownBuilds.OwnServerRegion(build.ServerArguments) is { } own
+                ? $"(launcher) Region {own}: the build's own -McpRegion (Settings → Builds)"
+                : $"(launcher) Region {region}: the backend's first Server Region (admin panel → Matchmaking), NA when none is ticked");
 
             WarnAboutSupport(build, output);
             WriteServerConfig();

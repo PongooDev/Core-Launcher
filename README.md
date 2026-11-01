@@ -106,7 +106,9 @@ launcher on a friend's backend hosts its servers for that backend (Core-Launcher
    your servers (403), and the Servers page says so.
 2. Your servers log in to the host's backend as `CoreServer-<your PC name>-{n}` (Settings → Servers → **PC name on a
    friend's backend**; empty uses your computer's name), so they don't share accounts with the host's own
-   `CoreServer{n}`, and register with the **Region** set there.
+   `CoreServer{n}`, and register with the host's region: the first of the **Server Regions** ticked on the host's
+   admin panel (Matchmaking), or NA when none is. To host another region, name it in the build's server arguments
+   (Settings → Builds, e.g. `-McpRegion=EU`) and have the host tick it among the Server Regions.
 3. Players are sent to your PC's IP: for players on the internet, forward UDP 7777 and 15000 and up to your PC.
 
 This needs a Core-Backend with Trusted Hosting IPs and `CoreServer-<PC>-{n}` logins (Core-Backend #125 and later;
@@ -151,11 +153,10 @@ Settings are saved in `%LOCALAPPDATA%\Core-Launcher\settings.json`.
 | Host servers | On | Autohost on or off |
 | Servers to keep running | `2` | Save the World's on a build with Battle Royale |
 | Battle Royale servers | `2` | On a build with Battle Royale (1.7.2 on), on top of the servers above; each match takes a server of its own |
-| Region | North America | The region the servers advertise (`-McpRegion=`): North America, Europe, Oceania, Brazil or Asia, as Fortnite's Matchmaking Region setting lists them. Players who pick it queue for these servers; Core-Backend sends players whose region has no server to another region's. A build whose server arguments name a region other than NA keeps its own |
 | Ready timeout | `180` s | `0` waits forever |
 | Server login | `CoreServer{n}` | `{n}` is the server's number, so each server has its own account |
 
-The launcher adds `-AUTH_LOGIN`, `-AUTH_PASSWORD` and `-AUTH_TYPE=epic` itself. It adds `-httpproxy=127.0.0.1:<port>` when the build uses it, `-CoreBackend=http://127.0.0.1:<port>` for processes that load `CoreRedirect.dll` (both with the friend's address instead when you play on a friend's backend), and `-nullrhi -unattended` for servers (no renderer, and engine message boxes are logged instead of waiting for a click, as dedicated servers run). The shipping exe drops any switch missing from its command line whitelist, `-nullrhi` included, so before a build's first server starts the launcher patches its exe the way Reboot Launcher does: four client-only switches in the whitelist become `-log -nosplash -nosound -nullrhi`. Core's server makes the same change in memory, so an exe the launcher can't write to still works. Battle Royale servers also get `-CoreMode=BattleRoyale`: Core takes the map and playlist from the build itself and registers the server with Core-Backend's matchmaking.
+The launcher adds `-AUTH_LOGIN`, `-AUTH_PASSWORD` and `-AUTH_TYPE=epic` itself. It adds `-httpproxy=127.0.0.1:<port>` when the build uses it, `-CoreBackend=http://127.0.0.1:<port>` for processes that load `CoreRedirect.dll` (both with the friend's address instead when you play on a friend's backend), `-McpRegion=` for servers (the region they host: the first of the backend's **Server Regions**, on its admin panel's Matchmaking page, or `NA` when none is ticked; a friend's backend gives its own, and a build whose server arguments name a region other than NA keeps it), and `-nullrhi -unattended` for servers (no renderer, and engine message boxes are logged instead of waiting for a click, as dedicated servers run). The shipping exe drops any switch missing from its command line whitelist, `-nullrhi` included, so before a build's first server starts the launcher patches its exe the way Reboot Launcher does: four client-only switches in the whitelist become `-log -nosplash -nosound -nullrhi`. Core's server makes the same change in memory, so an exe the launcher can't write to still works. Battle Royale servers also get `-CoreMode=BattleRoyale`: Core takes the map and playlist from the build itself and registers the server with Core-Backend's matchmaking.
 
 ## Logs
 
