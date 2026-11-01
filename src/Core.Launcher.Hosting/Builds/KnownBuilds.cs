@@ -60,6 +60,9 @@ public static partial class KnownBuilds
     /// <summary>Fortnite 1.10, ++Fortnite+Release-Cert CL-3790078 on UE 4.19.0: fixed Mutant Storm targets, the 50v50 mode and the Winter Bus, on the first UE 4.19 build.</summary>
     public const int Fortnite110 = 3790078;
 
+    /// <summary>Fortnite 1.11, ++Fortnite+Release-Cert CL-3807424 on UE 4.19.0: the Winterfest update, with the holiday map, Snowfall and the Frostnite mode.</summary>
+    public const int Fortnite111 = 3807424;
+
     /// <summary>
     /// What a Battle Royale server gets. Core takes the map and playlist from the build's own data (on 1.7.2 the Battle
     /// Royale zone theme's Athena_Terrain and solo playlist; the match's playlist comes with its assignment) and
@@ -139,7 +142,8 @@ public static partial class KnownBuilds
         new(Fortnite182, "1.8.2", "Fortnite 1.8.2 (CL-3741772)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite19, "1.9", "Fortnite 1.9 (CL-3757339)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite191, "1.9.1", "Fortnite 1.9.1 (CL-3775276)", BuildSupport.Full, [], BattleRoyale: true),
-        new(Fortnite110, "1.10", "Fortnite 1.10 (CL-3790078)", BuildSupport.InProgress, [], BattleRoyale: true),
+        new(Fortnite110, "1.10", "Fortnite 1.10 (CL-3790078)", BuildSupport.Full, [], BattleRoyale: true),
+        new(Fortnite111, "1.11", "Fortnite 1.11 (CL-3807424)", BuildSupport.InProgress, [], BattleRoyale: true),
     ];
 
     private static KnownBuild? Find(int changelist) => Array.Find(Builds, build => build.Changelist == changelist);
