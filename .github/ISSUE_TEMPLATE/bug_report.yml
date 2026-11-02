@@ -1,0 +1,35 @@
+name: Bug report
+description: Something in Core Launcher or CoreServerHost doesn't work
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Launcher version
+      description: Shown in Settings, or the release you downloaded (for example v1.0.5)
+    validations:
+      required: true
+  - type: input
+    id: build
+    attributes:
+      label: Fortnite build
+      placeholder: "1.11"
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what should have happened
+      description: Screenshots help, especially of any error message.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen
+      placeholder: "1. Add a build\n2. ..."
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Drag the files in. Bugs with logs get fixed much faster.
+        - `%LOCALAPPDATA%\Core-Launcher\Logs\Launcher.log`
+        - For a server or game that won't start: the newest files in `%LOCALAPPDATA%\Core-Launcher\Logs\Core`
