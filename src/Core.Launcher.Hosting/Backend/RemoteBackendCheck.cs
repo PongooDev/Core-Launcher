@@ -47,6 +47,11 @@ public static class RemoteBackendCheck
     private static string Describe(Exception exception, BackendEndpoint endpoint)
     {
         var socket = exception.InnerException as SocketException ?? exception.InnerException?.InnerException as SocketException;
+        if (exception.InnerException is System.Security.Authentication.AuthenticationException)
+        {
+            return $"{endpoint} answered, but its certificate isn't valid for {endpoint.Host} or isn't trusted. An https:// backend needs a real certificate for its host name (e.g. from Let's Encrypt).";
+        }
+
         return socket?.SocketErrorCode switch
         {
             SocketError.HostNotFound or SocketError.NoData or SocketError.TryAgain => $"Couldn't find {endpoint.Host}: check the address.",

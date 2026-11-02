@@ -438,7 +438,7 @@ public static class Program
         ConsoleEx.WriteLine();
         ConsoleEx.WriteLine(Output.Indent + Theme.Emphasis("OPTIONS:", Theme.Text));
         ConsoleEx.WriteLine(Output.Indent + "  --build <path>          Path to Fortnite build folder (Engine + FortniteGame)");
-        ConsoleEx.WriteLine(Output.Indent + "  --backend <url>         Target Core-Backend address (default: http://127.0.0.1:5595)");
+        ConsoleEx.WriteLine(Output.Indent + "  --backend <url>         Target Core-Backend address, http:// or https:// (default: http://127.0.0.1:5595)");
         ConsoleEx.WriteLine(Output.Indent + "  --region <region>       Matchmaking region: NA, EU, OCE, BR, ASIA (default: NA)");
         ConsoleEx.WriteLine(Output.Indent + "  --servers <count>       Standard / Save the World server count (default: 2)");
         ConsoleEx.WriteLine(Output.Indent + "  --br-servers <count>    Battle Royale server count (default: 2)");

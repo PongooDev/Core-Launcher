@@ -44,13 +44,14 @@ public static class LaunchArguments
 
     private static IEnumerable<string> Common(BuildSettings build, IReadOnlyList<DllRole> dlls, BackendEndpoint backend, string login, string? password = null)
     {
-        if (build.UseHttpProxy)
+        // -httpproxy takes a plain HTTP proxy, which an https:// backend's reverse proxy isn't: CoreRedirect reaches that one.
+        if (build.UseHttpProxy && !backend.Secure)
         {
             yield return $"-httpproxy={backend.Authority}";
         }
 
         // CoreRedirect sends Epic's hosts here (CoreV2 Core/Private/Configuration.cpp, default http://127.0.0.1:5595):
-        // it puts this in front of each request's path, so any host and port work.
+        // it puts this in front of each request's path, so any host and port work, and https:// as well as http://.
         if (dlls.Contains(DllRole.Redirect))
         {
             yield return $"-CoreBackend={backend.Url}";

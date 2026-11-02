@@ -136,7 +136,7 @@ public class SettingsIni
         BuildPath=
 
         ; The Core-Backend endpoint to register servers with
-        ; Local backend: http://127.0.0.1:5595 | Friend/Remote: http://192.168.1.100:5595
+        ; Local backend: http://127.0.0.1:5595 | Friend/Remote: http://192.168.1.100:5595 | Behind an https proxy: https://core.example.com
         BackendUrl=http://127.0.0.1:5595
 
         ; Matchmaking Region advertised by servers: NA, EU, OCE, BR, ASIA
@@ -185,7 +185,7 @@ public class SettingsIni
         builder.AppendLine();
 
         builder.AppendLine("; The Core-Backend endpoint to register servers with");
-        builder.AppendLine("; Local backend: http://127.0.0.1:5595 | Friend/Remote: http://192.168.1.100:5595");
+        builder.AppendLine("; Local backend: http://127.0.0.1:5595 | Friend/Remote: http://192.168.1.100:5595 | Behind an https proxy: https://core.example.com");
         builder.AppendLine($"BackendUrl={Get("Server", "BackendUrl") ?? "http://127.0.0.1:5595"}");
         builder.AppendLine();
 

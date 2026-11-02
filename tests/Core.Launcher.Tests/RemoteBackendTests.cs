@@ -30,9 +30,30 @@ public sealed class RemoteBackendTests
         Assert.Equal(new BackendEndpoint(host, port), endpoint);
     }
 
+    // A backend behind a TLS-terminating reverse proxy (Core-Launcher #9): https://, on 443 unless a port is given.
+    [Theory]
+    [InlineData("https://core.example.com", "core.example.com", 443, "https://core.example.com")]
+    [InlineData("HTTPS://Core.Example.com/", "core.example.com", 443, "https://core.example.com")]
+    [InlineData("https://core.example.com:8443/register", "core.example.com", 8443, "https://core.example.com:8443")]
+    [InlineData("https://203.0.113.7", "203.0.113.7", 443, "https://203.0.113.7")]
+    [InlineData("https://[2001:db8::1]", "2001:db8::1", 443, "https://[2001:db8::1]")]
+    public void AnHttpsAddressIsReadWithPort443(string text, string host, int port, string url)
+    {
+        Assert.True(BackendEndpoint.TryParse(text, out var endpoint, out var error), error);
+        Assert.Equal(new BackendEndpoint(host, port, Secure: true), endpoint);
+        Assert.Equal(url, endpoint.Url);
+        Assert.Equal(url, endpoint.ToString());
+
+        // http:// stays as it was.
+        Assert.True(BackendEndpoint.TryParse("http://203.0.113.7", out var plain, out _));
+        Assert.False(plain.Secure);
+        Assert.Equal("http://203.0.113.7:5595", plain.Url);
+    }
+
     [Theory]
     [InlineData("", "Enter your friend's address")]
-    [InlineData("https://203.0.113.7", "http://")]
+    [InlineData("https://", "Enter your friend's address")]
+    [InlineData("https://core.example.com:99999", "isn't a port")]
     [InlineData("203.0.113.7:99999", "isn't a port")]
     [InlineData("203.0.113.7:port", "isn't a port")]
     [InlineData(":5595", "before the port")]
@@ -65,6 +86,37 @@ public sealed class RemoteBackendTests
     }
 
     [Fact]
+    public void AnHttpsBackendIsReachedThroughCoreRedirectAlone()
+    {
+        var build = KnownBuilds.Create(@"C:\Cert", new BuildVersion(4, 16, 0, KnownBuilds.Cert, "++Fortnite+Release-Cert"), allowUnsupported: false);
+        Assert.True(BackendEndpoint.TryParse("https://core.example.com", out var endpoint, out _));
+
+        // -httpproxy takes a plain HTTP proxy, which the reverse proxy in front of the backend isn't.
+        var client = LaunchArguments.Client(build, endpoint, "Friend");
+        Assert.Contains("-CoreBackend=https://core.example.com", client);
+        Assert.DoesNotContain("-httpproxy", client);
+
+        var server = LaunchArguments.Server(build, endpoint, "CoreServer1");
+        Assert.Contains("-CoreBackend=https://core.example.com", server);
+        Assert.DoesNotContain("-httpproxy", server);
+    }
+
+    [Fact]
+    public async Task TheCheckAsksAnHttpsBackendOverHttps()
+    {
+        Assert.True(BackendEndpoint.TryParse("https://core.example.com", out var endpoint, out _));
+        var status = await CheckAsync("https://core.example.com/core/api/status", HttpStatusCode.OK, """{"name":"Core-Backend","version":"0.1.0"}""", endpoint);
+        Assert.True(status.Reachable);
+        Assert.Contains("https://core.example.com", status.Message);
+
+        // A certificate that isn't valid for the host says so; it is never accepted anyway.
+        using var http = new HttpClient(new ThrowingHandler(new HttpRequestException("SSL", new System.Security.Authentication.AuthenticationException("bad certificate"))));
+        status = await RemoteBackendCheck.CheckAsync(http, endpoint, TestContext.Current.CancellationToken);
+        Assert.False(status.Reachable);
+        Assert.Contains("certificate", status.Message);
+    }
+
+    [Fact]
     public async Task AFriendsBackendIsWatchedNotStarted()
     {
         using var folder = new TempFolder();
@@ -81,8 +133,10 @@ public sealed class RemoteBackendTests
 
             settings.Remote.Address = "";
             Assert.Contains("Enter your friend's backend address", host.TargetFor(settings).Problem);
-            settings.Remote.Address = "https://x";
-            Assert.Contains("http://", host.TargetFor(settings).Problem);
+            settings.Remote.Address = "https://core.example.com";
+            var secure = host.TargetFor(settings);
+            Assert.Null(secure.Problem);
+            Assert.Equal(new BackendEndpoint("core.example.com", 443, Secure: true), secure.Endpoint);
 
             // Turning it off goes back to this PC's backend as it was set up.
             settings.UseRemote = false;
@@ -189,6 +243,24 @@ public sealed class RemoteBackendTests
         await host.DisposeAsync();
     }
 
+    [Fact]
+    public async Task TheBackendHostFollowsAnHttpsBackend()
+    {
+        var routes = new StatusRoute { Url = "https://core.example.com/core/api/status" };
+        using var job = new JobObject();
+        using var output = new LogChannel("Backend");
+        using var log = new LogChannel("Launcher");
+        var host = new BackendHost(job, output, log, new HttpClient(routes));
+        Assert.True(BackendEndpoint.TryParse("https://core.example.com", out var endpoint, out _));
+        host.Configure(BackendTarget.Friend(endpoint, "Sam"));
+        host.Start();
+        Assert.True(await host.WaitReadyAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken), string.Join('\n', log.Snapshot()));
+        Assert.Equal(endpoint, host.Endpoint);
+        Assert.Equal("https://core.example.com/register", host.RegisterUrl);
+        Assert.Equal("https://core.example.com/portal", host.PortalUrl);
+        await host.DisposeAsync();
+    }
+
     private static async Task<RemoteBackendStatus> CheckAsync(string url, HttpStatusCode code, string body, BackendEndpoint endpoint)
     {
         using var http = new HttpClient(new StatusRoute { Url = url, Code = code, Body = body });
@@ -203,6 +275,11 @@ public sealed class RemoteBackendTests
             Assert.True(DateTime.UtcNow < deadline, "timed out");
             await Task.Delay(10, TestContext.Current.CancellationToken);
         }
+    }
+
+    private sealed class ThrowingHandler(Exception exception) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) => throw exception;
     }
 
     private sealed class StatusRoute : HttpMessageHandler

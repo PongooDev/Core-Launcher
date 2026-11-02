@@ -85,6 +85,15 @@ public sealed class SetupIniTests
         Assert.Equal("192.168.1.50", endpoint.Host);
         Assert.Equal(5600, endpoint.Port);
         Assert.Equal("http://192.168.1.50:5600", endpoint.Url);
+
+        // A backend behind an https reverse proxy (Core-Launcher #9): 443 unless a port is given.
+        ini.Set("Server", "BackendUrl", "https://core.example.com");
+        endpoint = ServerHostConfig.FromIniAndArgs(ini, []).ParseEndpoint();
+        Assert.Equal(("core.example.com", 443, true, "https://core.example.com"), (endpoint.Host, endpoint.Port, endpoint.Secure, endpoint.Url));
+
+        ini.Set("Server", "BackendUrl", "https://core.example.com:8443/");
+        endpoint = ServerHostConfig.FromIniAndArgs(ini, []).ParseEndpoint();
+        Assert.Equal("https://core.example.com:8443", endpoint.Url);
     }
 
     [Fact]

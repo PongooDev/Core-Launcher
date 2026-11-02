@@ -4,36 +4,46 @@ using System.Net.Sockets;
 
 namespace Core.Launcher.Hosting.Backend;
 
-/// <summary>Where a Core-Backend answers: this PC's on a port, or a friend's at a host name or IP and port.</summary>
-public sealed record BackendEndpoint(string Host, int Port)
+/// <summary>
+/// Where a Core-Backend answers: this PC's on a port, or a friend's at a host name or IP and port. <paramref name="Secure"/>:
+/// over https://, as a backend behind a TLS-terminating reverse proxy (Caddy, nginx, a Cloudflare tunnel) is reached.
+/// </summary>
+public sealed record BackendEndpoint(string Host, int Port, bool Secure = false)
 {
     public const int DefaultPort = 5595;
+
+    /// <summary>An https:// backend's port when none is given.</summary>
+    public const int DefaultSecurePort = 443;
 
     public static BackendEndpoint Local(int port) => new("127.0.0.1", port);
 
     /// <summary>Host and port as a URL or -httpproxy takes them; an IPv6 address is bracketed.</summary>
-    public string Authority => $"{(Host.Contains(':') ? $"[{Host}]" : Host)}:{Port}";
+    public string Authority => $"{BracketedHost}:{Port}";
 
-    /// <summary>What CoreRedirect.dll sends Epic's hosts to (-CoreBackend=).</summary>
-    public string Url => $"http://{Authority}";
+    public string Scheme => Secure ? "https" : "http";
 
-    public override string ToString() => Authority;
+    /// <summary>What CoreRedirect.dll sends Epic's hosts to (-CoreBackend=), and where the launcher asks the backend.</summary>
+    public string Url => Secure && Port == DefaultSecurePort ? $"https://{BracketedHost}" : $"{Scheme}://{Authority}";
+
+    private string BracketedHost => Host.Contains(':') ? $"[{Host}]" : Host;
+
+    public override string ToString() => Secure ? Url : Authority;
 
     /// <summary>
     /// Reads what a player types for a friend's backend: <c>203.0.113.7</c>, <c>my-house.duckdns.org:5600</c>,
-    /// <c>[2001:db8::1]:5595</c> or a pasted <c>http://host:port/</c>. The port defaults to 5595.
+    /// <c>[2001:db8::1]:5595</c>, a pasted <c>http://host:port/</c>, or <c>https://core.example.com</c> for one behind an
+    /// https reverse proxy. The port defaults to 5595, or 443 for https://.
     /// </summary>
     public static bool TryParse(string? text, out BackendEndpoint endpoint, out string error)
     {
         endpoint = Local(DefaultPort);
         var value = (text ?? "").Trim();
-        if (value.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        var secure = value.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+        if (secure)
         {
-            error = "Core-Backend is reached over http://, not https://";
-            return false;
+            value = value["https://".Length..];
         }
-
-        if (value.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+        else if (value.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
         {
             value = value["http://".Length..];
         }
@@ -75,7 +85,7 @@ public sealed record BackendEndpoint(string Host, int Port)
             portText = colon < 0 ? "" : value[(colon + 1)..];
         }
 
-        var port = DefaultPort;
+        var port = secure ? DefaultSecurePort : DefaultPort;
         if (portText.Length > 0 && (!int.TryParse(portText, NumberStyles.None, CultureInfo.InvariantCulture, out port) || port is < 1 or > 65535))
         {
             error = $"{portText} isn't a port (1 to 65535)";
@@ -112,7 +122,7 @@ public sealed record BackendEndpoint(string Host, int Port)
             return false;
         }
 
-        endpoint = new BackendEndpoint(host.ToLowerInvariant(), port);
+        endpoint = new BackendEndpoint(host.ToLowerInvariant(), port, secure);
         error = "";
         return true;
     }

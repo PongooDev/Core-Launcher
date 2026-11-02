@@ -22,12 +22,15 @@ public sealed record BackendTarget(bool Start, string Node, string Folder, strin
     /// <summary>The friend's name for it, for messages.</summary>
     public string RemoteName { get; init; } = "";
 
-    public BackendEndpoint Endpoint => new(Host, Port);
+    /// <summary>A friend's backend reached over https:// (behind a TLS-terminating reverse proxy).</summary>
+    public bool Secure { get; init; }
+
+    public BackendEndpoint Endpoint => new(Host, Port, Secure);
 
     public static BackendTarget Running(int port) => new(false, "", "", "", port);
 
     public static BackendTarget Friend(BackendEndpoint endpoint, string name) =>
-        new(false, "", "", "", endpoint.Port) { Host = endpoint.Host, Remote = true, RemoteName = name };
+        new(false, "", "", "", endpoint.Port) { Host = endpoint.Host, Secure = endpoint.Secure, Remote = true, RemoteName = name };
 
     public static BackendTarget FriendProblem(string problem, string name) => new(false, "", "", "", 0, problem) { Remote = true, RemoteName = name };
 }
@@ -79,7 +82,7 @@ public sealed partial class BackendHost : IAsyncDisposable
     public string Host { get; private set; } = "127.0.0.1";
 
     /// <summary>Where clients reach the backend in use, while it is ready.</summary>
-    public BackendEndpoint? Endpoint => State == BackendState.Ready && Port is { } port ? new BackendEndpoint(Host, port) : null;
+    public BackendEndpoint? Endpoint => State == BackendState.Ready && Port is { } port ? new BackendEndpoint(Host, port, Target.Remote && Target.Secure) : null;
 
     /// <summary>The friend's backend's last check, while one is in use.</summary>
     public RemoteBackendStatus? RemoteStatus { get; private set; }
@@ -101,14 +104,14 @@ public sealed partial class BackendHost : IAsyncDisposable
     public string? AdminPanelUrl => State == BackendState.Ready && Port is { } port && !Target.Remote ? $"http://127.0.0.1:{port}{AdminPath}" : null;
 
     /// <summary>The registration page of the backend in use (local or friend's).</summary>
-    public string? RegisterUrl => State == BackendState.Ready && Port is { } port
-        ? (Target.Remote ? $"http://{Target.Host}:{port}{RegisterPath}" : $"http://127.0.0.1:{port}{RegisterPath}")
-        : (Target.Remote ? $"http://{Target.Host}:{Target.Port}{RegisterPath}" : null);
+    public string? RegisterUrl => PageUrl(RegisterPath);
 
     /// <summary>The player self-service portal page of the backend in use (local or friend's).</summary>
-    public string? PortalUrl => State == BackendState.Ready && Port is { } port
-        ? (Target.Remote ? $"http://{Target.Host}:{port}{PortalPath}" : $"http://127.0.0.1:{port}{PortalPath}")
-        : (Target.Remote ? $"http://{Target.Host}:{Target.Port}{PortalPath}" : null);
+    public string? PortalUrl => PageUrl(PortalPath);
+
+    private string? PageUrl(string path) => Target.Remote
+        ? $"{(Target with { Port = State == BackendState.Ready && Port is { } port ? port : Target.Port }).Endpoint.Url}{path}"
+        : State == BackendState.Ready && Port is { } local ? $"{BackendEndpoint.Local(local).Url}{path}" : null;
 
     public bool Running => !_run.IsCompleted;
 

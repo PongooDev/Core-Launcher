@@ -113,18 +113,8 @@ public sealed record ServerHostConfig
 
     public BackendEndpoint ParseEndpoint()
     {
-        var raw = BackendUrl;
-        if (!raw.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !raw.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-        {
-            raw = "http://" + raw;
-        }
-
-        if (Uri.TryCreate(raw, UriKind.Absolute, out var uri))
-        {
-            return new BackendEndpoint(uri.Host, uri.Port > 0 ? uri.Port : 5595);
-        }
-
-        return new BackendEndpoint("127.0.0.1", 5595);
+        // http://host[:port] (5595 by default), or https://host[:port] (443) for a backend behind an https reverse proxy.
+        return BackendEndpoint.TryParse(BackendUrl, out var endpoint, out _) ? endpoint : BackendEndpoint.Local(BackendEndpoint.DefaultPort);
     }
 
     public LauncherPaths ResolvePaths() =>

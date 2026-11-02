@@ -102,6 +102,13 @@ backend instead of running their own.
 While you play on a friend's backend the launcher runs no backend, and the admin panel stays on the host's PC. You need
 the same Fortnite build as the host. Choose **My own backend** to go back.
 
+**A backend behind an https domain** (a reverse proxy such as Caddy, nginx or a Cloudflare tunnel with a real
+certificate in front of Core-Backend): enter `https://your.domain` (port 443 unless you add one). The certificate is
+checked as a browser would, so it has to be valid for that name. The game then reaches the backend through CoreRedirect
+alone (no `-httpproxy`), and matchmaking and notifications use `wss://`. The proxy has to pass WebSocket upgrades and
+`X-Forwarded-Proto: https` on to the backend; XMPP (friends, parties, chat) is plain TCP that no HTTP proxy carries, so
+the backend's own port stays reachable at its public address for it.
+
 **Hosting servers for a friend's backend** (more servers, or servers in another region): with **Host servers** on, a
 launcher on a friend's backend hosts its servers for that backend (Core-Launcher #6):
 
@@ -151,7 +158,7 @@ Settings are saved in `%LOCALAPPDATA%\Core-Launcher\settings.json`.
 | Allow unsupported builds | Off | Gives builds Core doesn't support Core's defaults and lets them play and host (with a warning); builds whose Core options you set by hand are left alone. Supported and in-progress builds don't need it |
 | DLLs | Latest `PongooDev/CoreV2` release | Or a local folder with `Core.dll`, `CoreClient.dll`, `CoreRedirect.dll` |
 | Backend | Installed by the launcher | Or your own Core-Backend folder, or one that is already running |
-| Play on | My own backend | Or a friend's backend: a name and an address (`host` or `host:port`, port 5595 by default), with a saved list |
+| Play on | My own backend | Or a friend's backend: a name and an address (`host` or `host:port`, port 5595 by default, or `https://host` behind an https reverse proxy), with a saved list |
 | Port | `5595` | `0` lets the backend pick a free port |
 | Data folder | `Backend\data` | Your own folder uses its `data` folder, the one `npm start` uses |
 | Host servers | On | Autohost on or off |
