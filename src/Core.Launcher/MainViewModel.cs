@@ -781,7 +781,7 @@ public sealed partial class MainViewModel : ObservableObject
                 rows.Add(new ServerRowViewModel(_host.Servers, ShowServerLog));
             }
 
-            rows[index].Update(slots[index]);
+            rows[index].Update(slots[index], _host.ServerPlayers(slots[index]));
         }
     }
 
@@ -1078,9 +1078,19 @@ public sealed partial class ServerRowViewModel(ServerPool pool, Action<int> show
     [ObservableProperty]
     public partial bool Booting { get; set; }
 
-    public void Update(ServerSlotView slot)
+    /// <summary>"3 / 100 players" or "Empty" (Core-Launcher #10); blank when the backend doesn't say.</summary>
+    [ObservableProperty]
+    public partial string Players { get; set; } = "";
+
+    /// <summary>Someone is playing on it.</summary>
+    [ObservableProperty]
+    public partial bool Occupied { get; set; }
+
+    public void Update(ServerSlotView slot, SessionPlayers? players)
     {
         Instance = slot.Instance;
+        Players = players?.Describe() ?? "";
+        Occupied = players is { Current: > 0 };
         (State, StateBrush) = slot.State switch
         {
             ServerState.Ready => ("Ready", MainViewModel.Brush("GoodBrush")),

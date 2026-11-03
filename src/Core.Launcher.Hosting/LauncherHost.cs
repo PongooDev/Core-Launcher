@@ -34,6 +34,7 @@ public sealed class LauncherHost : IAsyncDisposable
     private readonly HttpClient _remoteCheck = RemoteBackendCheck.CreateHttpClient();
     private readonly BackendRegion _region = new(RemoteBackendCheck.CreateHttpClient(), TimeProvider.System);
     private readonly GameLauncher _launcher;
+    private readonly ServerStarter _starter;
     private readonly Dictionary<int, LogChannel> _serverLogs = [];
     private readonly Dictionary<string, LogChannel> _clientLogs = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<ClientSession> _clients = [];
@@ -67,7 +68,8 @@ public sealed class LauncherHost : IAsyncDisposable
         Updater = new LauncherUpdater(github, LauncherUpdater.RunningVersion, LauncherUpdater.PublishedExecutable(typeof(LauncherHost).Assembly), Log.Write);
         Backend = new BackendHost(_job, BackendLog, Log);
         _launcher = new GameLauncher(_job, Dlls, paths, Log);
-        Servers = new ServerPool(new ServerStarter(this), Log, TimeProvider.System);
+        _starter = new ServerStarter(this);
+        Servers = new ServerPool(_starter, Log, TimeProvider.System);
 
         Backend.Changed += OnChanged;
         Servers.Changed += OnChanged;
@@ -123,6 +125,12 @@ public sealed class LauncherHost : IAsyncDisposable
 
     private static string ServerLogin(LauncherSettings settings, int instance) =>
         settings.Backend.UseRemote ? settings.Servers.RemoteLoginFor(instance, Environment.MachineName) : settings.Servers.LoginFor(instance);
+
+    /// <summary>
+    /// The players in a ready server's matchmaking session (Core-Launcher #10), from the backend's session listing; null
+    /// for a server that isn't ready, or when the backend doesn't list it or doesn't count players (an older backend).
+    /// </summary>
+    public SessionPlayers? ServerPlayers(ServerSlotView slot) => slot.State == ServerState.Ready ? _starter.Players(slot.Instance, slot.Ports) : null;
 
     /// <summary>
     /// Why a friend's backend won't take this PC's servers, when it has said so: its Trusted Hosting IPs don't have this
@@ -716,5 +724,8 @@ public sealed class LauncherHost : IAsyncDisposable
             Backend() is { } backend
                 ? host._sessions.Check(backend, ServerLogin(host.Settings, instance), startedAt, ports)
                 : SessionCheck.Pending;
+
+        public SessionPlayers? Players(int instance, IReadOnlyList<int> ports) =>
+            Backend() is { } backend ? host._sessions.Players(backend, ServerLogin(host.Settings, instance), ports) : null;
     }
 }

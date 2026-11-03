@@ -84,6 +84,26 @@ public sealed class BackendSessions : IDisposable
     }
 
     /// <summary>
+    /// How many players the session of the server logged in as <paramref name="login"/> (or, when the session names no
+    /// owner, on one of <paramref name="ports"/>) has, from the latest listing of the backend at <paramref name="backend"/>
+    /// (Core-Launcher #10). Null when it isn't listed, the listing couldn't be read, or the backend is older and doesn't
+    /// count players. Never blocks: like <see cref="Check(BackendEndpoint, string, DateTimeOffset, IReadOnlyList{int})"/>
+    /// it reads the listing again in the background when that one is old.
+    /// </summary>
+    public SessionPlayers? Players(BackendEndpoint backend, string login, IReadOnlyList<int> ports)
+    {
+        if (Latest(backend)?.Sessions is not { } sessions)
+        {
+            return null;
+        }
+
+        // A server's earlier session can linger until the backend drops it: the newest one is the server's own.
+        return sessions.Where(session => Owns(session, login, ports))
+            .OrderByDescending(session => session.LastUpdated ?? DateTimeOffset.MinValue)
+            .FirstOrDefault()?.Players;
+    }
+
+    /// <summary>
     /// Whether the friend's backend at <paramref name="backend"/> lets this PC host for it, from the latest listing (a
     /// 403 refuses it); like <see cref="Check(BackendEndpoint, string, DateTimeOffset, IReadOnlyList{int})"/> it never
     /// blocks and reads the listing again in the background when that one is old.
@@ -167,14 +187,36 @@ public sealed class BackendSessions : IDisposable
         var port = item.TryGetProperty("serverPort", out var number) && number.ValueKind == JsonValueKind.Number && number.TryGetInt32(out var value) ? value : 0;
         DateTimeOffset? updated = item.TryGetProperty("lastUpdated", out var text) && text.ValueKind == JsonValueKind.String
             && DateTimeOffset.TryParse(text.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var parsed) ? parsed : null;
-        return new Session(owner, port, updated);
+        return new Session(owner, port, updated, ParsePlayers(item));
+    }
+
+    /// <summary>
+    /// A listed session's currentPlayers and maxPlayers (Core-Backend's sessionSummary); null when the backend doesn't
+    /// send them, so an older backend shows no player count.
+    /// </summary>
+    public static SessionPlayers? ParsePlayers(JsonElement session)
+    {
+        static int? Count(JsonElement item, string name) =>
+            item.ValueKind == JsonValueKind.Object && item.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number
+            && value.TryGetInt32(out var count) && count >= 0 ? count : null;
+
+        return Count(session, "currentPlayers") is { } current ? new SessionPlayers(current, Count(session, "maxPlayers") ?? 0) : null;
     }
 
     public void Dispose() => _http.Dispose();
 
-    private sealed record Session(string OwnerName, int ServerPort, DateTimeOffset? LastUpdated);
+    private sealed record Session(string OwnerName, int ServerPort, DateTimeOffset? LastUpdated, SessionPlayers? Players);
 
     /// <summary>One read of the listing: <see cref="Sessions"/> is null when it failed, <see cref="Unsupported"/> when the backend has no listing.</summary>
     // Forbidden: it answered 403, which a friend's backend answers a PC it doesn't trust to host.
     private sealed record Listing(BackendEndpoint Backend, DateTimeOffset ReadAt, IReadOnlyList<Session>? Sessions, bool Unsupported, bool Forbidden = false);
+}
+
+/// <summary>The players in a server's matchmaking session; <see cref="Max"/> is 0 when the backend doesn't say.</summary>
+public sealed record SessionPlayers(int Current, int Max)
+{
+    /// <summary>"Empty", "1 / 4 players", "3 players": shown on the server's card.</summary>
+    public string Describe() => Current == 0 ? "Empty"
+        : Max > 0 ? $"{Current} / {Max} players"
+        : Current == 1 ? "1 player" : $"{Current} players";
 }

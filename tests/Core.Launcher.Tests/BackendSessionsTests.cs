@@ -144,6 +144,80 @@ public sealed class BackendSessionsTests
         Assert.Equal(HostingAccess.Unknown, sessions.Access(friend));
     }
 
+    // Core-Launcher #10: each server's card shows how many players its session has.
+    private static string WithPlayers(string session, int current, int max) =>
+        session.Replace("\"currentPlayers\":0,\"maxPlayers\":4", $"\"currentPlayers\":{current},\"maxPlayers\":{max}");
+
+    private async Task<SessionPlayers?> PlayersAsync(string login, params int[] ports)
+    {
+        using var sessions = Sessions();
+        await sessions.RefreshAsync(Port, TestContext.Current.CancellationToken);
+        return sessions.Players(BackendEndpoint.Local(Port), login, ports);
+    }
+
+    [Fact]
+    public async Task EachServersPlayersAreReadFromItsSession()
+    {
+        List(WithPlayers(Session("CoreServer1", 7777, Started.AddSeconds(40)), 3, 100), Session("CoreServer2", 7778, Started.AddSeconds(40)));
+        Assert.Equal(new SessionPlayers(3, 100), await PlayersAsync("coreserver1", 7777));
+        Assert.Equal(new SessionPlayers(0, 4), await PlayersAsync("CoreServer2", 7778));
+        Assert.Null(await PlayersAsync("CoreServer3", 7779));
+    }
+
+    [Fact]
+    public async Task AServersNewestSessionGivesItsPlayers()
+    {
+        List(WithPlayers(Session("CoreServer1", 7777, Started.AddSeconds(-30)), 2, 4), WithPlayers(Session("CoreServer1", 7777, Started.AddSeconds(40)), 1, 4));
+        Assert.Equal(new SessionPlayers(1, 4), await PlayersAsync("CoreServer1", 7777));
+    }
+
+    [Fact]
+    public async Task AnOlderBackendWithoutPlayerCountsShowsNone()
+    {
+        List("""{"ownerName":"CoreServer1","serverPort":7777,"lastUpdated":"2026-10-22T12:00:40.000Z"}""");
+        Assert.Null(await PlayersAsync("CoreServer1", 7777));
+
+        // No listing at all (404), or an unreachable backend.
+        _routes[Url] = () => new HttpResponseMessage(HttpStatusCode.NotFound);
+        Assert.Null(await PlayersAsync("CoreServer1", 7777));
+        _routes[Url] = () => throw new HttpRequestException("No connection could be made");
+        Assert.Null(await PlayersAsync("CoreServer1", 7777));
+    }
+
+    [Theory]
+    [InlineData("""{"currentPlayers":3,"maxPlayers":100}""", 3, 100)]
+    [InlineData("""{"currentPlayers":0,"maxPlayers":4}""", 0, 4)]
+    [InlineData("""{"currentPlayers":2}""", 2, 0)]
+    [InlineData("""{"currentPlayers":2,"maxPlayers":"lots"}""", 2, 0)]
+    public void PlayerCountsAreParsed(string json, int current, int max)
+    {
+        using var document = System.Text.Json.JsonDocument.Parse(json);
+        Assert.Equal(new SessionPlayers(current, max), BackendSessions.ParsePlayers(document.RootElement));
+    }
+
+    [Theory]
+    [InlineData("""{}""")]
+    [InlineData("""{"maxPlayers":4}""")]
+    [InlineData("""{"currentPlayers":"3","maxPlayers":4}""")]
+    [InlineData("""{"currentPlayers":-1,"maxPlayers":4}""")]
+    [InlineData("""{"currentPlayers":1.5}""")]
+    [InlineData("""[]""")]
+    public void MissingOrBadPlayerCountsAreNull(string json)
+    {
+        using var document = System.Text.Json.JsonDocument.Parse(json);
+        Assert.Null(BackendSessions.ParsePlayers(document.RootElement));
+    }
+
+    [Theory]
+    [InlineData(0, 100, "Empty")]
+    [InlineData(0, 0, "Empty")]
+    [InlineData(3, 100, "3 / 100 players")]
+    [InlineData(1, 4, "1 / 4 players")]
+    [InlineData(1, 0, "1 player")]
+    [InlineData(5, 0, "5 players")]
+    public void PlayerCountsAreDescribed(int current, int max, string text) =>
+        Assert.Equal(text, new SessionPlayers(current, max).Describe());
+
     private static async Task WaitForAsync(Func<bool> condition)
     {
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
