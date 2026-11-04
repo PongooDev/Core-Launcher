@@ -286,6 +286,8 @@
                                 <TextBox Text="{Binding Settings.Servers.BattleRoyaleInstances, UpdateSourceTrigger=PropertyChanged}" Width="110" HorizontalAlignment="Left" />
                                 <TextBlock Style="{StaticResource Hint}" Text="On builds with Battle Royale (1.7.2 on), these run on top of the servers above, which host Save the World. Each match takes a server of its own." />
                                 <TextBlock Style="{StaticResource Hint}" Text="The servers' region is the first of the Server Regions on the backend's admin panel (Matchmaking), or NA when none is ticked; a friend's backend gives its own. A build's own -McpRegion (Settings → Builds) other than NA wins. Servers take it when they next start." />
+                                <CheckBox Style="{StaticResource Switch}" Content="Download server assets for hosted servers" IsChecked="{Binding Settings.Servers.DownloadServerAssets}" Margin="0,16,0,0" FontSize="14" />
+                                <TextBlock Style="{StaticResource Hint}" Text="Installs the build's pak of server-only assets (from Core-ServerAssets, checked by SHA-256) into its Paks folder before its servers start. Players don't need it." />
                                 <TextBlock Text="Ready timeout (seconds)" Style="{StaticResource Label}" />
                                 <TextBox Text="{Binding Settings.Servers.ReadyTimeoutSeconds, UpdateSourceTrigger=PropertyChanged}" Width="110" HorizontalAlignment="Left" />
                                 <TextBlock Style="{StaticResource Hint}" Text="A server that hasn't logged &quot;Server ready&quot; by then is restarted. 0 waits forever." />

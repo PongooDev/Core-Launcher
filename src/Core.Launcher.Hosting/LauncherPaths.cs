@@ -27,6 +27,9 @@ public sealed class LauncherPaths
     /// <summary>The managed backend's accounts and profiles; shared by every installed version.</summary>
     public string BackendData => Path.Combine(Backend, "data");
 
+    /// <summary>Core-ServerAssets' last good manifest (<see cref="Components.ServerAssets"/>).</summary>
+    public string ServerAssets => Path.Combine(Root, "ServerAssets");
+
     public string Logs => Path.Combine(Root, "Logs");
 
     public string CoreLogs => Path.Combine(Logs, "Core");

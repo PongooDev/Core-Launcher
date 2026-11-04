@@ -115,7 +115,7 @@ public sealed class ServerHostRunner : IAsyncDisposable
         _build = KnownBuilds.Create(detected.Folder, detected.Version, _config.AllowUnsupportedBuilds);
         _endpoint = _config.ParseEndpoint();
 
-        _starter = new GameServerStarter(_config, _build, _endpoint, _launcher, _paths, _sessions, _log, AddEvent);
+        _starter = new GameServerStarter(_config, _build, _endpoint, _launcher, _paths, _sessions, _log, AddEvent, new ServerAssets(_http, _paths.ServerAssets, _log.Write));
         _pool = new ServerPool(_starter, _log, TimeProvider.System);
 
         var totalInstances = _config.StandardServers + (KnownBuilds.HasBattleRoyale(_build.Changelist) ? _config.BattleRoyaleServers : 0);

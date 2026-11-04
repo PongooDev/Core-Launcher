@@ -111,6 +111,7 @@ public class SettingsIni
         SetDefault("Server", "PcName", "");
         SetDefault("Server", "ReadyTimeout", "180");
         SetDefault("Server", "AllowUnsupportedBuilds", "false");
+        SetDefault("Server", "DownloadServerAssets", "true");
         SetDefault("Paths", "DllsFolder", "");
         SetDefault("Paths", "DataFolder", "");
     }
@@ -160,6 +161,9 @@ public class SettingsIni
 
         ; Allow builds not officially verified with Core V2 (true / false)
         AllowUnsupportedBuilds=false
+
+        ; Install the build's server assets pak (server-only content from Core-ServerAssets, SHA-256 checked) into its Paks folder (true / false)
+        DownloadServerAssets=true
 
         [Paths]
         ; Custom Core DLLs folder (empty uses cached Core V2 release DLLs)
@@ -218,6 +222,10 @@ public class SettingsIni
         builder.AppendLine($"AllowUnsupportedBuilds={Get("Server", "AllowUnsupportedBuilds") ?? "false"}");
         builder.AppendLine();
 
+        builder.AppendLine("; Install the build's server assets pak (server-only content from Core-ServerAssets, SHA-256 checked) into its Paks folder (true / false)");
+        builder.AppendLine($"DownloadServerAssets={Get("Server", "DownloadServerAssets") ?? "true"}");
+        builder.AppendLine();
+
         builder.AppendLine("[Paths]");
         builder.AppendLine("; Custom Core DLLs folder (empty uses cached Core V2 release DLLs)");
         builder.AppendLine($"DllsFolder={Get("Paths", "DllsFolder") ?? ""}");
@@ -270,7 +278,8 @@ public class SettingsIni
                    key.Equals("Login", StringComparison.OrdinalIgnoreCase) ||
                    key.Equals("PcName", StringComparison.OrdinalIgnoreCase) ||
                    key.Equals("ReadyTimeout", StringComparison.OrdinalIgnoreCase) ||
-                   key.Equals("AllowUnsupportedBuilds", StringComparison.OrdinalIgnoreCase);
+                   key.Equals("AllowUnsupportedBuilds", StringComparison.OrdinalIgnoreCase) ||
+                   key.Equals("DownloadServerAssets", StringComparison.OrdinalIgnoreCase);
         }
 
         if (section.Equals("Paths", StringComparison.OrdinalIgnoreCase))

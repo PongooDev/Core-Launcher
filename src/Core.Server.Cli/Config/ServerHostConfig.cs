@@ -14,6 +14,7 @@ public sealed record ServerHostConfig
     public string PcName { get; init; } = "";
     public int ReadyTimeoutSeconds { get; init; } = 180;
     public bool AllowUnsupportedBuilds { get; init; }
+    public bool DownloadServerAssets { get; init; } = true;
     public string DllsFolder { get; init; } = "";
     public string DataFolder { get; init; } = "";
     public bool HelpRequested { get; init; }
@@ -30,6 +31,7 @@ public sealed record ServerHostConfig
         var pcName = ini.Get("Server", "PcName") ?? "";
         var timeout = int.TryParse(ini.Get("Server", "ReadyTimeout"), out var t) ? Math.Max(0, t) : 180;
         var unsupported = bool.TryParse(ini.Get("Server", "AllowUnsupportedBuilds"), out var unsupp) && unsupp;
+        var serverAssets = !bool.TryParse(ini.Get("Server", "DownloadServerAssets"), out var assets) || assets;
         var dllsFolder = ini.Get("Paths", "DllsFolder") ?? "";
         var dataFolder = ini.Get("Paths", "DataFolder") ?? "";
 
@@ -104,6 +106,7 @@ public sealed record ServerHostConfig
             PcName = pcName.Trim(),
             ReadyTimeoutSeconds = timeout,
             AllowUnsupportedBuilds = unsupported,
+            DownloadServerAssets = serverAssets,
             DllsFolder = dllsFolder.Trim(),
             DataFolder = dataFolder.Trim(),
             HelpRequested = help,
@@ -131,6 +134,7 @@ public sealed record ServerHostConfig
         ini.Set("Server", "PcName", PcName);
         ini.Set("Server", "ReadyTimeout", ReadyTimeoutSeconds.ToString());
         ini.Set("Server", "AllowUnsupportedBuilds", AllowUnsupportedBuilds ? "true" : "false");
+        ini.Set("Server", "DownloadServerAssets", DownloadServerAssets ? "true" : "false");
         ini.Set("Paths", "DllsFolder", DllsFolder);
         ini.Set("Paths", "DataFolder", DataFolder);
     }

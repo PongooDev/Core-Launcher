@@ -68,11 +68,13 @@ public sealed class LauncherHost : IAsyncDisposable
         Updater = new LauncherUpdater(github, LauncherUpdater.RunningVersion, LauncherUpdater.PublishedExecutable(typeof(LauncherHost).Assembly), Log.Write);
         Backend = new BackendHost(_job, BackendLog, Log);
         _launcher = new GameLauncher(_job, Dlls, paths, Log);
+        ServerAssets = new ServerAssets(_http, paths.ServerAssets, Log.Write);
         _starter = new ServerStarter(this);
         Servers = new ServerPool(_starter, Log, TimeProvider.System);
 
         Backend.Changed += OnChanged;
         Servers.Changed += OnChanged;
+        ServerAssets.Checked += Servers.Tick;
     }
 
     public LauncherPaths Paths { get; }
@@ -94,6 +96,9 @@ public sealed class LauncherHost : IAsyncDisposable
     public BackendHost Backend { get; }
 
     public ServerPool Servers { get; }
+
+    /// <summary>The hosted build's server assets pak (Core-ServerAssets), checked before its first server starts.</summary>
+    public ServerAssets ServerAssets { get; }
 
     public IReadOnlyList<ClientSession> Clients
     {
@@ -389,6 +394,16 @@ public sealed class LauncherHost : IAsyncDisposable
             _ = RestartBackendAsync();
         }
 
+        if (previous is not null && previous.Servers.DownloadServerAssets != settings.Servers.DownloadServerAssets)
+        {
+            ServerAssets.Reset();
+            if (!settings.Servers.DownloadServerAssets)
+            {
+                var builds = settings.Builds.Select(build => build.Path).ToList();
+                _ = Task.Run(() => ServerAssets.RemoveFrom(builds));
+            }
+        }
+
         Servers.Configure(KnownBuilds.ServerCount(settings.Servers, settings.FindSelectedBuild()), TimeSpan.FromSeconds(settings.Servers.ReadyTimeoutSeconds));
         // On a friend's backend the servers here host for theirs (Core-Launcher #6), under logins of their own
         // (ServerSettings.RemoteLoginFor), once it trusts this PC's IP.
@@ -640,6 +655,12 @@ public sealed class LauncherHost : IAsyncDisposable
                 return "checking for updates";
             }
 
+            // The build's server assets pak goes in before its first server boots; failures are logged, never blocking.
+            if (host.ServerAssets.Pending(build.Path, build.Changelist, host.Settings.Servers.DownloadServerAssets, host._shutdown.Token) is { } assets)
+            {
+                return assets;
+            }
+
             if (Backend() is not { } backend)
             {
                 return host.Settings.Backend.UseRemote ? $"waiting for {host.BackendDescription}" : "waiting for the backend";
@@ -698,6 +719,11 @@ public sealed class LauncherHost : IAsyncDisposable
             output.Write(KnownBuilds.OwnServerRegion(build.ServerArguments) is { } own
                 ? $"(launcher) Region {own}: the build's own -McpRegion (Settings → Builds)"
                 : $"(launcher) Region {region}: the backend's first Server Region (admin panel → Matchmaking), NA when none is ticked");
+
+            if (host.ServerAssets.Status is { Length: > 0 } assets)
+            {
+                output.Write($"(launcher) Server assets: {assets}");
+            }
 
             WarnAboutSupport(build, output);
             WriteServerConfig();

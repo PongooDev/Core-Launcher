@@ -156,6 +156,12 @@ public sealed class ServerSettings
     /// </summary>
     public int BattleRoyaleInstances { get; set; } = 2;
 
+    /// <summary>
+    /// Before a build's servers start, install its server assets pak (server-only content the PC paks lack) from
+    /// Core-ServerAssets into its Paks folder, verified by SHA-256 (<see cref="Components.ServerAssets"/>). Off removes Core's pak.
+    /// </summary>
+    public bool DownloadServerAssets { get; set; } = true;
+
     /// <summary>A server that hasn't logged "Server ready" by then is restarted; 0 waits forever.</summary>
     public int ReadyTimeoutSeconds { get; set; } = 180;
 

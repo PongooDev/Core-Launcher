@@ -1,6 +1,7 @@
 using Core.Launcher.Hosting;
 using Core.Launcher.Hosting.Backend;
 using Core.Launcher.Hosting.Builds;
+using Core.Launcher.Hosting.Components;
 using Core.Launcher.Hosting.Logging;
 using Core.Launcher.Hosting.Processes;
 using Core.Launcher.Hosting.Servers;
@@ -20,6 +21,7 @@ public sealed class GameServerStarter : IServerStarter
     private readonly LogChannel _log;
     private readonly Dictionary<int, LogChannel> _serverLogs = [];
     private readonly Action<string>? _onEvent;
+    private readonly ServerAssets? _serverAssets;
     private readonly Dictionary<int, bool> _slotTypes = [];
 
     // The login each slot's server was started with. Removing a slot renumbers the ones after it while their servers
@@ -63,7 +65,8 @@ public sealed class GameServerStarter : IServerStarter
         LauncherPaths paths,
         BackendSessions sessions,
         LogChannel log,
-        Action<string>? onEvent = null)
+        Action<string>? onEvent = null,
+        ServerAssets? serverAssets = null)
     {
         _config = config;
         _build = build;
@@ -73,6 +76,7 @@ public sealed class GameServerStarter : IServerStarter
         _sessions = sessions;
         _log = log;
         _onEvent = onEvent;
+        _serverAssets = serverAssets;
     }
 
     public string? Blocker()
@@ -80,6 +84,12 @@ public sealed class GameServerStarter : IServerStarter
         if (!KnownBuilds.CanHost(_build))
         {
             return KnownBuilds.NotSupported(_build, _config.AllowUnsupportedBuilds);
+        }
+
+        // The build's server assets pak goes in before its first server boots; failures are logged, never blocking.
+        if (_serverAssets?.Pending(_build.Path, _build.Changelist, _config.DownloadServerAssets, CancellationToken.None) is { } assets)
+        {
+            return assets;
         }
 
         var isLocal = IsLoopback(_endpoint.Host);
@@ -105,6 +115,11 @@ public sealed class GameServerStarter : IServerStarter
 
         output.Write($"(server-host) --- {DateTime.Now:yyyy-MM-dd HH:mm:ss} ---");
         output.Write($"(server-host) Starting instance {instance} for {_endpoint.Url} as {login}");
+
+        if (_serverAssets?.Status is { Length: > 0 } assets)
+        {
+            output.Write($"(server-host) Server assets: {assets}");
+        }
 
         if (KnownBuilds.SupportWarning(_build) is { } warning)
         {
