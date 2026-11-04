@@ -17,9 +17,9 @@ public sealed class ServerAssetsTests
 
     private static readonly byte[] SigBytes = Encoding.ASCII.GetBytes("not a real sig either");
 
-    private static string Manifest(string? sha256 = null, long? size = null, string url = PakUrl, int changelist = 3901517, string? sig = null) => $$"""
+    private static string Manifest(string? sha256 = null, long? size = null, string url = PakUrl, int changelist = 3901517, string? sig = null, int? schema = null) => $$"""
         {
-          "schema": 1,
+          "schema": {{schema ?? (sig is null ? 1 : 2)}},
           "builds": {
             "{{changelist}}": {
               "version": "3.0",
@@ -66,7 +66,8 @@ public sealed class ServerAssetsTests
 
     [Theory]
     [InlineData("""{ "builds": {} }""")]
-    [InlineData("""{ "schema": 2, "builds": {} }""")]
+    [InlineData("""{ "schema": 3, "builds": {} }""")]
+    [InlineData("""{ "schema": 0, "builds": {} }""")]
     [InlineData("""{ "schema": 1, "builds": [] }""")]
     [InlineData("""{ "schema": 1, "builds": { "3.0": {} } }""")]
     [InlineData("not json")]
@@ -270,6 +271,11 @@ public sealed class ServerAssetsTests
     [Fact]
     public void RefusesSigsThatArentSafe()
     {
+        // A sig needs schema 2: launchers that only read schema 1 then install nothing, instead of the pak without its sig.
+        Assert.Throws<InvalidDataException>(() => ServerAssetsManifest.Parse(Manifest(sig: Sig(), schema: 1)));
+        Assert.Equal(2, ServerAssetsManifest.Parse(Manifest(schema: 2)).Schema);
+        Assert.Null(ServerAssetsManifest.Parse(Manifest(schema: 2)).For(3901517)!.Sig);
+
         Assert.Throws<InvalidDataException>(() => ServerAssetsManifest.Parse(Manifest(sig: "\"ServerAssets-3.0-CL-3901517.sig\"")));
         Assert.Throws<InvalidDataException>(() => ServerAssetsManifest.Parse(Manifest(sig: "{}")));
         Assert.Throws<InvalidDataException>(() => ServerAssetsManifest.Parse(Manifest(sig: Sig(file: "ServerAssets-3.0-CL-3901517.pak"))));
@@ -401,6 +407,24 @@ public sealed class ServerAssetsTests
         File.WriteAllBytes(Path.Combine(paks, "pakchunkCoreServerAssets-WindowsClient_P.sig"), SigBytes);
         Assert.Contains("none published", await assets.EnsureAsync(build, 3901517, true, TestContext.Current.CancellationToken));
         Assert.Equal(["pakchunk0-WindowsClient.pak", "pakchunk0-WindowsClient.sig"], Directory.GetFiles(paks).Select(Path.GetFileName).Order());
+    }
+
+    /// <summary>A real Core-ServerAssets manifest.json, from CORE_SERVER_ASSETS_MANIFEST (a path), for checking an edit before it's pushed.</summary>
+    [Fact]
+    public void ParsesTheRealManifest()
+    {
+        var path = Environment.GetEnvironmentVariable("CORE_SERVER_ASSETS_MANIFEST");
+        if (string.IsNullOrEmpty(path))
+        {
+            Assert.Skip("Set CORE_SERVER_ASSETS_MANIFEST to a Core-ServerAssets manifest.json to run this");
+        }
+
+        var manifest = ServerAssetsManifest.Parse(File.ReadAllText(path));
+        foreach (var entry in manifest.Builds.Values)
+        {
+            TestContext.Current.SendDiagnosticMessage($"CL-{entry.Changelist} {entry.Version}: {entry.Pak} {entry.Size} {entry.Sha256}, sig {entry.Sig?.File ?? "none"}, {entry.Contents.Count} assets");
+            Assert.NotEmpty(entry.Contents);
+        }
     }
 
     private static (string Build, string Paks) Build(TempFolder folder)

@@ -18,7 +18,15 @@ public sealed record ServerAssetsEntry(int Changelist, string Version, string Pa
 /// </summary>
 public sealed record ServerAssetsManifest(int Schema, IReadOnlyDictionary<int, ServerAssetsEntry> Builds)
 {
-    public const int SupportedSchema = 1;
+    /// <summary>
+    /// The newest schema this launcher reads. Schema 2 added <c>sig</c>, and a manifest with a sig must say schema 2:
+    /// launchers before 1.0.14 would ignore a sig, installing a pak its build refuses to start with, but they (and
+    /// 1.0.14) read only schema 1, so on schema 2 they read no manifest at all and install nothing.
+    /// </summary>
+    public const int SupportedSchema = 2;
+
+    /// <summary>The first schema with <c>sig</c>.</summary>
+    public const int SigSchema = 2;
 
     public ServerAssetsEntry? For(int changelist) => Builds.GetValueOrDefault(changelist);
 
@@ -34,9 +42,9 @@ public sealed record ServerAssetsManifest(int Schema, IReadOnlyDictionary<int, S
                 throw new InvalidDataException("manifest.json has no schema");
             }
 
-            if (schema != SupportedSchema)
+            if (schema < 1 || schema > SupportedSchema)
             {
-                throw new InvalidDataException($"manifest.json is schema {schema}; this launcher reads schema {SupportedSchema} (update the launcher)");
+                throw new InvalidDataException($"manifest.json is schema {schema}; this launcher reads schemas 1 to {SupportedSchema} (update the launcher)");
             }
 
             var builds = new Dictionary<int, ServerAssetsEntry>();
@@ -50,7 +58,7 @@ public sealed record ServerAssetsManifest(int Schema, IReadOnlyDictionary<int, S
                 foreach (var build in list.EnumerateObject())
                 {
                     var changelist = ParseChangelist(build.Name);
-                    builds[changelist] = ParseEntry(changelist, build.Value);
+                    builds[changelist] = ParseEntry(schema, changelist, build.Value);
                 }
             }
 
@@ -67,7 +75,7 @@ public sealed record ServerAssetsManifest(int Schema, IReadOnlyDictionary<int, S
             ? changelist
             : throw new InvalidDataException($"manifest.json: \"{name}\" isn't a changelist");
 
-    private static ServerAssetsEntry ParseEntry(int changelist, JsonElement entry)
+    private static ServerAssetsEntry ParseEntry(int schema, int changelist, JsonElement entry)
     {
         if (entry.ValueKind != JsonValueKind.Object)
         {
@@ -78,6 +86,11 @@ public sealed record ServerAssetsManifest(int Schema, IReadOnlyDictionary<int, S
         ServerAssetsFile? sig = null;
         if (entry.TryGetProperty("sig", out var sigValue))
         {
+            if (schema < SigSchema)
+            {
+                throw new InvalidDataException($"manifest.json: CL {changelist} has a sig, which needs schema {SigSchema} (older launchers would install its pak without it)");
+            }
+
             if (sigValue.ValueKind != JsonValueKind.Object)
             {
                 throw new InvalidDataException($"manifest.json: CL {changelist}'s sig isn't an object");
