@@ -91,6 +91,15 @@ public static partial class KnownBuilds
     public const int Fortnite32 = 3935073;
 
     /// <summary>
+    /// Fortnite 3.3, ++Fortnite+Release-3.3 CL-3942182 on UE 4.20.0, released 15 March 2018: Battle Royale gets Remote Explosives
+    /// (a rare, aim-down-sights detonated explosive, stacks of 4) and the Supply Llama (3 per match at random spots, opened
+    /// like a chest), loses the Smoke Grenade to the vault, and the Hunting Rifle drops its 'No Scope' name. Treasure chests
+    /// get 500 health and ammo boxes 250. The Blitz mode (short storm, more loot) is enabled on 19 March. Save the World gets
+    /// the Luck of the Storm questline and the Shamrock Reclaimer Outlander, and reverts v3.2's Critical Chance change.
+    /// </summary>
+    public const int Fortnite33 = 3942182;
+
+    /// <summary>
     /// What a Battle Royale server gets. Core takes the map and playlist from the build's own data (on 1.7.2 the Battle
     /// Royale zone theme's Athena_Terrain and solo playlist; the match's playlist comes with its assignment) and
     /// registers the server with the matchmaking service that Battle Royale's players queue on, so the launcher needs no
@@ -179,7 +188,8 @@ public static partial class KnownBuilds
         new(Fortnite25, "2.5", "Fortnite 2.5 (CL-3889387)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite30, "3.0", "Fortnite 3.0 (CL-3901517)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite31, "3.1", "Fortnite 3.1 (CL-3915963)", BuildSupport.Full, [], BattleRoyale: true),
-        new(Fortnite32, "3.2", "Fortnite 3.2 (CL-3935073)", BuildSupport.InProgress, [], BattleRoyale: true),
+        new(Fortnite32, "3.2", "Fortnite 3.2 (CL-3935073)", BuildSupport.Full, [], BattleRoyale: true),
+        new(Fortnite33, "3.3", "Fortnite 3.3 (CL-3942182)", BuildSupport.InProgress, [], BattleRoyale: true),
     ];
 
     private static KnownBuild? Find(int changelist) => Array.Find(Builds, build => build.Changelist == changelist);
