@@ -13,7 +13,11 @@ public sealed class ServerAssetsTests
 
     private static string Hash(byte[] bytes) => Convert.ToHexStringLower(SHA256.HashData(bytes));
 
-    private static string Manifest(string? sha256 = null, long? size = null, string url = PakUrl, int changelist = 3901517) => $$"""
+    private const string SigUrl = ServerAssets.ReleaseUrlPrefix + "cl-3901517/ServerAssets-3.0-CL-3901517.sig";
+
+    private static readonly byte[] SigBytes = Encoding.ASCII.GetBytes("not a real sig either");
+
+    private static string Manifest(string? sha256 = null, long? size = null, string url = PakUrl, int changelist = 3901517, string? sig = null) => $$"""
         {
           "schema": 1,
           "builds": {
@@ -22,12 +26,17 @@ public sealed class ServerAssetsTests
               "pak": "ServerAssets-3.0-CL-3901517.pak",
               "url": "{{url}}",
               "sha256": "{{sha256 ?? Hash(PakBytes)}}",
-              "size": {{size ?? PakBytes.Length}},
+              "size": {{size ?? PakBytes.Length}},{{(sig is null ? "" : $"\n      \"sig\": {sig},")}}
               "contents": ["/Game/Athena/Maps/Athena_LocationVolumes", "/Game/Athena/Maps/Streaming/Athena_GameplayActors"]
             }
           }
         }
         """;
+
+    private static string Sig(string file = "ServerAssets-3.0-CL-3901517.sig", string url = SigUrl, string? sha256 = null, long? size = null) =>
+        $$"""{ "file": "{{file}}", "url": "{{url}}", "sha256": "{{sha256 ?? Hash(SigBytes)}}", "size": {{size ?? SigBytes.Length}} }""";
+
+    private static string SignedManifest() => Manifest(sig: Sig());
 
     [Fact]
     public void ParsesTheManifest()
@@ -243,6 +252,155 @@ public sealed class ServerAssetsTests
         await checkedOnce.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
         Assert.Null(assets.Pending(build, 3901517, true, TestContext.Current.CancellationToken));
         Assert.Contains("none published for CL-3901517", assets.Status);
+    }
+
+    [Fact]
+    public void ParsesASig()
+    {
+        Assert.Null(ServerAssetsManifest.Parse(Manifest()).For(3901517)!.Sig);
+
+        var sig = ServerAssetsManifest.Parse(SignedManifest()).For(3901517)!.Sig!;
+        Assert.Equal("ServerAssets-3.0-CL-3901517.sig", sig.File);
+        Assert.Equal(SigUrl, sig.Url);
+        Assert.Equal(Hash(SigBytes), sig.Sha256);
+        Assert.Equal(SigBytes.Length, sig.Size);
+        Assert.Equal(Hash(SigBytes), ServerAssetsManifest.Parse(Manifest(sig: Sig(sha256: Hash(SigBytes).ToUpperInvariant()))).For(3901517)!.Sig!.Sha256);
+    }
+
+    [Fact]
+    public void RefusesSigsThatArentSafe()
+    {
+        Assert.Throws<InvalidDataException>(() => ServerAssetsManifest.Parse(Manifest(sig: "\"ServerAssets-3.0-CL-3901517.sig\"")));
+        Assert.Throws<InvalidDataException>(() => ServerAssetsManifest.Parse(Manifest(sig: "{}")));
+        Assert.Throws<InvalidDataException>(() => ServerAssetsManifest.Parse(Manifest(sig: Sig(file: "ServerAssets-3.0-CL-3901517.pak"))));
+        Assert.Throws<InvalidDataException>(() => ServerAssetsManifest.Parse(Manifest(sig: Sig(file: "..\\\\evil.sig"))));
+        Assert.Throws<InvalidDataException>(() => ServerAssetsManifest.Parse(Manifest(sig: Sig(url: "https://example.com/ServerAssets.sig"))));
+        Assert.Throws<InvalidDataException>(() => ServerAssetsManifest.Parse(Manifest(sig: Sig(sha256: "abc"))));
+        Assert.Throws<InvalidDataException>(() => ServerAssetsManifest.Parse(Manifest(sig: Sig(size: 0))));
+    }
+
+    [Fact]
+    public void DecidesWhatToDoWithASig()
+    {
+        var signed = ServerAssetsManifest.Parse(SignedManifest());
+        var unsigned = ServerAssetsManifest.Parse(Manifest());
+        var sig = new InstalledFile(SigBytes.Length, Hash(SigBytes));
+        var pak = new InstalledPak(PakBytes.Length, Hash(PakBytes));
+
+        Assert.Equal(ServerAssetsAction.UpToDate, ServerAssets.Decide(true, 3901517, signed, pak with { Sig = sig }).Action);
+        Assert.Equal(ServerAssetsAction.Install, ServerAssets.Decide(true, 3901517, signed, pak).Action);
+        Assert.Equal(ServerAssetsAction.Install, ServerAssets.Decide(true, 3901517, signed, pak with { Sig = sig with { Sha256 = new string('0', 64) } }).Action);
+        Assert.Equal(ServerAssetsAction.Install, ServerAssets.Decide(true, 3901517, signed, pak with { Sig = sig with { Size = 1 } }).Action);
+
+        // A build that doesn't sign its paks: no sig wanted, so one left from an older entry means reinstalling without it.
+        Assert.Equal(ServerAssetsAction.UpToDate, ServerAssets.Decide(true, 3901517, unsigned, pak).Action);
+        Assert.Equal(ServerAssetsAction.Install, ServerAssets.Decide(true, 3901517, unsigned, pak with { Sig = sig }).Action);
+    }
+
+    [Fact]
+    public async Task InstallsThePakWithItsSig()
+    {
+        using var folder = new TempFolder();
+        var (build, paks) = Build(folder);
+        var routes = new Routes { [ServerAssets.ManifestUrl] = Text(SignedManifest()), [PakUrl] = Bytes(PakBytes), [SigUrl] = Bytes(SigBytes) };
+        var assets = new ServerAssets(new HttpClient(routes), folder.Combine("Cache"), _ => { });
+
+        var result = await assets.EnsureAsync(build, 3901517, true, TestContext.Current.CancellationToken);
+
+        Assert.Contains("installed", result);
+        Assert.Contains("pakchunkCoreServerAssets-WindowsClient_P.sig", result);
+        Assert.Equal(PakBytes, File.ReadAllBytes(Path.Combine(paks, "pakchunkCoreServerAssets-WindowsClient_P.pak")));
+        Assert.Equal(SigBytes, File.ReadAllBytes(Path.Combine(paks, "pakchunkCoreServerAssets-WindowsClient_P.sig")));
+        Assert.Equal(3, Directory.GetFiles(paks).Length);
+
+        // Up to date: neither is downloaded again.
+        routes.Remove(PakUrl);
+        routes.Remove(SigUrl);
+        Assert.Contains("is installed", await assets.EnsureAsync(build, 3901517, true, TestContext.Current.CancellationToken));
+
+        // The sig went missing: both are installed again.
+        File.Delete(Path.Combine(paks, "pakchunkCoreServerAssets-WindowsClient_P.sig"));
+        routes[PakUrl] = Bytes(PakBytes);
+        routes[SigUrl] = Bytes(SigBytes);
+        Assert.Contains("updating", await assets.EnsureAsync(build, 3901517, true, TestContext.Current.CancellationToken));
+        Assert.Equal(SigBytes, File.ReadAllBytes(Path.Combine(paks, "pakchunkCoreServerAssets-WindowsClient_P.sig")));
+    }
+
+    [Fact]
+    public async Task NeverInstallsAPakWithoutItsSig()
+    {
+        using var folder = new TempFolder();
+        var (build, paks) = Build(folder);
+        var routes = new Routes { [ServerAssets.ManifestUrl] = Text(SignedManifest()), [PakUrl] = Bytes(PakBytes), [SigUrl] = Bytes([.. SigBytes, 0]) };
+        var assets = new ServerAssets(new HttpClient(routes), folder.Combine("Cache"), _ => { });
+
+        // The sig doesn't match: neither is installed, and no download is left behind.
+        Assert.StartsWith("skipped", await assets.EnsureAsync(build, 3901517, true, TestContext.Current.CancellationToken));
+        Assert.Equal(["pakchunk0-WindowsClient.pak"], Directory.GetFiles(paks).Select(Path.GetFileName));
+
+        // The sig can't be downloaded at all.
+        routes.Remove(SigUrl);
+        Assert.StartsWith("skipped", await assets.EnsureAsync(build, 3901517, true, TestContext.Current.CancellationToken));
+        Assert.Equal(["pakchunk0-WindowsClient.pak"], Directory.GetFiles(paks).Select(Path.GetFileName));
+    }
+
+    [Fact]
+    public async Task AFailedUpdateKeepsTheInstalledPakAndSig()
+    {
+        using var folder = new TempFolder();
+        var (build, paks) = Build(folder);
+        var pak = Path.Combine(paks, "pakchunkCoreServerAssets-WindowsClient_P.pak");
+        var sig = Path.Combine(paks, "pakchunkCoreServerAssets-WindowsClient_P.sig");
+        File.WriteAllText(pak, "an older pak");
+        File.WriteAllText(sig, "its sig");
+        var routes = new Routes { [ServerAssets.ManifestUrl] = Text(SignedManifest()), [PakUrl] = Bytes(PakBytes), [SigUrl] = Bytes(Encoding.ASCII.GetBytes("a tampered sig")) };
+        var assets = new ServerAssets(new HttpClient(routes), folder.Combine("Cache"), _ => { });
+
+        Assert.StartsWith("skipped", await assets.EnsureAsync(build, 3901517, true, TestContext.Current.CancellationToken));
+        Assert.Equal("an older pak", File.ReadAllText(pak));
+        Assert.Equal("its sig", File.ReadAllText(sig));
+        Assert.Equal(3, Directory.GetFiles(paks).Length);
+    }
+
+    [Fact]
+    public async Task InstallsNoSigWhenTheManifestHasNone()
+    {
+        using var folder = new TempFolder();
+        var (build, paks) = Build(folder);
+        var sig = Path.Combine(paks, "pakchunkCoreServerAssets-WindowsClient_P.sig");
+        File.WriteAllBytes(Path.Combine(paks, "pakchunkCoreServerAssets-WindowsClient_P.pak"), PakBytes);
+        File.WriteAllBytes(sig, SigBytes);
+        var routes = new Routes { [ServerAssets.ManifestUrl] = Text(Manifest()), [PakUrl] = Bytes(PakBytes), [SigUrl] = Bytes(SigBytes) };
+        var assets = new ServerAssets(new HttpClient(routes), folder.Combine("Cache"), _ => { });
+
+        // A sig from an older entry goes with the reinstall.
+        Assert.Contains("installed", await assets.EnsureAsync(build, 3901517, true, TestContext.Current.CancellationToken));
+        Assert.False(File.Exists(sig));
+        Assert.Contains("is installed", await assets.EnsureAsync(build, 3901517, true, TestContext.Current.CancellationToken));
+        Assert.Equal(["pakchunk0-WindowsClient.pak", "pakchunkCoreServerAssets-WindowsClient_P.pak"], Directory.GetFiles(paks).Select(Path.GetFileName).Order());
+    }
+
+    [Fact]
+    public async Task RemovesThePakAndSigTogether()
+    {
+        using var folder = new TempFolder();
+        var (build, paks) = Build(folder);
+        File.WriteAllText(Path.Combine(paks, "pakchunk0-WindowsClient.sig"), "game sig");
+        File.WriteAllBytes(Path.Combine(paks, "pakchunkCoreServerAssets-WindowsClient_P.pak"), PakBytes);
+        File.WriteAllBytes(Path.Combine(paks, "pakchunkCoreServerAssets-WindowsClient_P.sig"), SigBytes);
+        File.WriteAllText(Path.Combine(paks, "pakchunkCoreServerAssets-WindowsClient_P.sig.download"), "half");
+        var routes = new Routes { [ServerAssets.ManifestUrl] = Text("""{ "schema": 1, "builds": {} }""") };
+        var assets = new ServerAssets(new HttpClient(routes), folder.Combine("Cache"), _ => { });
+
+        var result = await assets.EnsureAsync(build, 3901517, true, TestContext.Current.CancellationToken);
+
+        Assert.StartsWith("removed pakchunkCoreServerAssets-WindowsClient_P.pak and pakchunkCoreServerAssets-WindowsClient_P.sig", result);
+        Assert.Equal(["pakchunk0-WindowsClient.pak", "pakchunk0-WindowsClient.sig"], Directory.GetFiles(paks).Select(Path.GetFileName).Order());
+
+        // A sig left without its pak goes too, even with nothing published.
+        File.WriteAllBytes(Path.Combine(paks, "pakchunkCoreServerAssets-WindowsClient_P.sig"), SigBytes);
+        Assert.Contains("none published", await assets.EnsureAsync(build, 3901517, true, TestContext.Current.CancellationToken));
+        Assert.Equal(["pakchunk0-WindowsClient.pak", "pakchunk0-WindowsClient.sig"], Directory.GetFiles(paks).Select(Path.GetFileName).Order());
     }
 
     private static (string Build, string Paks) Build(TempFolder folder)

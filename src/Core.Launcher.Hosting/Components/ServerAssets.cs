@@ -3,12 +3,18 @@ using System.Text.Json;
 
 namespace Core.Launcher.Hosting.Components;
 
-/// <summary>One build's server assets pak in the Core-ServerAssets manifest.</summary>
-public sealed record ServerAssetsEntry(int Changelist, string Version, string Pak, string Url, string Sha256, long Size, IReadOnlyList<string> Contents);
+/// <summary>A release asset the manifest names: its file name, download URL, SHA-256 and size.</summary>
+public sealed record ServerAssetsFile(string File, string Url, string Sha256, long Size);
+
+/// <summary>
+/// One build's server assets pak in the Core-ServerAssets manifest, and its <see cref="Sig"/>: the signature file a
+/// build that signs its paks needs next to every pak (null for builds that don't).
+/// </summary>
+public sealed record ServerAssetsEntry(int Changelist, string Version, string Pak, string Url, string Sha256, long Size, IReadOnlyList<string> Contents, ServerAssetsFile? Sig = null);
 
 /// <summary>
 /// Core-ServerAssets' manifest.json: <c>{ "schema": 1, "builds": { "&lt;changelist&gt;": { "version", "pak", "url",
-/// "sha256", "size", "contents" } } }</c>.
+/// "sha256", "size", "contents", "sig"? } } }</c>, where the optional <c>sig</c> is <c>{ "file", "url", "sha256", "size" }</c>.
 /// </summary>
 public sealed record ServerAssetsManifest(int Schema, IReadOnlyDictionary<int, ServerAssetsEntry> Builds)
 {
@@ -68,40 +74,61 @@ public sealed record ServerAssetsManifest(int Schema, IReadOnlyDictionary<int, S
             throw new InvalidDataException($"manifest.json: CL {changelist} isn't an object");
         }
 
-        string Text(string name) =>
-            entry.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String && value.GetString() is { Length: > 0 } text
-                ? text
-                : throw new InvalidDataException($"manifest.json: CL {changelist} has no {name}");
-
-        var pak = Text("pak");
-        if (!pak.EndsWith(".pak", StringComparison.OrdinalIgnoreCase) || pak.IndexOfAny(['/', '\\', ':']) >= 0 || pak.Contains("..", StringComparison.Ordinal))
+        var pak = ParseFile(changelist, "pak", entry, "pak", ".pak");
+        ServerAssetsFile? sig = null;
+        if (entry.TryGetProperty("sig", out var sigValue))
         {
-            throw new InvalidDataException($"manifest.json: CL {changelist}'s pak \"{pak}\" isn't a .pak file name");
-        }
+            if (sigValue.ValueKind != JsonValueKind.Object)
+            {
+                throw new InvalidDataException($"manifest.json: CL {changelist}'s sig isn't an object");
+            }
 
-        // Only Core-ServerAssets' own releases: the manifest lives there, so a pak from anywhere else is a mistake.
-        var url = Text("url");
-        if (!url.StartsWith(ServerAssets.ReleaseUrlPrefix, StringComparison.Ordinal) || !Uri.TryCreate(url, UriKind.Absolute, out _))
-        {
-            throw new InvalidDataException($"manifest.json: CL {changelist}'s url isn't a {ServerAssets.Repository} release download");
-        }
-
-        var sha256 = Text("sha256").ToLowerInvariant();
-        if (sha256.Length != 64 || !sha256.All(char.IsAsciiHexDigit))
-        {
-            throw new InvalidDataException($"manifest.json: CL {changelist}'s sha256 isn't 64 hex digits");
-        }
-
-        if (!entry.TryGetProperty("size", out var sizeValue) || !sizeValue.TryGetInt64(out var size) || size <= 0)
-        {
-            throw new InvalidDataException($"manifest.json: CL {changelist} has no size");
+            sig = ParseFile(changelist, "sig", sigValue, "file", ".sig");
         }
 
         var version = entry.TryGetProperty("version", out var versionValue) && versionValue.ValueKind == JsonValueKind.String ? versionValue.GetString() ?? "" : "";
         var contents = entry.TryGetProperty("contents", out var contentsValue) && contentsValue.ValueKind == JsonValueKind.Array
             ? contentsValue.EnumerateArray().Where(item => item.ValueKind == JsonValueKind.String).Select(item => item.GetString()!).ToList()
             : [];
-        return new ServerAssetsEntry(changelist, version, pak, url, sha256, size, contents);
+        return new ServerAssetsEntry(changelist, version, pak.File, pak.Url, pak.Sha256, pak.Size, contents, sig);
+    }
+
+    /// <summary>
+    /// One downloadable file of an entry (<paramref name="what"/> is "pak" or "sig"): <paramref name="nameField"/>, a bare
+    /// file name ending in <paramref name="extension"/>, and its url, sha256 and size.
+    /// </summary>
+    private static ServerAssetsFile ParseFile(int changelist, string what, JsonElement element, string nameField, string extension)
+    {
+        string Text(string name) =>
+            element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String && value.GetString() is { Length: > 0 } text
+                ? text
+                : throw new InvalidDataException($"manifest.json: CL {changelist}'s {what} has no {name}");
+
+        var file = Text(nameField);
+        if (!file.EndsWith(extension, StringComparison.OrdinalIgnoreCase) || file.IndexOfAny(['/', '\\', ':']) >= 0 || file.Contains("..", StringComparison.Ordinal))
+        {
+            throw new InvalidDataException($"manifest.json: CL {changelist}'s {what} \"{file}\" isn't a {extension} file name");
+        }
+
+        // Only Core-ServerAssets' own releases: the manifest lives there, so a file from anywhere else is a mistake.
+        var url = Text("url");
+        if (!url.StartsWith(ServerAssets.ReleaseUrlPrefix, StringComparison.Ordinal) || !Uri.TryCreate(url, UriKind.Absolute, out _))
+        {
+            throw new InvalidDataException($"manifest.json: CL {changelist}'s {what} url isn't a {ServerAssets.Repository} release download");
+        }
+
+        var sha256 = Text("sha256").ToLowerInvariant();
+        if (sha256.Length != 64 || !sha256.All(char.IsAsciiHexDigit))
+        {
+            throw new InvalidDataException($"manifest.json: CL {changelist}'s {what} sha256 isn't 64 hex digits");
+        }
+
+        if (!element.TryGetProperty("size", out var sizeValue) || !sizeValue.TryGetInt64(out var size) || size <= 0)
+        {
+            throw new InvalidDataException($"manifest.json: CL {changelist}'s {what} has no size");
+        }
+
+        return new ServerAssetsFile(file, url, sha256, size);
     }
 }
 
@@ -125,13 +152,17 @@ public enum ServerAssetsAction
 
 public sealed record ServerAssetsDecision(ServerAssetsAction Action, string Reason);
 
-/// <summary>What is installed in a build's Paks folder under Core's name: its size and SHA-256.</summary>
-public sealed record InstalledPak(long Size, string Sha256);
+/// <summary>An installed file's size and SHA-256.</summary>
+public sealed record InstalledFile(long Size, string Sha256);
+
+/// <summary>What is installed in a build's Paks folder under Core's name: the pak's size and SHA-256, and its sig's, if any.</summary>
+public sealed record InstalledPak(long Size, string Sha256, InstalledFile? Sig = null);
 
 /// <summary>
 /// Server-only assets for hosted servers (Core-ServerAssets): before a build's first server starts, reads the manifest,
-/// and installs the build's verified pak into its FortniteGame\Content\Paks under Core's own name, or removes Core's pak
-/// when the build is no longer listed or the feature is off. Only Core's own file is ever written or deleted, and network
+/// and installs the build's verified pak (with its sig, when the manifest has one) into its FortniteGame\Content\Paks
+/// under Core's own name, or removes them when the build is no longer listed or the feature is off. Only Core's own
+/// files are ever written or deleted, and network
 /// trouble never stops a server from starting.
 /// </summary>
 public sealed class ServerAssets
@@ -242,13 +273,21 @@ public sealed class ServerAssets
                 : new(ServerAssetsAction.Remove, $"CL-{changelist} is no longer in the manifest");
         }
 
-        if (installed is not null && installed.Size == entry.Size && string.Equals(installed.Sha256, entry.Sha256, StringComparison.OrdinalIgnoreCase))
+        // Up to date only when the pak matches and so does its sig: the manifest's, or none when the manifest has none.
+        if (installed is not null && Matches(installed.Size, installed.Sha256, entry.Size, entry.Sha256)
+            && (entry.Sig is null ? installed.Sig is null : installed.Sig is { } sig && Matches(sig.Size, sig.Sha256, entry.Sig.Size, entry.Sig.Sha256)))
         {
-            return new(ServerAssetsAction.UpToDate, $"{entry.Pak} for CL-{changelist} is installed");
+            return new(ServerAssetsAction.UpToDate, $"{entry.Pak}{(entry.Sig is null ? "" : $" and {entry.Sig.File}")} for CL-{changelist} is installed");
         }
 
         return new(ServerAssetsAction.Install, installed is null ? $"installing {entry.Pak} for CL-{changelist}" : $"updating to {entry.Pak} for CL-{changelist}");
     }
+
+    private static bool Matches(long size, string sha256, long expectedSize, string expectedSha256) =>
+        size == expectedSize && string.Equals(sha256, expectedSha256, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>The sig that goes with Core's pak: the same name with .sig, as the engine looks for it.</summary>
+    public static string SigPath(string pakPath) => Path.ChangeExtension(pakPath, ".sig");
 
     /// <summary>
     /// Null once the server assets of this build and setting have been checked, otherwise why servers wait. The first
@@ -307,26 +346,75 @@ public sealed class ServerAssets
 
         var destination = Path.Combine(paks, PakFileName(paks));
         var installed = await InstalledAsync(destination, cancellation);
+        if (installed is null)
+        {
+            // No pak: a sig or an unfinished download left behind on its own goes.
+            Remove(paks);
+        }
+
         var manifest = enabled && changelist > 0 ? await ManifestAsync(cancellation) : null;
         var decision = Decide(enabled, changelist, manifest, installed);
         switch (decision.Action)
         {
             case ServerAssetsAction.Remove:
                 Remove(paks);
-                return $"removed {Path.GetFileName(destination)}: {decision.Reason}";
+                return $"removed {Path.GetFileName(destination)}{(installed?.Sig is null ? "" : $" and {Path.GetFileName(SigPath(destination))}")}: {decision.Reason}";
             case ServerAssetsAction.Install:
                 var entry = manifest!.For(changelist)!;
                 using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation))
                 {
                     timeout.CancelAfter(DownloadTimeout);
-                    // Downloads.FileAsync writes <destination>.download and only moves it into place once its size and
-                    // SHA-256 match the manifest's.
-                    await Downloads.FileAsync(_http, entry.Url, destination, entry.Size, entry.Sha256, null, timeout.Token);
+                    await InstallAsync(entry, destination, timeout.Token);
                 }
 
-                return $"{decision.Reason}: installed {Path.GetFileName(destination)} ({entry.Size} bytes, SHA-256 {entry.Sha256}; {string.Join(", ", entry.Contents)})";
+                var sig = entry.Sig is null ? "" : $", with {Path.GetFileName(SigPath(destination))} ({entry.Sig.Size} bytes, SHA-256 {entry.Sig.Sha256})";
+                return $"{decision.Reason}: installed {Path.GetFileName(destination)} ({entry.Size} bytes, SHA-256 {entry.Sha256}{sig}; {string.Join(", ", entry.Contents)})";
             default:
                 return decision.Action == ServerAssetsAction.UpToDate ? $"{decision.Reason} as {Path.GetFileName(destination)}" : $"none: {decision.Reason}";
+        }
+    }
+
+    /// <summary>
+    /// Installs the entry's pak, and its sig when it has one, as one: both are downloaded to temporary files and checked
+    /// against the manifest before either is moved into place, so a pak never sits in the Paks folder without its sig
+    /// (on a build that signs its paks, the engine refuses to start with an unsigned pak).
+    /// </summary>
+    private async Task InstallAsync(ServerAssetsEntry entry, string destination, CancellationToken cancellation)
+    {
+        var sigDestination = SigPath(destination);
+        var pakTemporary = destination + ".download";
+        var sigTemporary = sigDestination + ".download";
+        try
+        {
+            await Downloads.VerifiedAsync(_http, entry.Url, pakTemporary, entry.Pak, entry.Size, entry.Sha256, null, cancellation);
+            if (entry.Sig is { } sig)
+            {
+                await Downloads.VerifiedAsync(_http, sig.Url, sigTemporary, sig.File, sig.Size, sig.Sha256, null, cancellation);
+            }
+
+            // Both verified. The old pak goes before its sig, and the new sig comes before its pak, so at no point is a
+            // pak installed without the sig it needs; a sig left from an older entry goes when the new one has none.
+            File.Delete(destination);
+            File.Delete(sigDestination);
+            if (entry.Sig is not null)
+            {
+                File.Move(sigTemporary, sigDestination);
+            }
+
+            try
+            {
+                File.Move(pakTemporary, destination);
+            }
+            catch
+            {
+                File.Delete(sigDestination);
+                throw;
+            }
+        }
+        finally
+        {
+            File.Delete(pakTemporary);
+            File.Delete(sigTemporary);
         }
     }
 
@@ -337,10 +425,17 @@ public sealed class ServerAssets
             return null;
         }
 
-        return new InstalledPak(new FileInfo(path).Length, await Downloads.Sha256Async(path, cancellation));
+        var sig = SigPath(path);
+        return new InstalledPak(
+            new FileInfo(path).Length,
+            await Downloads.Sha256Async(path, cancellation),
+            File.Exists(sig) ? new InstalledFile(new FileInfo(sig).Length, await Downloads.Sha256Async(sig, cancellation)) : null);
     }
 
-    /// <summary>Deletes Core's pak (any platform) and an unfinished download of it from <paramref name="paksFolder"/>, and nothing else.</summary>
+    /// <summary>
+    /// Deletes Core's pak and sig (any platform) and unfinished downloads of them from <paramref name="paksFolder"/>, and
+    /// nothing else. Paks go before sigs, so a failure part way never leaves a pak without its sig.
+    /// </summary>
     public static int Remove(string paksFolder)
     {
         if (!Directory.Exists(paksFolder))
@@ -348,18 +443,18 @@ public sealed class ServerAssets
             return 0;
         }
 
-        var removed = 0;
-        foreach (var file in Directory.EnumerateFiles(paksFolder, PakPrefix + "*").ToList())
+        string[] order = [".pak", ".sig", ".pak.download", ".sig.download"];
+        var files = Directory.EnumerateFiles(paksFolder, PakPrefix + "*")
+            .Select(file => (File: file, Rank: Array.FindIndex(order, ending => Path.GetFileName(file).EndsWith(ending, StringComparison.OrdinalIgnoreCase))))
+            .Where(file => file.Rank >= 0)
+            .OrderBy(file => file.Rank)
+            .ToList();
+        foreach (var (file, _) in files)
         {
-            var name = Path.GetFileName(file);
-            if (name.EndsWith(".pak", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".pak.download", StringComparison.OrdinalIgnoreCase))
-            {
-                File.Delete(file);
-                ++removed;
-            }
+            File.Delete(file);
         }
 
-        return removed;
+        return files.Count;
     }
 
     /// <summary>Removes Core's pak from every build given, for when the feature is turned off; failures are logged.</summary>
