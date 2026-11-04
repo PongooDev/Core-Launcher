@@ -148,8 +148,11 @@ public sealed class LauncherHost : IAsyncDisposable
     public static string RefusalMessage(string backend) =>
         $"{backend} refused this PC's servers (403): ask your friend to add this PC's public IP under Settings → Trusted Hosting IPs in their admin panel";
 
-    /// <summary>The launcher installs and runs Core-Backend itself (not a folder, an outside one or a friend's).</summary>
-    private static bool ManagesBackend(BackendSettings settings) => !settings.UseRemote && settings.Source == BackendSource.Managed;
+    /// <summary>
+    /// The launcher installs and runs Core-Backend itself (not a folder, an outside one or a friend's): only then does
+    /// it download Node.js and Core-Backend.
+    /// </summary>
+    public static bool ManagesBackend(BackendSettings settings) => !settings.UseRemote && settings.Source == BackendSource.Managed;
 
     public event Action? Changed;
 

@@ -68,7 +68,8 @@ Other builds are turned away unless you turn on **Allow unsupported builds** (Se
 ### Setup
 1. Download `CoreLauncher.exe` from the [latest release](https://github.com/PongooDev/Core-Launcher/releases/latest) and run it. Windows may warn that it is from an unknown publisher (the exe isn't code-signed): choose **More info → Run anyway**.
 2. Enter a player name and pick your Fortnite build folder (the one with `Engine` and `FortniteGame`).
-3. Press **Install**. The launcher downloads Node.js, Core-Backend and the Core DLLs, then **Continue**.
+3. Under **Whose backend**, keep **Run my own backend**, or pick **Connect to a friend's backend** and enter its address (see [Play with friends](#play-with-friends)): the launcher checks that it answers, and then installs and runs no backend of its own.
+4. Press **Install**. The launcher downloads Node.js and Core-Backend (only for your own backend) and the Core DLLs, then **Continue**.
 4. Press **Play**.
 
 Once a client is running, **Launch another client** on Home starts one more with a username you choose (same build and DLLs, its own login and log); **Running clients** lists them with View log and Close.
@@ -98,7 +99,7 @@ backend instead of running their own.
 
 **A friend:**
 
-1. Settings → Backend → **A friend's backend**. Enter a name and the host's address, press **Test connection**, then
+1. In first-run setup pick **Connect to a friend's backend** and enter the host's address, or later: Settings → Backend → **A friend's backend**. Enter a name and the host's address, press **Test connection**, then
    **Save to list** and **Save**. (Or pick a saved friend under **Play on** on Home; **Join a friend** goes to the same
    settings.)
 2. Press **Play**. You log in to the host's backend with your player name (a new account there the first time), and

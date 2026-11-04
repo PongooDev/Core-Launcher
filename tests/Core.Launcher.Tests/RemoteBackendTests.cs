@@ -174,6 +174,65 @@ public sealed class RemoteBackendTests
         Assert.Equal("", loaded.Backend.Remote.Address);
     }
 
+    // First-run setup's "Connect to a friend's backend" (Core-Launcher #11).
+    [Fact]
+    public void SetupOnAFriendsBackendSavesItAndInstallsNoBackend()
+    {
+        using var folder = new TempFolder();
+        var store = new SettingsStore(folder.Combine("settings.json"));
+        var settings = new LauncherSettings();
+        Assert.True(LauncherHost.ManagesBackend(settings.Backend));
+
+        settings.Backend.UseFriend(" Sam ", " https://core.example.com ");
+        store.Save(settings);
+        var loaded = store.Load();
+        Assert.True(loaded.Backend.UseRemote);
+        Assert.Equal(("Sam", "https://core.example.com"), (loaded.Backend.Remote.Name, loaded.Backend.Remote.Address));
+        Assert.Equal("Sam", Assert.Single(loaded.Backend.SavedRemotes).DisplayName);
+        // No Node.js or Core-Backend download, and "my own backend" stays as it was for switching back in Settings.
+        Assert.False(LauncherHost.ManagesBackend(loaded.Backend));
+        Assert.Equal(BackendSource.Managed, loaded.Backend.Source);
+
+        // The same address again updates the saved friend instead of adding another; a new one is added.
+        loaded.Backend.UseFriend("Sammy", "HTTPS://core.example.com");
+        loaded.Backend.UseFriend("", "203.0.113.7");
+        Assert.Equal(["Sammy", "203.0.113.7"], loaded.Backend.SavedRemotes.Select(remote => remote.DisplayName));
+        Assert.Equal("203.0.113.7", loaded.Backend.Remote.Address);
+        Assert.NotSame(loaded.Backend.Remote, loaded.Backend.SavedRemotes[1]);
+
+        loaded.Backend.UseRemote = false;
+        Assert.True(LauncherHost.ManagesBackend(loaded.Backend));
+    }
+
+    [Fact]
+    public async Task SetupsFriendCheckRefusesABadOrDeadAddress()
+    {
+        using var folder = new TempFolder();
+        var host = new LauncherHost(new LauncherPaths(folder.Combine("Launcher")));
+        try
+        {
+            var status = await host.CheckRemoteAsync("my house", TestContext.Current.CancellationToken);
+            Assert.False(status.Reachable);
+            Assert.Contains("isn't a host name", status.Message);
+
+            status = await host.CheckRemoteAsync("", TestContext.Current.CancellationToken);
+            Assert.False(status.Reachable);
+            Assert.Contains("Enter your friend's address", status.Message);
+
+            var listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            listener.Stop();
+            status = await host.CheckRemoteAsync($"127.0.0.1:{port}", TestContext.Current.CancellationToken);
+            Assert.False(status.Reachable);
+            Assert.Contains("remote access", status.Message);
+        }
+        finally
+        {
+            await host.DisposeAsync();
+        }
+    }
+
     [Fact]
     public async Task TheCheckTellsCoreBackendFromAnythingElse()
     {

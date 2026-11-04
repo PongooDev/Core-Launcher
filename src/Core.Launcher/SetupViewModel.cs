@@ -12,7 +12,10 @@ using Core.Launcher.Hosting.Settings;
 
 namespace Core.Launcher;
 
-/// <summary>First run: the player's name, the build folder, then everything else installed for them.</summary>
+/// <summary>
+/// First run: the player's name, the build folder, whose backend to play on (this PC's, or a friend's, Core-Launcher
+/// #11), then everything else installed for them.
+/// </summary>
 public sealed partial class SetupViewModel : ObservableObject
 {
     private readonly LauncherHost _host;
@@ -28,6 +31,9 @@ public sealed partial class SetupViewModel : ObservableObject
         Password = settings.Password;
         BuildFolder = settings.FindSelectedBuild()?.Path ?? "";
         UseLocalBackend = settings.Backend.Source == BackendSource.Folder;
+        UseFriendBackend = settings.Backend.UseRemote;
+        FriendName = settings.Backend.Remote.Name;
+        FriendAddress = settings.Backend.Remote.Address;
         BackendFolder = settings.Backend.Folder;
         UseLocalDlls = settings.Dlls.Source == DllSource.Local;
         DllFolder = settings.Dlls.LocalFolder;
@@ -57,6 +63,33 @@ public sealed partial class SetupViewModel : ObservableObject
     [ObservableProperty]
     public partial bool UseLocalBackend { get; set; }
 
+    /// <summary>"Connect to a friend's backend": this PC runs no backend and installs neither Node.js nor Core-Backend.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(UseOwnBackend))]
+    public partial bool UseFriendBackend { get; set; }
+
+    public bool UseOwnBackend
+    {
+        get => !UseFriendBackend;
+        set => UseFriendBackend = !value;
+    }
+
+    [ObservableProperty]
+    public partial string FriendName { get; set; } = "";
+
+    [ObservableProperty]
+    public partial string FriendAddress { get; set; } = "";
+
+    [ObservableProperty]
+    public partial string FriendStatus { get; set; } = "";
+
+    [ObservableProperty]
+    public partial Brush FriendStatusBrush { get; set; } = Brushes.Gray;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(TestFriendCommand))]
+    public partial bool TestingFriend { get; set; }
+
     [ObservableProperty]
     public partial string BackendFolder { get; set; } = "";
 
@@ -77,6 +110,35 @@ public sealed partial class SetupViewModel : ObservableObject
     public partial string Message { get; set; } = "";
 
     public bool Editable => !Installing;
+
+    partial void OnFriendAddressChanged(string value) => FriendStatus = "";
+
+    [RelayCommand(CanExecute = nameof(CanTestFriend))]
+    private async Task TestFriendAsync() => await CheckFriendAsync();
+
+    private bool CanTestFriend() => !TestingFriend;
+
+    /// <summary>
+    /// Asks the friend's backend for GET /core/api/status (the route it answers without a login, 5 s timeout) and says
+    /// what came back. Only the address goes to it; the player's name and password go at sign-in, as on any backend.
+    /// </summary>
+    private async Task<bool> CheckFriendAsync()
+    {
+        TestingFriend = true;
+        FriendStatus = "Checking…";
+        FriendStatusBrush = MainViewModel.Brush("MutedBrush");
+        try
+        {
+            var status = await _host.CheckRemoteAsync(FriendAddress.Trim());
+            FriendStatus = status.Reachable ? $"{status.Message}." : status.Message;
+            FriendStatusBrush = MainViewModel.Brush(status.Reachable ? "GoodBrush" : "BadBrush");
+            return status.Reachable;
+        }
+        finally
+        {
+            TestingFriend = false;
+        }
+    }
 
     // Reading the exe for its build string can take a moment, so detection runs off the UI thread and only the
     // latest folder's result is shown.
@@ -142,7 +204,17 @@ public sealed partial class SetupViewModel : ObservableObject
     [RelayCommand]
     private void Register()
     {
-        var url = _host.RegisterUrl ?? "http://127.0.0.1:5595/register";
+        // Register on the backend this player will play on: the friend's when that's picked.
+        var url = UseFriendBackend
+            ? BackendEndpoint.TryParse(FriendAddress, out var friend, out _) ? $"{friend.Url}/register" : null
+            : _host.Backend.RegisterUrl ?? "http://127.0.0.1:5595/register";
+        if (url is null)
+        {
+            FriendStatus = "Enter your friend's backend address first";
+            FriendStatusBrush = MainViewModel.Brush("BadBrush");
+            return;
+        }
+
         Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
     }
 
@@ -172,7 +244,21 @@ public sealed partial class SetupViewModel : ObservableObject
             return;
         }
 
-        if (UseLocalBackend && !File.Exists(Path.Combine(BackendFolder, "src", "main.js")))
+        if (UseFriendBackend)
+        {
+            if (!BackendEndpoint.TryParse(FriendAddress, out _, out var problem))
+            {
+                Message = $"Friend's backend: {problem}";
+                return;
+            }
+
+            if (!await CheckFriendAsync())
+            {
+                Message = "Couldn't reach your friend's backend: see the message under its address.";
+                return;
+            }
+        }
+        else if (UseLocalBackend && !File.Exists(Path.Combine(BackendFolder, "src", "main.js")))
         {
             Message = "That Core-Backend folder has no src\\main.js";
             return;
@@ -195,14 +281,24 @@ public sealed partial class SetupViewModel : ObservableObject
         }
 
         settings.SelectedBuild = buildSettings.Name;
-        settings.Backend.Source = UseLocalBackend ? BackendSource.Folder : BackendSource.Managed;
-        settings.Backend.Folder = UseLocalBackend ? BackendFolder.Trim() : settings.Backend.Folder;
+        if (UseFriendBackend)
+        {
+            // "My own backend" keeps what it was, for when the player switches back in Settings.
+            settings.Backend.UseFriend(FriendName, FriendAddress);
+        }
+        else
+        {
+            settings.Backend.UseRemote = false;
+            settings.Backend.Source = UseLocalBackend ? BackendSource.Folder : BackendSource.Managed;
+            settings.Backend.Folder = UseLocalBackend ? BackendFolder.Trim() : settings.Backend.Folder;
+        }
+
         settings.Dlls.Source = UseLocalDlls ? DllSource.Local : DllSource.Release;
         settings.Dlls.LocalFolder = UseLocalDlls ? DllFolder.Trim() : settings.Dlls.LocalFolder;
         _host.SaveSettings(settings);
 
         Steps.Clear();
-        if (!UseLocalBackend)
+        if (LauncherHost.ManagesBackend(settings.Backend))
         {
             Steps.Add(new SetupStepViewModel(LauncherHost.RuntimeComponent));
             Steps.Add(new SetupStepViewModel(LauncherHost.BackendComponent));

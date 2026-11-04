@@ -128,6 +128,27 @@ public sealed class BackendSettings
 
     /// <summary>Friends' backends the player has saved, to switch between on Home.</summary>
     public List<RemoteBackend> SavedRemotes { get; set; } = [];
+
+    /// <summary>
+    /// Plays on a friend's backend from now on (first-run setup's "Connect to a friend's backend", Core-Launcher #11):
+    /// turns <see cref="UseRemote"/> on and keeps the friend in <see cref="SavedRemotes"/>, updating the entry with the
+    /// same address rather than adding another.
+    /// </summary>
+    public void UseFriend(string name, string address)
+    {
+        var friend = new RemoteBackend { Name = name.Trim(), Address = address.Trim() };
+        UseRemote = true;
+        Remote = friend.Copy();
+        var saved = SavedRemotes.FirstOrDefault(remote => string.Equals(remote.Address.Trim(), friend.Address, StringComparison.OrdinalIgnoreCase));
+        if (saved is null)
+        {
+            SavedRemotes.Add(friend);
+        }
+        else if (friend.Name.Length > 0)
+        {
+            saved.Name = friend.Name;
+        }
+    }
 }
 
 /// <summary>A friend's Core-Backend: a name for it and its address, host or IP with an optional :port (5595 when left out).</summary>
