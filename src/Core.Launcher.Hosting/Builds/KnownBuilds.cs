@@ -111,6 +111,12 @@ public static partial class KnownBuilds
     public const int Fortnite351 = 4000805;
 
     /// <summary>
+    /// Fortnite 3.5.2, ++Fortnite+Release-3.5 CL-4008490 on UE 4.20, a later build of 3.5's content update. The archive is Battle
+    /// Royale only, like 3.5.1's, with only pakchunk0, so Save the World content is not in it.
+    /// </summary>
+    public const int Fortnite352 = 4008490;
+
+    /// <summary>
     /// What a Battle Royale server gets. Core takes the map and playlist from the build's own data (on 1.7.2 the Battle
     /// Royale zone theme's Athena_Terrain and solo playlist; the match's playlist comes with its assignment) and
     /// registers the server with the matchmaking service that Battle Royale's players queue on, so the launcher needs no
@@ -202,7 +208,8 @@ public static partial class KnownBuilds
         new(Fortnite311, "3.1.1", "Fortnite 3.1.1 (CL-3917250)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite32, "3.2", "Fortnite 3.2 (CL-3935073)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite33, "3.3", "Fortnite 3.3 (CL-3942182)", BuildSupport.Full, [], BattleRoyale: true),
-        new(Fortnite351, "3.5.1", "Fortnite 3.5.1 (CL-4000805)", BuildSupport.InProgress, [], BattleRoyale: true),
+        new(Fortnite351, "3.5.1", "Fortnite 3.5.1 (CL-4000805)", BuildSupport.Full, [], BattleRoyale: true),
+        new(Fortnite352, "3.5.2", "Fortnite 3.5.2 (CL-4008490)", BuildSupport.InProgress, [], BattleRoyale: true),
     ];
 
     private static KnownBuild? Find(int changelist) => Array.Find(Builds, build => build.Changelist == changelist);

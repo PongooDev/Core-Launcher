@@ -74,16 +74,16 @@ public sealed class BuildSupportTests
     [Fact]
     public void MessagesGiveTheSupportedBuildsAsOneRangeOfVersions()
     {
-        Assert.Equal("Fortnite 1.1 to 3.3", KnownBuilds.SupportedNames);
-        Assert.Equal("Fortnite 3.5.1", KnownBuilds.InProgressNames);
-        Assert.Equal("Fortnite 1.1 to 3.3, and support for Fortnite 3.5.1 is in progress", KnownBuilds.SupportSummary);
+        Assert.Equal("Fortnite 1.1 to 3.5.1", KnownBuilds.SupportedNames);
+        Assert.Equal("Fortnite 3.5.2", KnownBuilds.InProgressNames);
+        Assert.Equal("Fortnite 1.1 to 3.5.1, and support for Fortnite 3.5.2 is in progress", KnownBuilds.SupportSummary);
 
         var other = KnownBuilds.Create(@"F:\Builds\Other", Unsupported, allowUnsupported: false);
         Assert.Equal(
-            "Core doesn't support Fortnite 3.4 CL-3968866 yet. It supports Fortnite 1.1 to 3.3, and support for Fortnite 3.5.1 is in progress. Turn on Allow unsupported builds in Settings → Builds to try it.",
+            "Core doesn't support Fortnite 3.4 CL-3968866 yet. It supports Fortnite 1.1 to 3.5.1, and support for Fortnite 3.5.2 is in progress. Turn on Allow unsupported builds in Settings → Builds to try it.",
             KnownBuilds.NotSupported(other, allowUnsupported: false));
         Assert.Equal(
-            "Fortnite 3.4 CL-3968866 isn't supported and may not work: Core is only tested on Fortnite 1.1 to 3.3, and support for Fortnite 3.5.1 is in progress.",
+            "Fortnite 3.4 CL-3968866 isn't supported and may not work: Core is only tested on Fortnite 1.1 to 3.5.1, and support for Fortnite 3.5.2 is in progress.",
             KnownBuilds.UnsupportedWarning(other.Name));
     }
 
