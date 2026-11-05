@@ -112,6 +112,7 @@ public class SettingsIni
         SetDefault("Server", "ReadyTimeout", "180");
         SetDefault("Server", "AllowUnsupportedBuilds", "false");
         SetDefault("Server", "DownloadServerAssets", "true");
+        SetDefault("Server", "AutoUpdates", "on");
         SetDefault("Paths", "DllsFolder", "");
         SetDefault("Paths", "DataFolder", "");
     }
@@ -164,6 +165,10 @@ public class SettingsIni
 
         ; Install the build's server assets pak (server-only content from Core-ServerAssets, SHA-256 checked) into its Paks folder (true / false)
         DownloadServerAssets=true
+
+        ; Check for a newer CoreServerHost release before starting servers and update itself (on / off)
+        ; Off only logs that an update is available
+        AutoUpdates=on
 
         [Paths]
         ; Custom Core DLLs folder (empty uses cached Core V2 release DLLs)
@@ -226,6 +231,11 @@ public class SettingsIni
         builder.AppendLine($"DownloadServerAssets={Get("Server", "DownloadServerAssets") ?? "true"}");
         builder.AppendLine();
 
+        builder.AppendLine("; Check for a newer CoreServerHost release before starting servers and update itself (on / off)");
+        builder.AppendLine("; Off only logs that an update is available");
+        builder.AppendLine($"AutoUpdates={Get("Server", "AutoUpdates") ?? "on"}");
+        builder.AppendLine();
+
         builder.AppendLine("[Paths]");
         builder.AppendLine("; Custom Core DLLs folder (empty uses cached Core V2 release DLLs)");
         builder.AppendLine($"DllsFolder={Get("Paths", "DllsFolder") ?? ""}");
@@ -279,7 +289,8 @@ public class SettingsIni
                    key.Equals("PcName", StringComparison.OrdinalIgnoreCase) ||
                    key.Equals("ReadyTimeout", StringComparison.OrdinalIgnoreCase) ||
                    key.Equals("AllowUnsupportedBuilds", StringComparison.OrdinalIgnoreCase) ||
-                   key.Equals("DownloadServerAssets", StringComparison.OrdinalIgnoreCase);
+                   key.Equals("DownloadServerAssets", StringComparison.OrdinalIgnoreCase) ||
+                   key.Equals("AutoUpdates", StringComparison.OrdinalIgnoreCase);
         }
 
         if (section.Equals("Paths", StringComparison.OrdinalIgnoreCase))

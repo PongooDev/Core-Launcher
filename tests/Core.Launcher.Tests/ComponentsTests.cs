@@ -7,6 +7,7 @@ using Core.Launcher.Hosting.Backend;
 using Core.Launcher.Hosting.Components;
 using Core.Launcher.Hosting.Logging;
 using Core.Launcher.Hosting.Native;
+using Core.Server.Cli.Hosting;
 
 namespace Core.Launcher.Tests;
 
@@ -112,6 +113,59 @@ public sealed class ComponentsTests
         Assert.Equal("old", File.ReadAllText(executable + ".old"));
         LauncherUpdater.CleanUp(executable);
         Assert.False(File.Exists(executable + ".old"));
+    }
+
+    [Fact]
+    public async Task TheServerHosterUpdatesFromItsOwnAssetAndRefusesAPartialDownload()
+    {
+        using var folder = new TempFolder();
+        var executable = folder.Combine("CoreServerHost.exe");
+        File.WriteAllText(executable, "old");
+        var routes = new Routes
+        {
+            ["https://api.github.com/repos/PongooDev/Core-Launcher/releases/latest"] = Json(Release("v1.0.30", ("CoreLauncher.exe", "gui"), ("CoreServerHost.exe", "cli-new"))),
+            ["https://example.test/CoreServerHost.exe"] = Text("cli-new"),
+        };
+        var updater = new LauncherUpdater(Github(routes), new Version(1, 0, 22), executable, _ => { }, SelfUpdate.AssetName);
+
+        var release = await updater.CheckAsync(TestContext.Current.CancellationToken);
+        Assert.Equal("v1.0.30", release?.Tag);
+
+        routes["https://example.test/CoreServerHost.exe"] = Text("cli-ne");
+        await Assert.ThrowsAsync<InvalidDataException>(() => updater.InstallAsync(release!, null, TestContext.Current.CancellationToken));
+        Assert.Equal("old", File.ReadAllText(executable));
+
+        routes["https://example.test/CoreServerHost.exe"] = Text("cli-new");
+        await updater.InstallAsync(release!, null, TestContext.Current.CancellationToken);
+        Assert.Equal("cli-new", File.ReadAllText(executable));
+
+        var withoutCli = Github(new Routes
+        {
+            ["https://api.github.com/repos/PongooDev/Core-Launcher/releases/latest"] = Json(Release("v1.0.30", ("CoreLauncher.exe", "gui"))),
+        });
+        Assert.Null(await new LauncherUpdater(withoutCli, new Version(1, 0, 22), executable, _ => { }, SelfUpdate.AssetName).CheckAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Theory]
+    [InlineData(false, true, false, true, UpdateAction.None)]
+    [InlineData(true, true, false, true, UpdateAction.Install)]
+    [InlineData(true, false, false, true, UpdateAction.LogOnly)]
+    [InlineData(true, true, true, true, UpdateAction.LogOnly)]
+    [InlineData(true, true, false, false, UpdateAction.LogOnly)]
+    public void DecidesWhetherToInstallOnlyLogOrDoNothing(bool available, bool autoUpdates, bool alreadyUpdated, bool canReplace, UpdateAction expected)
+    {
+        Assert.Equal(expected, SelfUpdate.Decide(available, autoUpdates, alreadyUpdated, canReplace));
+    }
+
+    [Theory]
+    [InlineData("v1.0.23", "1.0.22", true)]
+    [InlineData("v1.0.22", "1.0.22", false)]
+    [InlineData("v1.0.9", "1.0.22", false)]
+    [InlineData("v1.1.0", "1.0.22", true)]
+    [InlineData("v1.0.23-beta", "1.0.22", true)]
+    public void ComparesReleaseTagsToTheRunningVersion(string tag, string running, bool newer)
+    {
+        Assert.Equal(newer, LauncherUpdater.ParseVersion(tag)! > Version.Parse(running));
     }
 
     [Fact]

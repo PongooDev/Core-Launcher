@@ -73,6 +73,49 @@ public sealed class SetupIniTests
         Assert.True(config.AllowUnsupportedBuilds);
     }
 
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData("on", true)]
+    [InlineData("ON", true)]
+    [InlineData("true", true)]
+    [InlineData("off", false)]
+    [InlineData("Off", false)]
+    [InlineData("false", false)]
+    [InlineData("garbage", true)]
+    public void AutoUpdatesIsOnUnlessTheIniSaysOff(string? value, bool expected)
+    {
+        var ini = new SetupIni();
+        if (value is not null)
+        {
+            ini.Set("Server", "AutoUpdates", value);
+        }
+
+        Assert.Equal(expected, ServerHostConfig.FromIniAndArgs(ini, []).AutoUpdates);
+    }
+
+    [Fact]
+    public void AutoUpdatesIsWrittenToTheIniAndSurvivesAReload()
+    {
+        var ini = new SetupIni();
+        ini.PopulateDefaults();
+        Assert.Equal("on", ini.Get("Server", "AutoUpdates"));
+
+        ini.Set("Server", "AutoUpdates", "off");
+        var path = Path.Combine(Path.GetTempPath(), $"core-autoupdates-{Guid.NewGuid():N}.ini");
+        try
+        {
+            ini.Save(path);
+            var text = File.ReadAllText(path);
+            Assert.Contains("AutoUpdates=off", text);
+            Assert.Equal(1, text.Split("AutoUpdates=").Length - 1);
+            Assert.False(ServerHostConfig.FromIniAndArgs(SettingsIni.Load(path), []).AutoUpdates);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     [Fact]
     public void ConfigParsesEndpointsCorrectly()
     {

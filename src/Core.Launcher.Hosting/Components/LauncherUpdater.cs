@@ -15,13 +15,17 @@ public sealed class LauncherUpdater
     private readonly GitHubClient _github;
     private readonly Action<string> _log;
 
-    public LauncherUpdater(GitHubClient github, Version current, string? executable, Action<string> log)
+    /// <param name="assetName">The release asset that replaces the running exe: CoreLauncher.exe for the launcher, CoreServerHost.exe for the CLI server hoster.</param>
+    public LauncherUpdater(GitHubClient github, Version current, string? executable, Action<string> log, string assetName = AssetName)
     {
         _github = github;
         Current = current;
         Executable = executable;
         _log = log;
+        Asset = assetName;
     }
+
+    public string Asset { get; }
 
     public Version Current { get; }
 
@@ -38,7 +42,7 @@ public sealed class LauncherUpdater
     public async Task<Release?> CheckAsync(CancellationToken cancellation)
     {
         var release = await _github.LatestReleaseAsync(Repository, cancellation);
-        Available = release is not null && ParseVersion(release.Tag) is { } version && version > Current && release.Asset(AssetName) is not null ? release : null;
+        Available = release is not null && ParseVersion(release.Tag) is { } version && version > Current && release.Asset(Asset) is not null ? release : null;
         if (Available is not null)
         {
             _log($"Core Launcher {Available.Tag} is available (running {Current.ToString(3)})");
@@ -51,7 +55,7 @@ public sealed class LauncherUpdater
     public async Task InstallAsync(Release release, IProgress<string>? progress, CancellationToken cancellation)
     {
         var executable = Executable ?? throw new InvalidOperationException("Only a published CoreLauncher.exe can update itself");
-        var asset = release.Asset(AssetName) ?? throw new InvalidOperationException($"Release {release.Tag} has no {AssetName}");
+        var asset = release.Asset(Asset) ?? throw new InvalidOperationException($"Release {release.Tag} has no {Asset}");
         var downloaded = executable + ".new";
         await _github.DownloadAssetAsync(asset, downloaded, progress, cancellation);
         Swap(executable, downloaded);

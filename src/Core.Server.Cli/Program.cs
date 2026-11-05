@@ -58,6 +58,12 @@ public static class Program
             return 0;
         }
 
+        // A newer release replaces this exe (AutoUpdates) and runs in its place; any failure just starts the servers
+        if (await SelfUpdate.RunAsync(config.AutoUpdates, args, CancellationToken.None) is { } restartedExitCode)
+        {
+            return restartedExitCode;
+        }
+
         // Check if build is valid
         var detected = config.BuildPath.Length > 0 ? BuildDetector.Detect(config.BuildPath) : null;
         if (detected is null || detected.Version == BuildVersion.Unknown)
@@ -452,6 +458,7 @@ public static class Program
         ConsoleEx.WriteLine(Output.Indent + "  -v, --version           Show version information");
         ConsoleEx.WriteLine();
         ConsoleEx.WriteLine(Output.Indent + Theme.Paint("All options can also be configured permanently in settings.ini.", Theme.Muted));
+        ConsoleEx.WriteLine(Output.Indent + Theme.Paint("Updates: AutoUpdates=on|off in settings.ini (default on) checks for a newer release before starting servers.", Theme.Muted));
         ConsoleEx.WriteLine();
     }
 }

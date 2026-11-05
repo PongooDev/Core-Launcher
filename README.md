@@ -203,7 +203,9 @@ The previous run's `Launcher.log` and `Backend.log` are kept as `*.previous.log`
   CoreServerHost.exe
   CoreServerHost.exe --servers 2 --br-servers 2 --backend http://127.0.0.1:5595 --login MyServer_{n}
   ```
-  Configure `settings.ini` settings: `BuildPath`, `BackendUrl`, `Region`, `StandardServers`, `BattleRoyaleServers`, `ServerLogin` (defaults to `CoreServer{n}`), `PcName`, `ReadyTimeout`, and `AllowUnsupportedBuilds`.
+  Configure `settings.ini` settings: `BuildPath`, `BackendUrl`, `Region`, `StandardServers`, `BattleRoyaleServers`, `ServerLogin` (defaults to `CoreServer{n}`), `PcName`, `ReadyTimeout`, `AllowUnsupportedBuilds`, and `AutoUpdates`.
+
+  `AutoUpdates=on|off` (default `on`): before starting servers the hoster checks this repository's latest release and, when a newer one exists, downloads `CoreServerHost.exe` (size and SHA-256 checked), replaces itself and restarts with the same arguments. With `off` it only logs that an update is available. If GitHub can't be reached or the update fails, the servers start anyway.
 
   Interactive keyboard shortcuts while running:
   - `n`: Create a new server (pick Save The World or Battle Royale)
