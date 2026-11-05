@@ -601,7 +601,8 @@ public sealed class LauncherHost : IAsyncDisposable
     /// <summary>
     /// Points the Store's purchase page at the backend in the build's NoRedist\DefaultGame.ini (<see cref="PurchaseFlowConfig"/>):
     /// the game reads it on the front end's first frame (3.1 RegisterForEpicPurchasingDisplay, 0xD496C0), before the
-    /// backend's hotfix can set it, and a cooked build ignores the saved Game.ini (Core-Backend #244).
+    /// backend's hotfix can set it, and a cooked build ignores the saved Game.ini (Core-Backend #244). And the page's
+    /// single sign-on at the backend, in NoRedist\DefaultEngine.ini (Core-Backend #248).
     /// </summary>
     private void WritePurchaseFlow(BuildSettings build, BackendEndpoint backend)
     {
@@ -618,6 +619,22 @@ public sealed class LauncherHost : IAsyncDisposable
         {
             // The client still starts; buying V-Bucks or the Starter Pack opens Epic's page, which is black.
             Log.Write($"Couldn't write the purchase page to {path} ({exception.Message}); the Store's V-Bucks packs will open a black page");
+        }
+
+        // The page's single sign-on (Core-Backend #248): Protocol://RedirectUrl/exchange is the backend's.
+        var engineIni = PurchaseFlowConfig.EngineIniPath(build.Path);
+        var identity = PurchaseFlowConfig.IdentityEntries(backend);
+        try
+        {
+            if (PurchaseFlowConfig.Write(engineIni, PurchaseFlowConfig.IdentitySection, identity))
+            {
+                Log.Write($"Wrote {engineIni}: the purchase page signs in at {identity[0].Value}://{identity[1].Value}/exchange");
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // The flow's sign-on opens Epic's accounts site, and the Store shows "A PROBLEM OCCURRED".
+            Log.Write($"Couldn't write the purchase page's sign-in to {engineIni} ({exception.Message}); the Store's V-Bucks packs may not open");
         }
     }
 

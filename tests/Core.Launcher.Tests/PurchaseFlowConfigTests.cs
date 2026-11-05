@@ -77,4 +77,29 @@ public sealed class PurchaseFlowConfigTests
         Assert.Equal([0xFF, 0xFE], bytes[..2]);
         Assert.Equal("[EpicPurchaseFlow]\nProd=https:///core.example.com/purchase\n\n[A]\nName=Ünïcode\n", File.ReadAllText(ini));
     }
+
+    [Fact]
+    public void The_sign_on_is_the_backends_in_the_builds_noredist_default_engine_ini()
+    {
+        Assert.Equal(@"E:\3.5.2\Fortnite\FortniteGame\Config\NoRedist\DefaultEngine.ini", PurchaseFlowConfig.EngineIniPath(@"E:\3.5.2\Fortnite"));
+        Assert.Equal([("Protocol", "http"), ("RedirectUrl", "127.0.0.1:5595")], PurchaseFlowConfig.IdentityEntries(BackendEndpoint.Local(5595)));
+        Assert.Equal([("Protocol", "http"), ("RedirectUrl", "[2001:db8::1]:5595")], PurchaseFlowConfig.IdentityEntries(new BackendEndpoint("2001:db8::1", 5595)));
+        Assert.Equal([("Protocol", "https"), ("RedirectUrl", "core.example.com")], PurchaseFlowConfig.IdentityEntries(new BackendEndpoint("core.example.com", 443, Secure: true)));
+    }
+
+    [Fact]
+    public void Writes_the_identity_section_keeping_its_other_keys()
+    {
+        using var folder = new TempFolder();
+        var ini = folder.Combine("NoRedist", "DefaultEngine.ini");
+        var entries = PurchaseFlowConfig.IdentityEntries(BackendEndpoint.Local(5595));
+
+        Assert.True(PurchaseFlowConfig.Write(ini, PurchaseFlowConfig.IdentitySection, entries));
+        Assert.Equal("[OnlineSubsystemMcp.OnlineIdentityMcp]\r\nProtocol=http\r\nRedirectUrl=127.0.0.1:5595\r\n", File.ReadAllText(ini));
+        Assert.False(PurchaseFlowConfig.Write(ini, PurchaseFlowConfig.IdentitySection, entries));
+
+        var existing = "[OnlineSubsystemMcp.OnlineIdentityMcp]\r\nDomain=keep\r\nProtocol=https\r\nRedirectUrl=accounts.epicgames.com\r\n\r\n[B]\r\nC=1\r\n";
+        Assert.Equal("[OnlineSubsystemMcp.OnlineIdentityMcp]\r\nDomain=keep\r\nProtocol=http\r\nRedirectUrl=127.0.0.1:5595\r\n\r\n[B]\r\nC=1\r\n",
+            PurchaseFlowConfig.Merge(existing, PurchaseFlowConfig.IdentitySection, entries));
+    }
 }
