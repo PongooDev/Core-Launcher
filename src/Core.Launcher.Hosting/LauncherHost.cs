@@ -565,6 +565,7 @@ public sealed class LauncherHost : IAsyncDisposable
         }
 
         WarnAboutSupport(build, output);
+        WritePurchaseFlow(backend);
 
         var session = new ClientSession(login, _launcher.Start(new GameStart($"Client {login}", build, build.ClientDlls, LaunchArguments.Client(build, backend, login, effectivePassword), false, output)));
         lock (_gate)
@@ -594,6 +595,29 @@ public sealed class LauncherHost : IAsyncDisposable
         if (KnownBuilds.SupportWarning(build) is { } warning)
         {
             output.Write($"(launcher) {warning}");
+        }
+    }
+
+    /// <summary>
+    /// Points the Store's purchase page at the backend in the player's saved Game.ini (<see cref="PurchaseFlowConfig"/>):
+    /// the game reads it on the front end's first frame (3.1 RegisterForEpicPurchasingDisplay, 0xD496C0), before the
+    /// backend's hotfix can set it (Core-Backend #244).
+    /// </summary>
+    private void WritePurchaseFlow(BackendEndpoint backend)
+    {
+        var path = PurchaseFlowConfig.GameIniPath(Paths);
+        var url = PurchaseFlowConfig.Url(backend);
+        try
+        {
+            if (PurchaseFlowConfig.Write(path, url))
+            {
+                Log.Write($"Wrote {path}: the Store's purchase page is {url}");
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // The client still starts; buying V-Bucks or the Starter Pack opens Epic's page, which is black.
+            Log.Write($"Couldn't write the purchase page to {path} ({exception.Message}); the Store's V-Bucks packs will open a black page");
         }
     }
 
