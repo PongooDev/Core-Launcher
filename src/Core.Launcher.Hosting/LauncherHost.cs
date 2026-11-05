@@ -565,7 +565,7 @@ public sealed class LauncherHost : IAsyncDisposable
         }
 
         WarnAboutSupport(build, output);
-        WritePurchaseFlow(backend);
+        WritePurchaseFlow(build, backend);
 
         var session = new ClientSession(login, _launcher.Start(new GameStart($"Client {login}", build, build.ClientDlls, LaunchArguments.Client(build, backend, login, effectivePassword), false, output)));
         lock (_gate)
@@ -599,13 +599,13 @@ public sealed class LauncherHost : IAsyncDisposable
     }
 
     /// <summary>
-    /// Points the Store's purchase page at the backend in the player's saved Game.ini (<see cref="PurchaseFlowConfig"/>):
+    /// Points the Store's purchase page at the backend in the build's NoRedist\DefaultGame.ini (<see cref="PurchaseFlowConfig"/>):
     /// the game reads it on the front end's first frame (3.1 RegisterForEpicPurchasingDisplay, 0xD496C0), before the
-    /// backend's hotfix can set it (Core-Backend #244).
+    /// backend's hotfix can set it, and a cooked build ignores the saved Game.ini (Core-Backend #244).
     /// </summary>
-    private void WritePurchaseFlow(BackendEndpoint backend)
+    private void WritePurchaseFlow(BuildSettings build, BackendEndpoint backend)
     {
-        var path = PurchaseFlowConfig.GameIniPath(Paths);
+        var path = PurchaseFlowConfig.GameIniPath(build.Path);
         var url = PurchaseFlowConfig.Url(backend);
         try
         {

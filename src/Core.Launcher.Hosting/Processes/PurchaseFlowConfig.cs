@@ -4,11 +4,19 @@ using Core.Launcher.Hosting.Backend;
 namespace Core.Launcher.Hosting.Processes;
 
 /// <summary>
-/// The Store's purchase page, in the player's saved Game.ini (Core-Backend #244). The purchase flow reads its URL once,
-/// from the game config's [EpicPurchaseFlow] section under the MCP environment's name ("Prod"): the front end's root
-/// UIManager does on its first frame (3.1 RegisterForEpicPurchasingDisplay, 0xD496C0), before the backend's DefaultGame.ini
-/// hotfix applies, so a V-Bucks pack or the Starter Pack opened Epic's shipped launcher-website page, which is black.
-/// The saved Game.ini is read over the build's own config at start-up. Clients only: servers show no Store.
+/// The Store's purchase page, in the build's FortniteGame\Config\NoRedist\DefaultGame.ini (Core-Backend #244). The
+/// purchase flow reads its URL once, from the game config's [EpicPurchaseFlow] section under the MCP environment's name
+/// ("Prod"): the front end's root UIManager does on its first frame (UFortMcpContext::RegisterForEpicPurchasingDisplay,
+/// 3.1 0xD496C0, 3.5.2 0xDBEA40), before the backend's DefaultGame.ini hotfix applies, so a V-Bucks pack or the Starter
+/// Pack opened Epic's shipped launcher-website page, which is black.
+/// <para>
+/// The player's saved Game.ini can't carry it: a cooked build loads only GameUserSettings.ini from Saved\Config and marks
+/// every other config NoSave (FConfigCacheIni::LoadExternalIniFile, 3.5.2 0x12CB530, 3.1 0x11E7FD0). The source hierarchy
+/// takes NoRedist\Default&lt;Name&gt;.ini after Default&lt;Name&gt;.ini (GetSourceIniHierarchyFilenames, 3.5.2 0x12C7F80),
+/// and the pak file reads a loose file for anything that isn't a uasset, umap, ubulk or uexp (FPakPlatformFile::
+/// IsNonPakFilenameAllowed, 3.5.2 0x269FC20, no filename security delegate bound), so a loose one overrides the pak's Prod.
+/// Clients only: servers show no Store.
+/// </para>
 /// </summary>
 public static class PurchaseFlowConfig
 {
@@ -16,8 +24,8 @@ public static class PurchaseFlowConfig
 
     public const string Key = "Prod";
 
-    /// <summary>The player's saved Game.ini (FPaths::GeneratedConfigDir under Saved).</summary>
-    public static string GameIniPath(LauncherPaths paths) => Path.Combine(paths.GameUserDir, "Saved", "Config", "WindowsClient", "Game.ini");
+    /// <summary>The build's NoRedist\DefaultGame.ini, layered over the pak's FortniteGame\Config\DefaultGame.ini.</summary>
+    public static string GameIniPath(string buildRoot) => Path.Combine(buildRoot, "FortniteGame", "Config", "NoRedist", "DefaultGame.ini");
 
     /// <summary>
     /// As Core-Backend's purchaseFlowUrl (src/services/fortnite/purchase.js): http:///host:port/purchase. The triple slash

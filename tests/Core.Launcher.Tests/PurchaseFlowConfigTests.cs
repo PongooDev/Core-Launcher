@@ -20,11 +20,9 @@ public sealed class PurchaseFlowConfigTests
     }
 
     [Fact]
-    public void The_players_game_ini_is_in_fortnites_saved_config()
+    public void The_ini_is_the_builds_noredist_default_game_ini()
     {
-        var paths = new LauncherPaths(@"D:\Launcher") { GameUserDir = @"C:\Users\Player\AppData\Local\FortniteGame" };
-
-        Assert.Equal(@"C:\Users\Player\AppData\Local\FortniteGame\Saved\Config\WindowsClient\Game.ini", PurchaseFlowConfig.GameIniPath(paths));
+        Assert.Equal(@"E:\3.5.2\Fortnite\FortniteGame\Config\NoRedist\DefaultGame.ini", PurchaseFlowConfig.GameIniPath(@"E:\3.5.2\Fortnite"));
     }
 
     [Fact]
