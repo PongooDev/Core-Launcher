@@ -103,6 +103,14 @@ public static partial class KnownBuilds
     public const int Fortnite33 = 3942182;
 
     /// <summary>
+    /// Fortnite 3.5.1, ++Fortnite+Release-3.5 CL-4000805 on UE 4.20.0, the 11 April 2018 update (v3.50 plus its 3.5.1 hotfix):
+    /// Battle Royale gets Replay Mode, the Port-A-Fort (an epic thrown item that builds a three-story metal fort at the impact
+    /// point; stacks of 1, up to 5), a short equip time on slower weapons, a weaker Guided Missile and the updated 50v50 mode.
+    /// Save the World gets the Cyberpunk Heroes and Neon Weapons. The 3.5.1 hotfix fixes sprint-fire and Replay crashes.
+    /// </summary>
+    public const int Fortnite351 = 4000805;
+
+    /// <summary>
     /// What a Battle Royale server gets. Core takes the map and playlist from the build's own data (on 1.7.2 the Battle
     /// Royale zone theme's Athena_Terrain and solo playlist; the match's playlist comes with its assignment) and
     /// registers the server with the matchmaking service that Battle Royale's players queue on, so the launcher needs no
@@ -193,7 +201,8 @@ public static partial class KnownBuilds
         new(Fortnite31, "3.1", "Fortnite 3.1 (CL-3915963)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite311, "3.1.1", "Fortnite 3.1.1 (CL-3917250)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite32, "3.2", "Fortnite 3.2 (CL-3935073)", BuildSupport.Full, [], BattleRoyale: true),
-        new(Fortnite33, "3.3", "Fortnite 3.3 (CL-3942182)", BuildSupport.InProgress, [], BattleRoyale: true),
+        new(Fortnite33, "3.3", "Fortnite 3.3 (CL-3942182)", BuildSupport.Full, [], BattleRoyale: true),
+        new(Fortnite351, "3.5.1", "Fortnite 3.5.1 (CL-4000805)", BuildSupport.InProgress, [], BattleRoyale: true),
     ];
 
     private static KnownBuild? Find(int changelist) => Array.Find(Builds, build => build.Changelist == changelist);
