@@ -87,6 +87,9 @@ public static partial class KnownBuilds
     /// <summary>Fortnite 3.1, ++Fortnite+Release-3.1 CL-3915963 on UE 4.20.0: Season 3's 3.1.0 update.</summary>
     public const int Fortnite31 = 3915963;
 
+    /// <summary>Fortnite 3.1.1, ++Fortnite+Release-3.1 CL-3917250 on UE 4.20.0: 3.1.1 — crash fixes on top of 3.1.</summary>
+    public const int Fortnite311 = 3917250;
+
     /// <summary>Fortnite 3.2, ++Fortnite+Release-3.2 CL-3935073 on UE 4.20.0: Season 3's 3.2 update.</summary>
     public const int Fortnite32 = 3935073;
 
@@ -188,6 +191,7 @@ public static partial class KnownBuilds
         new(Fortnite25, "2.5", "Fortnite 2.5 (CL-3889387)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite30, "3.0", "Fortnite 3.0 (CL-3901517)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite31, "3.1", "Fortnite 3.1 (CL-3915963)", BuildSupport.Full, [], BattleRoyale: true),
+        new(Fortnite311, "3.1.1", "Fortnite 3.1.1 (CL-3917250)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite32, "3.2", "Fortnite 3.2 (CL-3935073)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite33, "3.3", "Fortnite 3.3 (CL-3942182)", BuildSupport.InProgress, [], BattleRoyale: true),
     ];
