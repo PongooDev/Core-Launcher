@@ -26,6 +26,13 @@ public sealed class LauncherSettings
     /// </summary>
     public bool AllowUnsupportedBuilds { get; set; }
 
+    /// <summary>
+    /// While a client starts, shows the splash image the build ships for EasyAntiCheat (from 3.2: EasyAntiCheat\Launcher\SplashScreen.png)
+    /// in a window with a progress bar, as real Fortnite did (<see cref="Processes.EacSplash"/>, Core-Launcher #12). Core doesn't run
+    /// EasyAntiCheat. Off by default; builds without the image show nothing.
+    /// </summary>
+    public bool ShowEacSplash { get; set; }
+
     public DllSettings Dlls { get; set; } = new();
 
     public BackendSettings Backend { get; set; } = new();

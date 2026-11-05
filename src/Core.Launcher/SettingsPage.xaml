@@ -118,6 +118,14 @@
                                            Text="{Binding UnsupportedBuildsHint}" />
                             </StackPanel>
                         </Border>
+                        <Border Style="{StaticResource Section}">
+                            <StackPanel>
+                                <TextBlock Text="LAUNCH" Style="{StaticResource Heading}" />
+                                <CheckBox Style="{StaticResource Switch}" Content="Show the EasyAntiCheat splash when starting" IsChecked="{Binding ShowEacSplash}" FontSize="14" Margin="0,8,0,0" />
+                                <TextBlock Style="{StaticResource Hint}" Margin="0,8,0,0"
+                                           Text="{Binding EacSplashHint}" />
+                            </StackPanel>
+                        </Border>
                         </StackPanel>
                     </ScrollViewer>
                 </Grid>

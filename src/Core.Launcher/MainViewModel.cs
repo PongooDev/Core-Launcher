@@ -827,6 +827,7 @@ public sealed partial class MainViewModel : ObservableObject
         try
         {
             await _host.PlayAsync();
+            ShowLaunchSplash(_host.Settings.PlayerName);
         }
         catch (Exception exception)
         {
@@ -855,6 +856,7 @@ public sealed partial class MainViewModel : ObservableObject
         try
         {
             await _host.PlayAsync(login, password);
+            ShowLaunchSplash(login);
             Toast($"Starting a client as {login}", "GoodBrush");
         }
         catch (Exception exception)
@@ -865,6 +867,24 @@ public sealed partial class MainViewModel : ObservableObject
         finally
         {
             Refresh();
+        }
+    }
+
+    /// <summary>Shows the build's EasyAntiCheat splash (<see cref="EacSplash"/>) while <paramref name="login"/>'s client starts, when the setting is on and the build has one.</summary>
+    private void ShowLaunchSplash(string login)
+    {
+        if (_host.Settings.FindSelectedBuild() is not { } build || EacSplash.Find(_host.Settings, build) is not { } image || _host.ClientFor(login) is not { } session)
+        {
+            return;
+        }
+
+        try
+        {
+            new EacSplashWindow(image, session.Game).Show();
+        }
+        catch (Exception exception) when (exception is IOException or NotSupportedException or InvalidOperationException)
+        {
+            _host.Log.Write($"EasyAntiCheat splash: {exception.Message}");
         }
     }
 

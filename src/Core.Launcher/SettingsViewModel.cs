@@ -216,6 +216,19 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
     }
 
+    public static string EacSplashHint =>
+        "Shows the launch window real Fortnite had from 3.2: the build's own EasyAntiCheat splash image and a progress bar, until the game's window opens. It only shows for builds that include the splash (3.2 and later). Core doesn't run EasyAntiCheat.";
+
+    public bool ShowEacSplash
+    {
+        get => Settings.ShowEacSplash;
+        set
+        {
+            Settings.ShowEacSplash = value;
+            OnPropertyChanged();
+        }
+    }
+
     public bool UseRelease
     {
         get => Settings.Dlls.Source == DllSource.Release;
