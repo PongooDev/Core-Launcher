@@ -313,7 +313,7 @@ public sealed class SettingsAndBuildTests
         Assert.Contains("Core DLLs turned off", KnownBuilds.NotSupported(build, allowUnsupported: true));
         Assert.DoesNotContain("doesn't support", KnownBuilds.NotSupported(build, allowUnsupported: true));
         Assert.Equal(
-            "Fortnite 3.4 CL-3968866 isn't supported and may not work: Core is only tested on Fortnite 1.1 to 3.5.2, and support for Fortnite 3.6 is in progress.",
+            "Fortnite 3.4 CL-3968866 isn't supported and may not work: Core is only tested on Fortnite 1.1 to 3.6, and support for Fortnite 4.0 is in progress.",
             KnownBuilds.UnsupportedWarning(build.Name));
     }
 
