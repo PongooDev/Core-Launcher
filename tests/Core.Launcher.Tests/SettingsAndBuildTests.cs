@@ -130,6 +130,13 @@ public sealed class SettingsAndBuildTests
     public void ServerLoginNumbersEachInstance()
     {
         Assert.Equal("CoreServer2", new ServerSettings().LoginFor(2));
+
+        // A login without {n} still gives each server its own account (CoreV2 #280).
+        var servers = new ServerSettings { Login = "Server" };
+        Assert.Equal("Server1", servers.LoginFor(1));
+        Assert.Equal("Server2", servers.LoginFor(2));
+        servers.Login = "Server1";
+        Assert.NotEqual(servers.LoginFor(1), servers.LoginFor(2));
     }
 
     [Fact]

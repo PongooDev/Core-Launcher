@@ -206,7 +206,14 @@ public sealed class ServerSettings
 
     public const int MaxPcNameLength = 10;
 
-    public string LoginFor(int instance) => Login.Replace("{n}", instance.ToString(), StringComparison.Ordinal);
+    /// <summary>
+    /// Server <paramref name="instance"/>'s login: <see cref="Login"/> with {n} as its number, or with the number after it
+    /// when it has no {n} (as Core.Server.Cli does), so no two servers share an account. Servers sharing one log each
+    /// other out as each logs in, and a server logged out shuts down (CoreV2 #280).
+    /// </summary>
+    public string LoginFor(int instance) => Login.Contains("{n}", StringComparison.Ordinal)
+        ? Login.Replace("{n}", instance.ToString(), StringComparison.Ordinal)
+        : $"{Login}{instance}";
 
     /// <summary>
     /// Server <paramref name="instance"/>'s login on a friend's backend. The friend's own servers are CoreServer{n}, so

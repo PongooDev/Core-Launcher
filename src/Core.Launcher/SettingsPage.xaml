@@ -301,7 +301,7 @@
                                 <TextBlock Style="{StaticResource Hint}" Text="A server that hasn't logged &quot;Server ready&quot; by then is restarted. 0 waits forever." />
                                 <TextBlock Text="Server login" Style="{StaticResource Label}" />
                                 <TextBox Text="{Binding Settings.Servers.Login, UpdateSourceTrigger=PropertyChanged}" Width="240" HorizontalAlignment="Left" />
-                                <TextBlock Style="{StaticResource Hint}" Text="{}{n} is the server's number, so each server logs in with its own account." />
+                                <TextBlock Style="{StaticResource Hint}" Text="{}{n} is the server's number, so each server logs in with its own account; without {n} the number goes at the end." />
                                 <TextBlock Text="PC name on a friend's backend" Style="{StaticResource Label}" />
                                 <TextBox Text="{Binding Settings.Servers.RemoteName, UpdateSourceTrigger=PropertyChanged}" Width="240" HorizontalAlignment="Left" />
                                 <TextBlock Style="{StaticResource Hint}" Text="On a friend's backend these servers log in as CoreServer-&lt;this name&gt;-{n} (letters and digits, up to 10; empty uses this computer's name), so they don't share accounts with your friend's own CoreServer{n}. A Server login changed from CoreServer{n} is used as it is." />
