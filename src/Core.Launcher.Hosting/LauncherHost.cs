@@ -75,6 +75,7 @@ public sealed class LauncherHost : IAsyncDisposable
         Backend.Changed += OnChanged;
         Servers.Changed += OnChanged;
         ServerAssets.Checked += Servers.Tick;
+        ServerAssets.ProgressChanged += OnChanged;
     }
 
     public LauncherPaths Paths { get; }

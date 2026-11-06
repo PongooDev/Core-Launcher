@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using Core.Launcher.Hosting.Builds;
+using Core.Launcher.Hosting.Components;
 using Core.Launcher.Hosting.Servers;
 using Core.Server.Cli.Hosting;
 using Core.Server.Cli.Interface;
@@ -136,6 +137,15 @@ public sealed partial class DashboardRenderer
         }
 
         lines.AddRange(table.BuildLines());
+
+        // Server assets: the pak's download, while it runs or after it failed (the servers start without it then).
+        if (status.ServerAssets is { Visible: true } assets)
+        {
+            lines.Add(string.Empty);
+            lines.Add(Output.Indent + Theme.Emphasis("▌", Theme.White) + " " + Theme.Emphasis("Server Assets", Theme.Text));
+            var failed = assets.Phase == ServerAssetsPhase.Failed;
+            lines.AddRange(new Panel().Row(failed ? "Failed" : "Status", Theme.Paint(failed ? $"{assets.Describe()} (servers start without it; restart CoreServerHost to retry)" : assets.Describe(), failed ? Theme.Danger : Theme.Text)).BuildLines());
+        }
 
         // 4. Activity Section (budget-aware to prevent exceeding window height)
         const int reservedForBottom = 4; // blank + status bar + blank + footer

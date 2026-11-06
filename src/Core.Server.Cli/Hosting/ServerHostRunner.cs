@@ -25,7 +25,8 @@ public sealed record ServerHostStatus(
     IReadOnlyList<string> RecentEvents,
     int StandardServers = 2,
     int BattleRoyaleServers = 2,
-    IReadOnlyDictionary<int, string>? SlotTypes = null);
+    IReadOnlyDictionary<int, string>? SlotTypes = null,
+    ServerAssetsProgress? ServerAssets = null);
 
 public sealed class ServerHostRunner : IAsyncDisposable
 {
@@ -115,7 +116,9 @@ public sealed class ServerHostRunner : IAsyncDisposable
         _build = KnownBuilds.Create(detected.Folder, detected.Version, _config.AllowUnsupportedBuilds);
         _endpoint = _config.ParseEndpoint();
 
-        _starter = new GameServerStarter(_config, _build, _endpoint, _launcher, _paths, _sessions, _log, AddEvent, new ServerAssets(_http, _paths.ServerAssets, _log.Write));
+        var serverAssets = new ServerAssets(_http, _paths.ServerAssets, _log.Write);
+        serverAssets.ProgressChanged += () => Changed?.Invoke();
+        _starter = new GameServerStarter(_config, _build, _endpoint, _launcher, _paths, _sessions, _log, AddEvent, serverAssets);
         _pool = new ServerPool(_starter, _log, TimeProvider.System);
 
         var totalInstances = _config.StandardServers + (KnownBuilds.HasBattleRoyale(_build.Changelist) ? _config.BattleRoyaleServers : 0);
@@ -217,7 +220,8 @@ public sealed class ServerHostRunner : IAsyncDisposable
             eventsCopy,
             _config.StandardServers,
             _config.BattleRoyaleServers,
-            slotTypes);
+            slotTypes,
+            _starter?.ServerAssetsProgress);
     }
 
     public bool HostsBattleRoyale(int instance) =>

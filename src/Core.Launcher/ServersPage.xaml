@@ -85,6 +85,37 @@
                    Text="The launcher keeps these servers running so a free one is always ready for a match. A server that doesn't report ready in time, or stops, is started again." />
 
         <Border DockPanel.Dock="Top" Style="{StaticResource Panel}" Padding="18,12" Margin="0,0,0,18" MaxWidth="760" HorizontalAlignment="Left"
+                Visibility="{Binding AssetsVisible, Converter={StaticResource Visible}}">
+            <StackPanel>
+                <DockPanel>
+                    <Button DockPanel.Dock="Right" Margin="12,0,0,0" Command="{Binding RetryServerAssetsCommand}"
+                            Visibility="{Binding AssetsFailed, Converter={StaticResource Visible}}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE72C;" Style="{StaticResource Icon}" FontSize="12" Margin="0,0,8,0" />
+                            <TextBlock Text="Retry" />
+                        </StackPanel>
+                    </Button>
+                    <TextBlock Text="Server assets" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+                </DockPanel>
+                <TextBlock Text="{Binding AssetsText}" TextWrapping="Wrap" FontSize="13" Margin="0,8,0,0">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Foreground" Value="{StaticResource SubtleBrush}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding AssetsFailed}" Value="True">
+                                    <Setter Property="Foreground" Value="{StaticResource BadBrush}" />
+                                    <Setter Property="FontWeight" Value="SemiBold" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+                <ProgressBar Margin="0,10,0,0" Minimum="0" Maximum="100" Value="{Binding AssetsPercent, Mode=OneWay}" IsIndeterminate="{Binding AssetsIndeterminate}"
+                             Visibility="{Binding AssetsFailed, Converter={StaticResource Not}, ConverterParameter=Visibility}" />
+            </StackPanel>
+        </Border>
+
+        <Border DockPanel.Dock="Top" Style="{StaticResource Panel}" Padding="18,12" Margin="0,0,0,18" MaxWidth="760" HorizontalAlignment="Left"
                 Visibility="{Binding RemoteHosting, Converter={StaticResource Visible}}">
             <StackPanel>
                 <TextBlock Text="Hosting for a friend's backend" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,4" />

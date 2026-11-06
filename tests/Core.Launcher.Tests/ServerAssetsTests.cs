@@ -5,7 +5,7 @@ using Core.Launcher.Hosting.Components;
 
 namespace Core.Launcher.Tests;
 
-public sealed class ServerAssetsTests
+public sealed partial class ServerAssetsTests
 {
     private const string PakUrl = ServerAssets.ReleaseUrlPrefix + "cl-3901517/ServerAssets-3.0-CL-3901517.pak";
 
@@ -340,14 +340,14 @@ public sealed class ServerAssetsTests
         var routes = new Routes { [ServerAssets.ManifestUrl] = Text(SignedManifest()), [PakUrl] = Bytes(PakBytes), [SigUrl] = Bytes([.. SigBytes, 0]) };
         var assets = new ServerAssets(new HttpClient(routes), folder.Combine("Cache"), _ => { });
 
-        // The sig doesn't match: neither is installed, and no download is left behind.
+        // The sig doesn't match: neither is installed (the verified pak waits as a partial download for the next try).
         Assert.StartsWith("skipped", await assets.EnsureAsync(build, 3901517, true, TestContext.Current.CancellationToken));
-        Assert.Equal(["pakchunk0-WindowsClient.pak"], Directory.GetFiles(paks).Select(Path.GetFileName));
+        Assert.Equal(["pakchunk0-WindowsClient.pak"], Directory.GetFiles(paks).Where(file => !file.EndsWith(".download", StringComparison.Ordinal)).Select(Path.GetFileName));
 
         // The sig can't be downloaded at all.
         routes.Remove(SigUrl);
         Assert.StartsWith("skipped", await assets.EnsureAsync(build, 3901517, true, TestContext.Current.CancellationToken));
-        Assert.Equal(["pakchunk0-WindowsClient.pak"], Directory.GetFiles(paks).Select(Path.GetFileName));
+        Assert.Equal(["pakchunk0-WindowsClient.pak"], Directory.GetFiles(paks).Where(file => !file.EndsWith(".download", StringComparison.Ordinal)).Select(Path.GetFileName));
     }
 
     [Fact]
@@ -365,7 +365,7 @@ public sealed class ServerAssetsTests
         Assert.StartsWith("skipped", await assets.EnsureAsync(build, 3901517, true, TestContext.Current.CancellationToken));
         Assert.Equal("an older pak", File.ReadAllText(pak));
         Assert.Equal("its sig", File.ReadAllText(sig));
-        Assert.Equal(3, Directory.GetFiles(paks).Length);
+        Assert.Equal(3, Directory.GetFiles(paks).Count(file => !file.EndsWith(".download", StringComparison.Ordinal)));
     }
 
     [Fact]

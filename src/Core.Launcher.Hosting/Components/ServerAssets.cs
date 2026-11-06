@@ -191,20 +191,48 @@ public sealed class ServerAssets
 
     public static readonly TimeSpan ManifestTimeout = TimeSpan.FromSeconds(15);
 
-    public static readonly TimeSpan DownloadTimeout = TimeSpan.FromMinutes(10);
+    /// <summary>A download fails when no byte arrives for this long (it is then tried again, resuming).</summary>
+    public static readonly TimeSpan DownloadStallTimeout = TimeSpan.FromSeconds(60);
+
+    /// <summary>How many times a download is tried: each try after a failure resumes the partial file.</summary>
+    public const int DownloadAttempts = 5;
+
+    /// <summary>The slowest line the overall cap allows for: 128 KiB/s.</summary>
+    private const double SlowestBytesPerSecond = 128 * 1024;
+
+    /// <summary>The overall cap on a download with its retries: ten minutes and the time <paramref name="size"/> takes at 128 KiB/s (about 2.5 hours for 1 GB).</summary>
+    public static TimeSpan DownloadCap(long size) => TimeSpan.FromMinutes(10) + TimeSpan.FromSeconds(size / SlowestBytesPerSecond);
+
+    /// <summary>The most often <see cref="ProgressChanged"/> is raised for byte counts (phase changes always raise it).</summary>
+    public static readonly TimeSpan ProgressInterval = TimeSpan.FromMilliseconds(250);
+
+    private static readonly TimeSpan SpeedWindow = TimeSpan.FromSeconds(5);
 
     private readonly HttpClient _http;
     private readonly string _cacheFolder;
     private readonly Action<string> _log;
+    private readonly TimeProvider _time;
+    private readonly TimeSpan _stallTimeout;
+    private readonly Func<int, TimeSpan>? _retryDelay;
     private readonly Lock _gate = new();
     private string? _key;
     private Task<string>? _check;
+    private (string BuildRoot, int Changelist, bool Enabled, CancellationToken Cancellation)? _last;
+    private ServerAssetsProgress _progress = ServerAssetsProgress.None;
+    private long _raised;
+    private readonly Queue<(long Time, long Bytes)> _samples = new();
 
-    public ServerAssets(HttpClient http, string cacheFolder, Action<string> log)
+    /// <param name="stallTimeout">Overrides <see cref="DownloadStallTimeout"/> (tests).</param>
+    /// <param name="time">The clock for speeds and the progress throttle (tests).</param>
+    /// <param name="retryDelay">Overrides the wait between download tries (tests).</param>
+    public ServerAssets(HttpClient http, string cacheFolder, Action<string> log, TimeSpan? stallTimeout = null, TimeProvider? time = null, Func<int, TimeSpan>? retryDelay = null)
     {
         _http = http;
         _cacheFolder = cacheFolder;
         _log = log;
+        _time = time ?? TimeProvider.System;
+        _stallTimeout = stallTimeout ?? DownloadStallTimeout;
+        _retryDelay = retryDelay;
     }
 
     /// <summary>The last good manifest, used when GitHub can't be reached.</summary>
@@ -224,6 +252,91 @@ public sealed class ServerAssets
 
     /// <summary>Raised when a check finishes.</summary>
     public event Action? Checked;
+
+    /// <summary>Where the check is: phase, bytes, speed and time left (<see cref="ServerAssetsProgress.None"/> before the first).</summary>
+    public ServerAssetsProgress Progress
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _progress;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Raised when <see cref="Progress"/> changes: at once for a new phase, at most every <see cref="ProgressInterval"/>
+    /// for byte counts. Raised on whichever thread is downloading.
+    /// </summary>
+    public event Action? ProgressChanged;
+
+    /// <summary>
+    /// Runs the last check again, for after a failure: the partial download is resumed. Does nothing while a check is
+    /// under way or before the first one. Servers already running keep starting without the pak until they restart.
+    /// </summary>
+    public void Retry()
+    {
+        lock (_gate)
+        {
+            if (_last is not { } last || _check is { IsCompleted: false })
+            {
+                return;
+            }
+
+            Begin(last.BuildRoot, last.Changelist, last.Enabled, last.Cancellation);
+        }
+    }
+
+    private void Publish(ServerAssetsProgress progress, bool force)
+    {
+        lock (_gate)
+        {
+            _progress = progress;
+            var now = _time.GetTimestamp();
+            if (!force && _time.GetElapsedTime(_raised, now) < ProgressInterval)
+            {
+                return;
+            }
+
+            _raised = now;
+        }
+
+        ProgressChanged?.Invoke();
+    }
+
+    /// <summary>The download's state as <paramref name="received"/> of <paramref name="total"/> bytes arrive, with the speed over the last few seconds.</summary>
+    private void Downloading(ServerAssetsEntry entry, string file, long received, long? total)
+    {
+        double speed = 0;
+        TimeSpan? remaining = null;
+        lock (_gate)
+        {
+            var now = _time.GetTimestamp();
+            if (_samples.Count == 0 || _time.GetElapsedTime(_samples.Last().Time, now) >= TimeSpan.FromMilliseconds(100))
+            {
+                _samples.Enqueue((now, received));
+            }
+
+            while (_samples.Count > 2 && _time.GetElapsedTime(_samples.Peek().Time, now) > SpeedWindow)
+            {
+                _samples.Dequeue();
+            }
+
+            var oldest = _samples.Peek();
+            var seconds = _time.GetElapsedTime(oldest.Time, now).TotalSeconds;
+            if (seconds >= 1 && received > oldest.Bytes)
+            {
+                speed = (received - oldest.Bytes) / seconds;
+                if (total is { } all && all > received)
+                {
+                    remaining = TimeSpan.FromSeconds((all - received) / speed);
+                }
+            }
+        }
+
+        Publish(new ServerAssetsProgress(ServerAssetsPhase.Downloading, entry.Version, file, received, total ?? 0, speed, remaining), received == total);
+    }
 
     public static string PaksFolder(string buildRoot) => Path.Combine(buildRoot, "FortniteGame", "Content", "Paks");
 
@@ -313,14 +426,23 @@ public sealed class ServerAssets
             var key = $"{Path.GetFullPath(buildRoot)}|{changelist}|{enabled}";
             if (_key != key || _check is null)
             {
-                _key = key;
-                var check = Task.Run(() => EnsureAsync(buildRoot, changelist, enabled, cancellation));
-                _check = check;
-                check.ContinueWith(_ => Checked?.Invoke(), TaskScheduler.Default);
+                Begin(buildRoot, changelist, enabled, cancellation);
             }
 
-            return _check.IsCompleted ? null : "checking server assets";
+            return _check!.IsCompleted ? null : _progress.Describe() is { Length: > 0 } line ? line : "checking server assets";
         }
+    }
+
+    /// <summary>Starts a check; the caller holds the lock.</summary>
+    private void Begin(string buildRoot, int changelist, bool enabled, CancellationToken cancellation)
+    {
+        _key = $"{Path.GetFullPath(buildRoot)}|{changelist}|{enabled}";
+        _last = (buildRoot, changelist, enabled, cancellation);
+        _samples.Clear();
+        _progress = new ServerAssetsProgress(ServerAssetsPhase.Checking);
+        var check = Task.Run(() => EnsureAsync(buildRoot, changelist, enabled, cancellation));
+        _check = check;
+        check.ContinueWith(_ => Checked?.Invoke(), TaskScheduler.Default);
     }
 
     /// <summary>Makes the next <see cref="Pending"/> check again (settings changed).</summary>
@@ -338,11 +460,15 @@ public sealed class ServerAssets
         string result;
         try
         {
+            Publish(new ServerAssetsProgress(ServerAssetsPhase.Checking), true);
             result = await EnsureCoreAsync(buildRoot, changelist, enabled, cancellation);
+            Publish(ServerAssetsProgress.None with { Phase = ServerAssetsPhase.Done }, true);
         }
         catch (Exception exception)
         {
-            result = $"skipped ({exception.Message}); the server starts without them";
+            var reason = exception is OperationCanceledException && !cancellation.IsCancellationRequested ? "took too long" : exception.Message;
+            result = $"skipped ({reason}); the server starts without them";
+            Publish(new ServerAssetsProgress(ServerAssetsPhase.Failed, Progress.Version, Progress.File, Error: reason), true);
         }
 
         _log($"Server assets: {result}");
@@ -359,13 +485,14 @@ public sealed class ServerAssets
 
         var destination = Path.Combine(paks, PakFileName(paks));
         var installed = await InstalledAsync(destination, cancellation);
+        var manifest = enabled && changelist > 0 ? await ManifestAsync(cancellation) : null;
         if (installed is null)
         {
-            // No pak: a sig or an unfinished download left behind on its own goes.
-            Remove(paks);
+            // No pak: a sig or an unfinished download left behind on its own goes, except the partial pak that the
+            // manifest's entry resumes.
+            Remove(paks, manifest?.For(changelist) is { } wanted ? [Path.GetFileName(PartialPath(destination, wanted.Sha256))] : null);
         }
 
-        var manifest = enabled && changelist > 0 ? await ManifestAsync(cancellation) : null;
         var decision = Decide(enabled, changelist, manifest, installed);
         switch (decision.Action)
         {
@@ -374,9 +501,11 @@ public sealed class ServerAssets
                 return $"removed {Path.GetFileName(destination)}{(installed?.Sig is null ? "" : $" and {Path.GetFileName(SigPath(destination))}")}: {decision.Reason}";
             case ServerAssetsAction.Install:
                 var entry = manifest!.For(changelist)!;
+                Publish(new ServerAssetsProgress(ServerAssetsPhase.Downloading, entry.Version, entry.Pak, 0, entry.Size), true);
+                Remove(paks, [Path.GetFileName(PartialPath(destination, entry.Sha256))], partialsOnly: true);
                 using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation))
                 {
-                    timeout.CancelAfter(DownloadTimeout);
+                    timeout.CancelAfter(DownloadCap(entry.Size));
                     await InstallAsync(entry, destination, timeout.Token);
                 }
 
@@ -387,26 +516,43 @@ public sealed class ServerAssets
         }
     }
 
+    /// <summary>The unfinished download of a pak with this SHA-256; the hash in the name keeps a partial of an older entry from being resumed.</summary>
+    private static string PartialPath(string path, string sha256) => $"{path}.{sha256[..12]}.download";
+
+    private DownloadOptions Options(ServerAssetsEntry entry, string file, long size) => new()
+    {
+        StallTimeout = _stallTimeout,
+        Resume = true,
+        Attempts = DownloadAttempts,
+        RetryDelay = _retryDelay,
+        Received = (received, total) => Downloading(entry, file, received, total ?? size),
+        Hashed = (hashed, total) => Publish(new ServerAssetsProgress(ServerAssetsPhase.Verifying, entry.Version, file, hashed, total), hashed == total),
+        Retrying = (attempt, exception) => _log($"Server assets: {file}: {exception.Message}; trying again ({attempt + 1} of {DownloadAttempts}), resuming"),
+    };
+
     /// <summary>
     /// Installs the entry's pak, and its sig when it has one, as one: both are downloaded to temporary files and checked
     /// against the manifest before either is moved into place, so a pak never sits in the Paks folder without its sig
-    /// (on a build that signs its paks, the engine refuses to start with an unsigned pak).
+    /// (on a build that signs its paks, the engine refuses to start with an unsigned pak). A pak that fails to download
+    /// part way stays as a partial file for the next try to resume; one that fails its checks is deleted.
     /// </summary>
     private async Task InstallAsync(ServerAssetsEntry entry, string destination, CancellationToken cancellation)
     {
         var sigDestination = SigPath(destination);
-        var pakTemporary = destination + ".download";
+        var pakTemporary = PartialPath(destination, entry.Sha256);
         var sigTemporary = sigDestination + ".download";
         try
         {
-            await Downloads.VerifiedAsync(_http, entry.Url, pakTemporary, entry.Pak, entry.Size, entry.Sha256, null, cancellation);
+            await DownloadAsync(entry, entry.Pak, entry.Url, pakTemporary, entry.Size, entry.Sha256, cancellation);
             if (entry.Sig is { } sig)
             {
-                await Downloads.VerifiedAsync(_http, sig.Url, sigTemporary, sig.File, sig.Size, sig.Sha256, null, cancellation);
+                _samples.Clear();
+                await DownloadAsync(entry, sig.File, sig.Url, sigTemporary, sig.Size, sig.Sha256, cancellation);
             }
 
             // Both verified. The old pak goes before its sig, and the new sig comes before its pak, so at no point is a
             // pak installed without the sig it needs; a sig left from an older entry goes when the new one has none.
+            Publish(new ServerAssetsProgress(ServerAssetsPhase.Installing, entry.Version, entry.Pak, entry.Size, entry.Size), true);
             File.Delete(destination);
             File.Delete(sigDestination);
             if (entry.Sig is not null)
@@ -426,8 +572,21 @@ public sealed class ServerAssets
         }
         finally
         {
-            File.Delete(pakTemporary);
             File.Delete(sigTemporary);
+        }
+    }
+
+    private async Task DownloadAsync(ServerAssetsEntry entry, string file, string url, string temporary, long size, string sha256, CancellationToken cancellation)
+    {
+        try
+        {
+            await Downloads.VerifiedAsync(_http, url, temporary, file, size, sha256, null, cancellation, Options(entry, file, size));
+        }
+        catch (InvalidDataException)
+        {
+            // A finished download that isn't the manifest's is useless to resume.
+            File.Delete(temporary);
+            throw;
         }
     }
 
@@ -447,19 +606,20 @@ public sealed class ServerAssets
 
     /// <summary>
     /// Deletes Core's pak and sig (any platform) and unfinished downloads of them from <paramref name="paksFolder"/>, and
-    /// nothing else. Paks go before sigs, so a failure part way never leaves a pak without its sig.
+    /// nothing else, except the file names in <paramref name="keep"/> (a partial download to resume); with
+    /// <paramref name="partialsOnly"/>, only unfinished downloads. Paks go before sigs, so a failure part way never leaves a pak without its sig.
     /// </summary>
-    public static int Remove(string paksFolder)
+    public static int Remove(string paksFolder, IReadOnlyCollection<string>? keep = null, bool partialsOnly = false)
     {
         if (!Directory.Exists(paksFolder))
         {
             return 0;
         }
 
-        string[] order = [".pak", ".sig", ".pak.download", ".sig.download"];
+        string[] order = [".pak", ".sig", ".download"];
         var files = Directory.EnumerateFiles(paksFolder, PakPrefix + "*")
             .Select(file => (File: file, Rank: Array.FindIndex(order, ending => Path.GetFileName(file).EndsWith(ending, StringComparison.OrdinalIgnoreCase))))
-            .Where(file => file.Rank >= 0)
+            .Where(file => file.Rank >= 0 && (!partialsOnly || file.Rank == 2) && keep?.Contains(Path.GetFileName(file.File), StringComparer.OrdinalIgnoreCase) != true)
             .OrderBy(file => file.Rank)
             .ToList();
         foreach (var (file, _) in files)

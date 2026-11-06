@@ -106,6 +106,26 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     public partial bool RemoteHosting { get; set; }
 
+    /// <summary>The server assets pak is being checked, downloaded or installed, or failed: the Servers page shows it.</summary>
+    [ObservableProperty]
+    public partial bool AssetsVisible { get; set; }
+
+    /// <summary>"Downloading server assets for 4.0 – 412 MB / 922 MB (45%) · 8.1 MB/s · 1 min left".</summary>
+    [ObservableProperty]
+    public partial string AssetsText { get; set; } = "";
+
+    /// <summary>0 to 100.</summary>
+    [ObservableProperty]
+    public partial double AssetsPercent { get; set; }
+
+    /// <summary>The bar just moves: the phase has no fraction.</summary>
+    [ObservableProperty]
+    public partial bool AssetsIndeterminate { get; set; }
+
+    /// <summary>The server assets download failed: <see cref="AssetsText"/> says why and Retry tries again.</summary>
+    [ObservableProperty]
+    public partial bool AssetsFailed { get; set; }
+
     /// <summary>The friend's backend refused this PC's servers (403), and what to do about it.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HostingRefused))]
@@ -362,6 +382,12 @@ public sealed partial class MainViewModel : ObservableObject
 
         HostingRefusal = refusal;
         RemoteHosting = UsingRemote && _host.Servers.Enabled;
+        var assets = _host.ServerAssets.Progress;
+        AssetsVisible = _host.Servers.Enabled && assets.Visible;
+        AssetsFailed = assets.Phase == ServerAssetsPhase.Failed;
+        AssetsText = assets.Describe();
+        AssetsPercent = assets.Percent;
+        AssetsIndeterminate = !assets.HasFraction && assets.Active;
         var ready = slots.Count(slot => slot.State == ServerState.Ready);
         ServersSummary = _host.Servers.Enabled ? $"{ready} / {slots.Count} ready" : "Off";
         ServersDetail = !_host.Servers.Enabled ? "Hosting is off"
@@ -840,6 +866,9 @@ public sealed partial class MainViewModel : ObservableObject
             Refresh();
         }
     }
+
+    [RelayCommand]
+    private void RetryServerAssets() => _host.ServerAssets.Retry();
 
     [RelayCommand]
     private async Task LaunchAnotherClientAsync()

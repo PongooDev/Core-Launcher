@@ -79,6 +79,9 @@ public sealed class GameServerStarter : IServerStarter
         _serverAssets = serverAssets;
     }
 
+    /// <summary>Where the build's server assets download is, for the dashboard (<see cref="ServerAssetsProgress.None"/> without the feature).</summary>
+    public ServerAssetsProgress ServerAssetsProgress => _serverAssets?.Progress ?? ServerAssetsProgress.None;
+
     public string? Blocker()
     {
         if (!KnownBuilds.CanHost(_build))
