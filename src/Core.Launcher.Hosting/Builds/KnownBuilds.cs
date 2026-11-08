@@ -137,6 +137,15 @@ public static partial class KnownBuilds
     /// <summary>Fortnite 4.2, ++Fortnite+Release-4.2 CL-4072250 on UE 4.20: Season 4's 4.2 update.</summary>
     public const int Fortnite42 = 4072250;
 
+    /// <summary>Fortnite 4.4.0, ++Fortnite+Release-4.4 CL-4117433 on UE 4.20: Season 4's 4.4 update (4.3 was skipped, nobody has a build of it).</summary>
+    public const int Fortnite440 = 4117433;
+
+    /// <summary>Fortnite 4.4.1, ++Fortnite+Release-4.4 CL-4127312 on UE 4.20: the first 4.4 hotfix.</summary>
+    public const int Fortnite441 = 4127312;
+
+    /// <summary>Fortnite 4.4.2, CL-4132537 on UE 4.20: the second 4.4 hotfix, named "Release-4.4.x" by CUE4Parse and its paks.</summary>
+    public const int Fortnite442 = 4132537;
+
     /// <summary>
     /// What a Battle Royale server gets. Core takes the map and playlist from the build's own data (on 1.7.2 the Battle
     /// Royale zone theme's Athena_Terrain and solo playlist; the match's playlist comes with its assignment) and
@@ -234,7 +243,10 @@ public static partial class KnownBuilds
         new(Fortnite36, "3.6", "Fortnite 3.6 (CL-4019403)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite40, "4.0", "Fortnite 4.0 (CL-4039451)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite41, "4.1", "Fortnite 4.1 (CL-4053532)", BuildSupport.Full, [], BattleRoyale: true),
-        new(Fortnite42, "4.2", "Fortnite 4.2 (CL-4072250)", BuildSupport.InProgress, [], BattleRoyale: true),
+        new(Fortnite42, "4.2", "Fortnite 4.2 (CL-4072250)", BuildSupport.Full, [], BattleRoyale: true),
+        new(Fortnite440, "4.4.0", "Fortnite 4.4.0 (CL-4117433)", BuildSupport.InProgress, [], BattleRoyale: true),
+        new(Fortnite441, "4.4.1", "Fortnite 4.4.1 (CL-4127312)", BuildSupport.InProgress, [], BattleRoyale: true),
+        new(Fortnite442, "4.4.2", "Fortnite 4.4.2 (CL-4132537)", BuildSupport.InProgress, [], BattleRoyale: true),
     ];
 
     private static KnownBuild? Find(int changelist) => Array.Find(Builds, build => build.Changelist == changelist);
