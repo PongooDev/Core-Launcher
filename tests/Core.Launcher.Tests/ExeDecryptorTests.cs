@@ -33,6 +33,31 @@ public sealed class ExeDecryptorTests
         Assert.Equal(ExeDecryptor.Result.AlreadyDecrypted, ExeDecryptor.Decrypt(exe));
     }
 
+    [Fact]
+    public void Returns_AlreadyDecrypted_for_its_own_output_even_without_prologues_in_the_samples()
+    {
+        // 3.5.1-4.2's decrypted exes have no prologue at .text+0x100000 (registration thunks), so the rebuilt import
+        // section is what must stop a second decrypt (#17), which would start the exe as its donor and rewrite it.
+        using var folder = new TempFolder();
+        var exe = folder.Combine("test.exe");
+        File.WriteAllBytes(exe, SyntheticExe(textSections: 2, extraSection: ".cimp"));
+        Assert.True(ExeDecryptor.IsDecrypted(exe));
+        Assert.Equal(ExeDecryptor.Result.AlreadyDecrypted, ExeDecryptor.Decrypt(exe));
+    }
+
+    [Fact]
+    public void IsDecrypted_is_false_for_a_packed_or_unpacked_exe()
+    {
+        using var folder = new TempFolder();
+        var packed = folder.Combine("packed.exe");
+        var plain = folder.Combine("plain.exe");
+        File.WriteAllBytes(packed, SyntheticExe(textSections: 2));
+        File.WriteAllBytes(plain, SyntheticExe(textSections: 1, extraSection: ".cimp"));
+        Assert.False(ExeDecryptor.IsDecrypted(packed));
+        Assert.False(ExeDecryptor.IsDecrypted(plain));
+        Assert.False(ExeDecryptor.IsDecrypted(folder.Combine("missing.exe")));
+    }
+
     private const string Exe191 = @"F:\Builds\1.9.1\FortniteGame\Binaries\Win64\FortniteClient-Win64-Shipping.exe";
 
 
@@ -507,7 +532,7 @@ public sealed class ExeDecryptorTests
         return (dlls, functions, firstThunks);
     }
 
-    private static byte[] SyntheticExe(int textSections, bool prologuesInFirst = false)
+    internal static byte[] SyntheticExe(int textSections, bool prologuesInFirst = false, string? extraSection = null)
     {
         using var ms = new MemoryStream();
         using var w = new BinaryWriter(ms);
@@ -523,7 +548,8 @@ public sealed class ExeDecryptorTests
 
         // COFF header
         w.Write((ushort)0x8664);
-        w.Write((ushort)textSections);
+        int sectionCount = textSections + (extraSection is null ? 0 : 1);
+        w.Write((ushort)sectionCount);
         w.Write(new byte[12]);
         w.Write((ushort)240);
         w.Write((ushort)0x22);
@@ -540,7 +566,7 @@ public sealed class ExeDecryptorTests
         w.Write(new byte[240 - (int)(ms.Position - optStart)]);
 
         // Section headers
-        int dataStart = ((int)ms.Position + textSections * 40 + 0x1FF) & ~0x1FF;
+        int dataStart = ((int)ms.Position + sectionCount * 40 + 0x1FF) & ~0x1FF;
         const int textSize = 4096;
 
         for (int i = 0; i < textSections; i++)
@@ -552,6 +578,19 @@ public sealed class ExeDecryptorTests
             w.Write((uint)(dataStart + i * textSize));
             w.Write(new byte[12]);
             w.Write(0x60000020u);
+        }
+
+        if (extraSection is not null)
+        {
+            var name = new byte[8];
+            Encoding.ASCII.GetBytes(extraSection).CopyTo(name, 0);
+            w.Write(name);
+            w.Write((uint)textSize);
+            w.Write((uint)(0x1000 + textSections * 0x10000));
+            w.Write((uint)textSize);
+            w.Write((uint)(dataStart + textSections * textSize));
+            w.Write(new byte[12]);
+            w.Write(0x40000040u);
         }
 
         while (ms.Position < dataStart) w.Write((byte)0);
@@ -569,6 +608,9 @@ public sealed class ExeDecryptorTests
                 w.Write(new byte[textSize]);
             }
         }
+
+        if (extraSection is not null)
+            w.Write(new byte[textSize]);
 
         return ms.ToArray();
     }

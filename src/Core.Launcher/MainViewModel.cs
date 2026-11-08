@@ -174,7 +174,7 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     public partial bool Hosting { get; set; }
 
-    /// <summary>Decrypt Arxan-packed builds (1.9.1+) before launch so Core can hook them; off puts the packed original back.</summary>
+    /// <summary>Decrypt Arxan-packed builds (1.9.1+) once, keeping a backup, so Core can hook them; off puts the packed original back.</summary>
     [ObservableProperty]
     public partial bool DecryptPackedBuilds { get; set; }
 

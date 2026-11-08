@@ -36,7 +36,8 @@ public sealed class LauncherSettings
     /// <summary>
     /// Decrypts Arxan-packed builds (1.9.1 and up) before launch so Core can hook them, backing the exe up to
     /// <c>&lt;exe&gt;.ORIGINAL.bak</c> first (<see cref="Core.Launcher.Hosting.Builds.BuildDecryptor"/>). Off by default:
-    /// it is new and only proven on some builds. Turning it off puts each build's packed original back.
+    /// it is new and only proven on some builds. A build is decrypted once and later launches use it as it is, so the
+    /// setting stays on; turning it off puts each build's packed original back on its next launch.
     /// </summary>
     public bool DecryptPackedBuilds { get; set; }
 

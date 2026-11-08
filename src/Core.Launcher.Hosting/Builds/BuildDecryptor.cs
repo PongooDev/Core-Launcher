@@ -25,9 +25,13 @@ public sealed class BuildDecryptor
     /// <summary>Appended to the exe path to hold the untouched packed original.</summary>
     public const string BackupSuffix = ".ORIGINAL.bak";
 
+    /// <summary>Appended to the exe path for a note saying this launcher decrypted the exe from that backup.</summary>
+    public const string MarkerSuffix = ".DECRYPTED";
+
     private readonly Action<string> _log;
     private readonly HashSet<string> _reported = new(StringComparer.OrdinalIgnoreCase);
     private readonly Lock _gate = new();
+    private readonly Lock _decrypting = new();
 
     public BuildDecryptor(Action<string> log) => _log = log;
 
@@ -39,24 +43,54 @@ public sealed class BuildDecryptor
 
     /// <summary>
     /// With <paramref name="enabled"/> on, decrypts <paramref name="executable"/> in place if it is packed, backing it
-    /// up first; with it off, puts the packed original back when a previous run decrypted it. Never throws: a failure is
-    /// logged and the exe is left ready to launch. Runs on the caller's thread (a background one) and takes a few seconds.
+    /// up first, and launches an exe this launcher already decrypted as it is; with it off, puts the packed original
+    /// back when a previous run decrypted it. Never throws: a failure is logged and the exe is left ready to launch.
+    /// Runs on the caller's thread (a background one); a first decrypt takes a few seconds, a later launch none.
     /// </summary>
     public void Decrypt(string executable, string buildName, bool enabled)
     {
+        // A server and a client of the same build start moments apart; one decrypts while the other waits and then
+        // finds the work done, instead of both writing the exe at once.
+        lock (_decrypting)
+        {
+            DecryptLocked(executable, buildName, enabled);
+        }
+    }
+
+    private void DecryptLocked(string executable, string buildName, bool enabled)
+    {
         var label = buildName.Length > 0 ? buildName : Path.GetFileName(executable);
         var backup = executable + BackupSuffix;
+        var marker = executable + MarkerSuffix;
 
         if (!enabled)
         {
             // Decryption is off: undo a decrypt from a previous run so the build launches as its untouched packed exe.
-            RevertToPacked(executable, backup, label);
+            RevertToPacked(executable, backup, marker, label);
             return;
         }
 
         var hadBackup = File.Exists(backup);
+        if (hadBackup && File.Exists(marker) && ExeDecryptor.IsDecrypted(executable))
+        {
+            // Decrypted on an earlier launch: launch it as it is. Never decrypt it again, or open it for writing (a
+            // server may be running it), which is what left the toggle unusable once a build was decrypted (#17).
+            LogOnce(executable, $"{label}'s exe is already decrypted; launching it (the packed original is at {Path.GetFileName(backup)})");
+            return;
+        }
+
         try
         {
+            if (hadBackup && !FilesEqual(executable, backup))
+            {
+                // There is a backup but no decrypt this launcher can vouch for (launcher 1.0.34 kept no marker, and
+                // re-decrypted its own output on every launch, which broke the exe). Start again from the original.
+                Report(new DecryptionProgress(true, label, "Restoring the original exe to decrypt it afresh"));
+                File.Copy(backup, executable, overwrite: true);
+                TryDelete(marker);
+                _log($"Restored {label}'s packed exe from {Path.GetFileName(backup)} to decrypt it afresh");
+            }
+
             Report(new DecryptionProgress(true, label, hadBackup ? "Checking the build" : "Backing up the original exe"));
             if (!hadBackup)
             {
@@ -72,6 +106,12 @@ public sealed class BuildDecryptor
                 TryDelete(backup);
             }
 
+            if (result == ExeDecryptor.Result.Decrypted)
+            {
+                // Says this launcher decrypted the exe from the backed-up original, so later launches use it as it is.
+                File.WriteAllText(marker, $"Decrypted by Core Launcher from {Path.GetFileName(backup)}. Turn decryption off in the launcher to restore the original.");
+            }
+
             LogOnce(executable, result switch
             {
                 ExeDecryptor.Result.Decrypted => $"Decrypted {label}'s exe ({executable}); the packed original is at {Path.GetFileName(backup)}",
@@ -83,6 +123,7 @@ public sealed class BuildDecryptor
         {
             // Build 8.30 and any other build the decryptor can't handle land here; the game still launches.
             _log($"Couldn't decrypt {label}'s exe ({exception.Message}); launching it as is");
+            TryDelete(marker);
             Restore(executable, backup);
         }
         finally
@@ -118,16 +159,18 @@ public sealed class BuildDecryptor
     /// Restores the packed original when decryption is off and a previous run decrypted the exe. Does nothing when there
     /// is no backup, or the exe already matches it (never decrypted, or already reverted).
     /// </summary>
-    private void RevertToPacked(string executable, string backup, string label)
+    private void RevertToPacked(string executable, string backup, string marker, string label)
     {
         try
         {
             if (!File.Exists(backup) || !File.Exists(executable) || FilesEqual(executable, backup))
             {
+                TryDelete(marker);
                 return;
             }
 
             File.Copy(backup, executable, overwrite: true);
+            TryDelete(marker);
             _log($"Decryption is off; restored {label}'s packed exe from {Path.GetFileName(backup)}");
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
@@ -145,8 +188,8 @@ public sealed class BuildDecryptor
             return false;
         }
 
-        using var a = File.OpenRead(left);
-        using var b = File.OpenRead(right);
+        using var a = new FileStream(left, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var b = new FileStream(right, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
         Span<byte> bufferA = stackalloc byte[8192];
         Span<byte> bufferB = stackalloc byte[8192];
         int read;

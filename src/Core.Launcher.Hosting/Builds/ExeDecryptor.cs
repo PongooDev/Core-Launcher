@@ -30,8 +30,10 @@ public static class ExeDecryptor
     private static readonly byte[] CrtPrologue =
         [0x48, 0x89, 0x5C, 0x24, 0x20, 0x55, 0x48, 0x8B, 0xEC, 0x48, 0x83, 0xEC, 0x20];
 
-    private const int PrologueThreshold = 8;
+    // Counted over all the windows: a packed image has a handful by chance, a decrypted one hundreds per window.
+    private const int PrologueThreshold = 64;
     private const int SampleSize = 65536;
+    private const int SampleWindows = 4;
     private const int PollIntervalMs = 200;
     private const int TimeoutMs = 30_000;
     private const ushort DynamicBase = 0x0040;
@@ -67,7 +69,11 @@ public static class ExeDecryptor
         if (ParsePe(executable) is not { } pe)
             return Result.NotEncrypted;
 
-        if (LooksDecrypted(executable, pe.Sections[pe.FirstTextIndex]))
+        // The rebuilt import directory is the last thing a decrypt adds, so an exe that has it was decrypted already.
+        // Running the decryptor over its own output would start the decrypted exe as the donor and bake that run's
+        // state back into the file (#17), so it must never get that far.
+        if (pe.Sections.Any(section => section.Name == ImportSectionName)
+            || LooksDecrypted(executable, pe.Sections[pe.FirstTextIndex]))
             return Result.AlreadyDecrypted;
 
         progress?.Invoke("Packed exe detected, decrypting");
@@ -153,7 +159,8 @@ public static class ExeDecryptor
     {
         Span<byte> header = stackalloc byte[4096];
         int read;
-        using (var fs = new FileStream(executable, FileMode.Open, FileAccess.Read, FileShare.Read))
+        // Shared for writing too, so this can read an exe a running server or client has open.
+        using (var fs = new FileStream(executable, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
         {
             read = fs.Read(header);
         }
@@ -224,19 +231,44 @@ public static class ExeDecryptor
             : null;
     }
 
+    /// <summary>
+    /// Whether <paramref name="executable"/> is the output of <see cref="Decrypt"/>: it still has the packer's two
+    /// <c>.text</c> sections, plus the import directory the decrypt rebuilt. False for a packed original, an exe that
+    /// was never packed, or a file that isn't a PE.
+    /// </summary>
+    public static bool IsDecrypted(string executable)
+    {
+        try
+        {
+            return ParsePe(executable) is { } pe && pe.Sections.Any(section => section.Name == ImportSectionName);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Samples a few windows spread over the first <c>.text</c> and counts function prologues across them. One window
+    /// at a fixed offset is not enough: 3.5.1-4.2 (and 2.5) have generated registration thunks at <c>.text+0x100000</c>
+    /// that hold no prologue even decrypted, which is why the single window used to say "packed" for a decrypted exe.
+    /// </summary>
     private static bool LooksDecrypted(string executable, Section firstText)
     {
         int length = Math.Min(SampleSize, firstText.RawSize);
-        int offset = Math.Max(0, Math.Min(0x100000, firstText.RawSize - length));
-
+        long room = firstText.RawSize - length;
         var sample = new byte[length];
-        using (var fs = new FileStream(executable, FileMode.Open, FileAccess.Read, FileShare.Read))
+        int count = 0;
+
+        using var fs = new FileStream(executable, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        for (int window = 1; window <= SampleWindows; window++)
         {
-            fs.Position = firstText.FileOffset + offset;
+            fs.Position = firstText.FileOffset + room * window / (SampleWindows + 1);
             fs.ReadExactly(sample);
+            count += CountPrologues(sample);
         }
 
-        return CountPrologues(sample) >= PrologueThreshold;
+        return count >= PrologueThreshold;
     }
 
     private static int CountPrologues(ReadOnlySpan<byte> data)
