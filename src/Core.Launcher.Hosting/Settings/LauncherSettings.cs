@@ -33,6 +33,13 @@ public sealed class LauncherSettings
     /// </summary>
     public bool ShowEacSplash { get; set; }
 
+    /// <summary>
+    /// Decrypts Arxan-packed builds (1.9.1 and up) before launch so Core can hook them, backing the exe up to
+    /// <c>&lt;exe&gt;.ORIGINAL.bak</c> first (<see cref="Core.Launcher.Hosting.Builds.BuildDecryptor"/>). Off by default:
+    /// it is new and only proven on some builds. Turning it off puts each build's packed original back.
+    /// </summary>
+    public bool DecryptPackedBuilds { get; set; }
+
     public DllSettings Dlls { get; set; } = new();
 
     public BackendSettings Backend { get; set; } = new();

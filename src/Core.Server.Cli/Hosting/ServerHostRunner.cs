@@ -61,7 +61,7 @@ public sealed class ServerHostRunner : IAsyncDisposable
 
         var github = new GitHubClient(_http);
         _dlls = new DllStore(_paths, github, _log.Write);
-        _launcher = new GameLauncher(_job, _dlls, _paths, _log);
+        _launcher = new GameLauncher(_job, _dlls, _paths, _log, new BuildDecryptor(_log.Write));
     }
 
     public LauncherPaths Paths => _paths;

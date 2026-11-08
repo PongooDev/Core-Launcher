@@ -126,6 +126,14 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     public partial bool AssetsFailed { get; set; }
 
+    /// <summary>A build's packed exe is being decrypted before launch: Home shows a status panel with a progress bar.</summary>
+    [ObservableProperty]
+    public partial bool DecryptVisible { get; set; }
+
+    /// <summary>"Decrypting Fortnite 4.0 — Reading the decrypted image".</summary>
+    [ObservableProperty]
+    public partial string DecryptText { get; set; } = "";
+
     /// <summary>The friend's backend refused this PC's servers (403), and what to do about it.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HostingRefused))]
@@ -165,6 +173,10 @@ public sealed partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     public partial bool Hosting { get; set; }
+
+    /// <summary>Decrypt Arxan-packed builds (1.9.1+) before launch so Core can hook them; off puts the packed original back.</summary>
+    [ObservableProperty]
+    public partial bool DecryptPackedBuilds { get; set; }
 
     [ObservableProperty]
     public partial int Instances { get; set; }
@@ -316,6 +328,11 @@ public sealed partial class MainViewModel : ObservableObject
             CanChangeBuild = !_host.GamesRunning;
             CanCheckForUpdates = !_host.CheckingForUpdates;
             OnPropertyChanged(nameof(PlayLabel));
+
+            DecryptPackedBuilds = settings.DecryptPackedBuilds;
+            var decryption = _host.Decryption;
+            DecryptVisible = decryption.Running;
+            DecryptText = decryption.Describe();
 
             RefreshServers();
             RefreshBackend();
@@ -713,6 +730,18 @@ public sealed partial class MainViewModel : ObservableObject
         {
             _host.SetHosting(value);
         }
+    }
+
+    partial void OnDecryptPackedBuildsChanged(bool value)
+    {
+        if (_syncing || value == _host.Settings.DecryptPackedBuilds)
+        {
+            return;
+        }
+
+        var updated = SettingsStore.Clone(_host.Settings);
+        updated.DecryptPackedBuilds = value;
+        _host.SaveSettings(updated);
     }
 
     partial void OnPlayerNameChanged(string value) => _ = UpdateAuthRequirementsAsync();

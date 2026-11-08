@@ -7,7 +7,7 @@ using Core.Launcher.Hosting.Settings;
 
 namespace Core.Launcher.Hosting.Processes;
 
-public sealed record GameStart(string Label, BuildSettings Build, IReadOnlyList<DllRole> Dlls, string Arguments, bool Minimized, LogChannel Output);
+public sealed record GameStart(string Label, BuildSettings Build, IReadOnlyList<DllRole> Dlls, string Arguments, bool Minimized, LogChannel Output, bool Decrypt = false);
 
 /// <summary>Starts the build's exe with its Core DLLs and follows the DLLs' logs.</summary>
 public sealed class GameLauncher
@@ -16,14 +16,16 @@ public sealed class GameLauncher
     private readonly DllStore _dlls;
     private readonly LauncherPaths _paths;
     private readonly LogChannel _log;
+    private readonly BuildDecryptor _decryptor;
     private readonly HashSet<string> _checkedExecutables = new(StringComparer.OrdinalIgnoreCase);
 
-    public GameLauncher(JobObject job, DllStore dlls, LauncherPaths paths, LogChannel log)
+    public GameLauncher(JobObject job, DllStore dlls, LauncherPaths paths, LogChannel log, BuildDecryptor decryptor)
     {
         _job = job;
         _dlls = dlls;
         _paths = paths;
         _log = log;
+        _decryptor = decryptor;
     }
 
     /// <summary>Throws <see cref="DllException"/> or <see cref="InvalidOperationException"/> with a message for the user when the game can't start.</summary>
@@ -34,6 +36,12 @@ public sealed class GameLauncher
         {
             throw new InvalidOperationException(problem);
         }
+
+        // Un-pack the exe (Arxan, builds 1.9.1+) before anything reads or patches it: the command-line whitelist the
+        // server patch looks for is encrypted until this runs, and Core's patches would be overwritten by the packer's
+        // stub at the entry point otherwise. Opt-in (Settings.DecryptPackedBuilds); when off, the build's packed
+        // original is put back. Never fails the launch (see BuildDecryptor).
+        _decryptor.Decrypt(executable, start.Build.Name, start.Decrypt);
 
         if (start.Dlls.Contains(DllRole.Server))
         {

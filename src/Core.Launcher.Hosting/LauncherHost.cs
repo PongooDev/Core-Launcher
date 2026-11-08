@@ -33,6 +33,7 @@ public sealed class LauncherHost : IAsyncDisposable
     private readonly BackendSessions _sessions = new(BackendSessions.CreateHttpClient(), TimeProvider.System);
     private readonly HttpClient _remoteCheck = RemoteBackendCheck.CreateHttpClient();
     private readonly BackendRegion _region = new(RemoteBackendCheck.CreateHttpClient(), TimeProvider.System);
+    private readonly BuildDecryptor _decryptor;
     private readonly GameLauncher _launcher;
     private readonly ServerStarter _starter;
     private readonly Dictionary<int, LogChannel> _serverLogs = [];
@@ -67,7 +68,8 @@ public sealed class LauncherHost : IAsyncDisposable
         BackendPackage = new BackendPackage(paths, github, Node, Log.Write);
         Updater = new LauncherUpdater(github, LauncherUpdater.RunningVersion, LauncherUpdater.PublishedExecutable(typeof(LauncherHost).Assembly), Log.Write);
         Backend = new BackendHost(_job, BackendLog, Log);
-        _launcher = new GameLauncher(_job, Dlls, paths, Log);
+        _decryptor = new BuildDecryptor(Log.Write);
+        _launcher = new GameLauncher(_job, Dlls, paths, Log, _decryptor);
         ServerAssets = new ServerAssets(_http, paths.ServerAssets, Log.Write);
         _starter = new ServerStarter(this);
         Servers = new ServerPool(_starter, Log, TimeProvider.System);
@@ -76,6 +78,7 @@ public sealed class LauncherHost : IAsyncDisposable
         Servers.Changed += OnChanged;
         ServerAssets.Checked += Servers.Tick;
         ServerAssets.ProgressChanged += OnChanged;
+        _decryptor.Changed += OnChanged;
     }
 
     public LauncherPaths Paths { get; }
@@ -100,6 +103,9 @@ public sealed class LauncherHost : IAsyncDisposable
 
     /// <summary>The hosted build's server assets pak (Core-ServerAssets), checked before its first server starts.</summary>
     public ServerAssets ServerAssets { get; }
+
+    /// <summary>What build decryption is doing right now (un-packing an Arxan build before launch); Idle when none is.</summary>
+    public DecryptionProgress Decryption => _decryptor.Progress;
 
     public IReadOnlyList<ClientSession> Clients
     {
@@ -568,7 +574,10 @@ public sealed class LauncherHost : IAsyncDisposable
         WarnAboutSupport(build, output);
         WritePurchaseFlow(build, backend);
 
-        var session = new ClientSession(login, _launcher.Start(new GameStart($"Client {login}", build, build.ClientDlls, LaunchArguments.Client(build, backend, login, effectivePassword), false, output)));
+        // Decryption (always on, for Arxan builds) runs inside Start and takes a few seconds, so launch off the UI
+        // thread; the decryptor marshals its progress to the UI through the Changed event.
+        var gameStart = new GameStart($"Client {login}", build, build.ClientDlls, LaunchArguments.Client(build, backend, login, effectivePassword), false, output, settings.DecryptPackedBuilds);
+        var session = new ClientSession(login, await Task.Run(() => _launcher.Start(gameStart)));
         lock (_gate)
         {
             _clients.Add(session);
@@ -772,7 +781,7 @@ public sealed class LauncherHost : IAsyncDisposable
 
             WarnAboutSupport(build, output);
             WriteServerConfig();
-            return host._launcher.Start(new GameStart($"Server {instance}", build, build.ServerDlls, arguments, true, output));
+            return host._launcher.Start(new GameStart($"Server {instance}", build, build.ServerDlls, arguments, true, output, settings.DecryptPackedBuilds));
         }
 
         private void WriteServerConfig()
