@@ -151,7 +151,7 @@ public sealed class BuildDetectorTests
         Assert.False(KnownBuilds.CanPlay(unsupported));
         Assert.False(KnownBuilds.CanHost(unsupported));
         Assert.Equal(
-            "Core doesn't support Fortnite 14.60 CL-14786821 yet. It supports Fortnite 1.1 to 4.2, and support for Fortnite 4.4.0 to 4.4.2 is in progress. Turn on Allow unsupported builds in Settings → Builds to try it.",
+            "Core doesn't support Fortnite 14.60 CL-14786821 yet. It supports Fortnite 1.1 to 4.4.2, and support for Fortnite 4.5 is in progress. Turn on Allow unsupported builds in Settings → Builds to try it.",
             KnownBuilds.NotSupported(unsupported, allowUnsupported: false));
 
         var cert = KnownBuilds.Create(@"C:\Cert", new BuildVersion(4, 16, 0, KnownBuilds.Cert, "++Fortnite+Release-Cert"), allowUnsupported: false);

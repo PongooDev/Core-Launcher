@@ -146,6 +146,12 @@ public static partial class KnownBuilds
     /// <summary>Fortnite 4.4.2, CL-4132537 on UE 4.20: the second 4.4 hotfix, named "Release-4.4.x" by CUE4Parse and its paks.</summary>
     public const int Fortnite442 = 4132537;
 
+    /// <summary>Fortnite 4.5, ++Fortnite+Release-4.5 CL-4159770 on UE 4.20: the earlier of the two builds called v4.5 (its paks say 4.5.0).</summary>
+    public const int Fortnite45 = 4159770;
+
+    /// <summary>Fortnite 4.5, ++Fortnite+Release-4.5 CL-4166199 on UE 4.20: the later of the two builds called v4.5.</summary>
+    public const int Fortnite45Later = 4166199;
+
     /// <summary>
     /// What a Battle Royale server gets. Core takes the map and playlist from the build's own data (on 1.7.2 the Battle
     /// Royale zone theme's Athena_Terrain and solo playlist; the match's playlist comes with its assignment) and
@@ -244,9 +250,11 @@ public static partial class KnownBuilds
         new(Fortnite40, "4.0", "Fortnite 4.0 (CL-4039451)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite41, "4.1", "Fortnite 4.1 (CL-4053532)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite42, "4.2", "Fortnite 4.2 (CL-4072250)", BuildSupport.Full, [], BattleRoyale: true),
-        new(Fortnite440, "4.4.0", "Fortnite 4.4.0 (CL-4117433)", BuildSupport.InProgress, [], BattleRoyale: true),
-        new(Fortnite441, "4.4.1", "Fortnite 4.4.1 (CL-4127312)", BuildSupport.InProgress, [], BattleRoyale: true),
-        new(Fortnite442, "4.4.2", "Fortnite 4.4.2 (CL-4132537)", BuildSupport.InProgress, [], BattleRoyale: true),
+        new(Fortnite440, "4.4.0", "Fortnite 4.4.0 (CL-4117433)", BuildSupport.Full, [], BattleRoyale: true),
+        new(Fortnite441, "4.4.1", "Fortnite 4.4.1 (CL-4127312)", BuildSupport.Full, [], BattleRoyale: true),
+        new(Fortnite442, "4.4.2", "Fortnite 4.4.2 (CL-4132537)", BuildSupport.Full, [], BattleRoyale: true),
+        new(Fortnite45, "4.5", "Fortnite 4.5 (CL-4159770)", BuildSupport.InProgress, [], BattleRoyale: true),
+        new(Fortnite45Later, "4.5", "Fortnite 4.5 (CL-4166199)", BuildSupport.InProgress, [], BattleRoyale: true),
     ];
 
     private static KnownBuild? Find(int changelist) => Array.Find(Builds, build => build.Changelist == changelist);
@@ -304,7 +312,7 @@ public static partial class KnownBuilds
     /// </summary>
     private static string Versions(BuildSupport support)
     {
-        var versions = Builds.Where(build => build.Support == support).Select(build => build.Version).ToArray();
+        var versions = Builds.Where(build => build.Support == support).Select(build => build.Version).Distinct().ToArray();
         return versions.Length switch
         {
             0 => "",
