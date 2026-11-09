@@ -507,6 +507,13 @@ public sealed partial class BuildEditor : ObservableObject
         set => Settings.UseHttpProxy = value;
     }
 
+    /// <summary>Servers for this build on top of the selected build's (Core-Launcher #18).</summary>
+    public int ExtraServers
+    {
+        get => Settings.ExtraServers;
+        set => Settings.ExtraServers = Math.Clamp(value, 0, SettingsStore.MaxInstances);
+    }
+
     public bool ClientRedirect
     {
         get => Settings.ClientDlls.Contains(DllRole.Redirect);

@@ -216,6 +216,10 @@ public sealed class ServerAssets
     private readonly Func<int, TimeSpan>? _retryDelay;
     private readonly Lock _gate = new();
     private string? _key;
+
+    // The builds and settings checked since the last Reset: with servers of several builds (Core-Launcher #18) each
+    // build is checked once, one at a time, instead of every check starting over for the other build.
+    private readonly HashSet<string> _checked = [];
     private Task<string>? _check;
     private (string BuildRoot, int Changelist, bool Enabled, CancellationToken Cancellation)? _last;
     private ServerAssetsProgress _progress = ServerAssetsProgress.None;
@@ -285,6 +289,7 @@ public sealed class ServerAssets
             }
 
             Begin(last.BuildRoot, last.Changelist, last.Enabled, last.Cancellation);
+            _checked.Remove(_key!);
         }
     }
 
@@ -424,12 +429,28 @@ public sealed class ServerAssets
         lock (_gate)
         {
             var key = $"{Path.GetFullPath(buildRoot)}|{changelist}|{enabled}";
+            if (_checked.Contains(key))
+            {
+                return null;
+            }
+
+            if (_key != key && _check is { IsCompleted: false })
+            {
+                return "waiting for another build's server assets check";
+            }
+
             if (_key != key || _check is null)
             {
                 Begin(buildRoot, changelist, enabled, cancellation);
             }
 
-            return _check!.IsCompleted ? null : _progress.Describe() is { Length: > 0 } line ? line : "checking server assets";
+            if (_check!.IsCompleted)
+            {
+                _checked.Add(key);
+                return null;
+            }
+
+            return _progress.Describe() is { Length: > 0 } line ? line : "checking server assets";
         }
     }
 
@@ -451,6 +472,7 @@ public sealed class ServerAssets
         lock (_gate)
         {
             _key = null;
+            _checked.Clear();
         }
     }
 

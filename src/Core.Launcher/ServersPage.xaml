@@ -18,6 +18,17 @@
                         </Border>
                         <TextBlock Text="{Binding Instance, StringFormat=Server {0}}" FontFamily="{StaticResource DisplayFont}" FontSize="17" FontWeight="SemiBold" />
                     </DockPanel>
+                    <TextBlock Text="{Binding Build}" Margin="0,4,0,0" TextTrimming="CharacterEllipsis">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource Subtle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Build}" Value="">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
                     <TextBlock Text="{Binding Headline}" FontSize="14" Margin="0,14,0,0" TextWrapping="Wrap" />
                     <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                         <StackPanel.Style>
@@ -171,9 +182,9 @@
 
             <ScrollViewer VerticalScrollBarVisibility="Auto" Visibility="{Binding Hosting, Converter={StaticResource Visible}}">
                 <StackPanel>
-                    <TextBlock Text="Save the World" Style="{StaticResource SectionTitle}" Visibility="{Binding HasBattleRoyale, Converter={StaticResource Visible}}" />
+                    <TextBlock Text="Save the World" Style="{StaticResource SectionTitle}" Visibility="{Binding ShowsBattleRoyale, Converter={StaticResource Visible}}" />
                     <ItemsControl ItemsSource="{Binding Servers}" Margin="0,0,-16,0" ItemsPanel="{StaticResource ServerCards}" ItemTemplate="{StaticResource ServerCard}" />
-                    <StackPanel Visibility="{Binding HasBattleRoyale, Converter={StaticResource Visible}}">
+                    <StackPanel Visibility="{Binding ShowsBattleRoyale, Converter={StaticResource Visible}}">
                         <TextBlock Text="Battle Royale" Style="{StaticResource SectionTitle}" Margin="0,8,0,10" />
                         <ItemsControl ItemsSource="{Binding BattleRoyaleServers}" Margin="0,0,-16,0" ItemsPanel="{StaticResource ServerCards}" ItemTemplate="{StaticResource ServerCard}" />
                     </StackPanel>

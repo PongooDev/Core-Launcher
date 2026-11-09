@@ -188,6 +188,8 @@ Settings are saved in `%LOCALAPPDATA%\Core-Launcher\settings.json`.
 | Host servers | On | Autohost on or off |
 | Servers to keep running | `2` | Save the World's on a build with Battle Royale |
 | Battle Royale servers | `2` | On a build with Battle Royale (1.7.2 on), on top of the servers above; each match takes a server of its own |
+| Extra servers (per build, Builds) | `0` | Servers for that build on top of the selected build's, whichever build is selected, so others can play it while you play another: Battle Royale on builds that have it, otherwise Save the World |
+| Switch idle servers to the builds players are on | Off | A server empty for 30 s restarts on the build of players who find no free server (one of your builds; needs a Core-Backend with `/core/api/demand`) |
 | Ready timeout | `180` s | `0` waits forever |
 | Download server assets for hosted servers | On | Installs the build's server assets pak before its servers start ([What it does](#what-it-does)); off removes it |
 | Server login | `CoreServer{n}` | `{n}` is the server's number, so each server has its own account |

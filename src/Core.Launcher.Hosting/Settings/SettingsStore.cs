@@ -161,6 +161,7 @@ public sealed class SettingsStore
         {
             build.ClientDlls ??= [];
             build.ServerDlls ??= [];
+            build.ExtraServers = Math.Clamp(build.ExtraServers, 0, MaxInstances);
         }
     }
 }

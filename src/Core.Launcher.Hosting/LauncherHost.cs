@@ -33,6 +33,10 @@ public sealed class LauncherHost : IAsyncDisposable
     private readonly BackendSessions _sessions = new(BackendSessions.CreateHttpClient(), TimeProvider.System);
     private readonly HttpClient _remoteCheck = RemoteBackendCheck.CreateHttpClient();
     private readonly BackendRegion _region = new(RemoteBackendCheck.CreateHttpClient(), TimeProvider.System);
+    private readonly BackendDemand _demand = new(BackendSessions.CreateHttpClient(), TimeProvider.System);
+    private readonly ServerSwitcher _switcher = new(TimeProvider.System);
+    private IReadOnlyList<ServerAssignment> _plan = [];
+    private bool _switching;
     private readonly BuildDecryptor _decryptor;
     private readonly GameLauncher _launcher;
     private readonly ServerStarter _starter;
@@ -76,6 +80,7 @@ public sealed class LauncherHost : IAsyncDisposable
 
         Backend.Changed += OnChanged;
         Servers.Changed += OnChanged;
+        Servers.Ticked += SwitchIdleServer;
         ServerAssets.Checked += Servers.Tick;
         ServerAssets.ProgressChanged += OnChanged;
         _decryptor.Changed += OnChanged;
@@ -414,7 +419,20 @@ public sealed class LauncherHost : IAsyncDisposable
             }
         }
 
-        Servers.Configure(KnownBuilds.ServerCount(settings.Servers, settings.FindSelectedBuild()), TimeSpan.FromSeconds(settings.Servers.ReadyTimeoutSeconds));
+        // Which build each server hosts (Core-Launcher #18): the selected build's servers, then every build's extra ones.
+        // A plan of other builds or switching turned off puts moved servers back on it as they next start.
+        var plan = ServerPlan.For(settings);
+        lock (_gate)
+        {
+            if (!plan.SequenceEqual(_plan) || !settings.Servers.SwitchIdleServers)
+            {
+                _switcher.Clear();
+            }
+
+            _plan = plan;
+        }
+
+        Servers.Configure(plan.Count, TimeSpan.FromSeconds(settings.Servers.ReadyTimeoutSeconds));
         // On a friend's backend the servers here host for theirs (Core-Launcher #6), under logins of their own
         // (ServerSettings.RemoteLoginFor), once it trusts this PC's IP.
         Servers.SetEnabled(settings.Servers.Enabled);
@@ -671,6 +689,7 @@ public sealed class LauncherHost : IAsyncDisposable
         await Backend.DisposeAsync();
         Servers.Dispose();
         _sessions.Dispose();
+        _demand.Dispose();
         _remoteCheck.Dispose();
         _region.Dispose();
         _http.Dispose();
@@ -685,16 +704,109 @@ public sealed class LauncherHost : IAsyncDisposable
     /// <summary>Whether the selected build has Battle Royale, so some servers host it.</summary>
     public bool BuildHasBattleRoyale => Settings.FindSelectedBuild() is { } build && KnownBuilds.HasBattleRoyale(build.Changelist);
 
-    /// <summary>Whether server <paramref name="instance"/> hosts Battle Royale (<see cref="ServerSettings.BattleRoyaleInstances"/>).</summary>
-    public bool HostsBattleRoyale(int instance) => BuildHasBattleRoyale && Settings.Servers.HostsBattleRoyale(instance);
+    /// <summary>Whether any server hosts Battle Royale: the selected build's, or another build's extra servers (Core-Launcher #18).</summary>
+    public bool AnyBattleRoyale
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return BuildHasBattleRoyale || _plan.Any(assignment => assignment.BattleRoyale);
+            }
+        }
+    }
+
+    /// <summary>
+    /// What server <paramref name="instance"/> hosts (<see cref="ServerPlan"/>): the build it was moved to by Switch idle
+    /// servers, otherwise the plan's; null for a slot outside the plan.
+    /// </summary>
+    public ServerAssignment? ServerAssignment(int instance)
+    {
+        lock (_gate)
+        {
+            return _switcher.Assignment(_plan, instance);
+        }
+    }
+
+    /// <summary>The build server <paramref name="instance"/> hosts; null when the settings have no such build.</summary>
+    public BuildSettings? ServerBuild(int instance) => ServerBuild(Settings, ServerAssignment(instance));
+
+    private static BuildSettings? ServerBuild(LauncherSettings settings, ServerAssignment? assignment) =>
+        assignment is null ? settings.FindSelectedBuild()
+        : settings.Builds.FirstOrDefault(build => string.Equals(build.Name, assignment.Build, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Whether server <paramref name="instance"/> hosts Battle Royale (<see cref="ServerSettings.BattleRoyaleInstances"/>, or another build's extra servers).</summary>
+    public bool HostsBattleRoyale(int instance) => ServerAssignment(instance)?.BattleRoyale ?? (BuildHasBattleRoyale && Settings.Servers.HostsBattleRoyale(instance));
+
+    /// <summary>
+    /// Settings → Servers, Switch idle servers (Core-Launcher #18): after each pool tick, moves an idle server to a build
+    /// whose players wait for one, by the backend's GET /core/api/demand, and restarts it on that build.
+    /// </summary>
+    private void SwitchIdleServer()
+    {
+        var settings = Settings;
+        if (!settings.Servers.SwitchIdleServers || !Servers.Enabled || _starter.Backend() is not { } backend)
+        {
+            return;
+        }
+
+        var demand = _demand.Current(backend);
+        if (demand.Count == 0)
+        {
+            return;
+        }
+
+        // Read outside the lock: the pool takes it (for each slot's build) while holding its own.
+        var slots = Servers.Slots;
+        var players = slots.ToDictionary(slot => slot.Instance, slot => slot.State == ServerState.Ready ? _starter.Players(slot.Instance, slot.Ports) : null);
+        ServerSwitch? move;
+        lock (_gate)
+        {
+            if (_switching)
+            {
+                return;
+            }
+
+            move = _switcher.Decide(_plan, slots, slot => players.GetValueOrDefault(slot.Instance), demand, wanted => ServerPlan.Resolve(settings, wanted));
+            _switching = move is not null;
+        }
+
+        if (move is null)
+        {
+            return;
+        }
+
+        try
+        {
+            Log.Write($"Server {move.Instance}: idle, moving it from {Describe(move.From)} to {Describe(move.To)}, whose players are waiting for a server");
+            ServerLog(move.Instance).Write($"(launcher) Moving to {Describe(move.To)}: its players are waiting for a server (Settings → Servers, Switch idle servers)");
+            Servers.Restart(move.Instance);
+        }
+        finally
+        {
+            lock (_gate)
+            {
+                _switching = false;
+            }
+        }
+
+        OnChanged();
+    }
+
+    private static string Describe(ServerAssignment assignment) => $"{assignment.Build} ({(assignment.BattleRoyale ? "Battle Royale" : "Save the World")})";
 
     private static bool SameJson<T>(T left, T right) => JsonSerializer.Serialize(left) == JsonSerializer.Serialize(right);
 
     private sealed class ServerStarter(LauncherHost host) : IServerStarter
     {
-        public string? Blocker()
+        public string? Blocker() => Blocker(host.Settings.FindSelectedBuild());
+
+        /// <summary>Why the server of slot <paramref name="instance"/> can't start now: its build's (Core-Launcher #18).</summary>
+        public string? Blocker(int instance) => Blocker(host.ServerBuild(instance));
+
+        private string? Blocker(BuildSettings? build)
         {
-            if (host.Settings.FindSelectedBuild() is not { } build)
+            if (build is null)
             {
                 return "no build (Settings → Builds)";
             }
@@ -743,7 +855,7 @@ public sealed class LauncherHost : IAsyncDisposable
         /// The backend the servers log in to: this PC's, or the friend's in use. The one the settings name, not the previous
         /// one while a switch restarts the backend.
         /// </summary>
-        private BackendEndpoint? Backend()
+        public BackendEndpoint? Backend()
         {
             var settings = host.Settings.Backend;
             if (host.Backend.Endpoint is not { } endpoint || host.Backend.Target.Remote != settings.UseRemote)
@@ -757,7 +869,7 @@ public sealed class LauncherHost : IAsyncDisposable
         public IServerInstance Start(int instance)
         {
             var settings = host.Settings;
-            var build = settings.FindSelectedBuild()!;
+            var build = host.ServerBuild(instance) ?? throw new InvalidOperationException("Its build isn't in Settings → Builds any more");
             var battleRoyale = host.HostsBattleRoyale(instance);
             var backend = Backend() ?? throw new InvalidOperationException("The backend isn't ready");
             // The admin panel's first Server Region (Core-Backend #142), NA when none is ticked; a build's own -McpRegion wins.
@@ -765,6 +877,7 @@ public sealed class LauncherHost : IAsyncDisposable
             var arguments = LaunchArguments.Server(build, backend, ServerLogin(settings, instance), battleRoyale, region);
             var output = host.ServerLog(instance);
             output.Write($"(launcher) --- {DateTime.Now:yyyy-MM-dd HH:mm:ss} ---");
+            output.Write($"(launcher) {build.Name}, {(battleRoyale ? "Battle Royale" : "Save the World")}");
             if (settings.Backend.UseRemote)
             {
                 output.Write($"(launcher) Hosting for {host.BackendDescription} ({backend.Url}) as {ServerLogin(settings, instance)}");

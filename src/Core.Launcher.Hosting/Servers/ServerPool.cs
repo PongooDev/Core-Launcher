@@ -23,6 +23,12 @@ public interface IServerStarter
     /// <summary>Null when a server can start now, otherwise why not (shown on waiting slots).</summary>
     string? Blocker();
 
+    /// <summary>
+    /// <see cref="Blocker()"/> for the server in slot <paramref name="instance"/>, whose build may be another slot's
+    /// (Core-Launcher #18): a slot that can't start doesn't hold back the slots after it.
+    /// </summary>
+    string? Blocker(int instance) => Blocker();
+
     IServerInstance Start(int instance);
 
     /// <summary>
@@ -81,6 +87,9 @@ public sealed class ServerPool : IDisposable
     public TimeSpan ReadyTimeout { get; private set; }
 
     public event Action? Changed;
+
+    /// <summary>Raised after every tick, outside the pool's lock, so the host can act on the slots (Core-Launcher #18).</summary>
+    public event Action? Ticked;
 
     public void Configure(int instances, TimeSpan readyTimeout)
     {
@@ -206,6 +215,8 @@ public sealed class ServerPool : IDisposable
         {
             Changed?.Invoke();
         }
+
+        Ticked?.Invoke();
     }
 
     private bool Update(DateTimeOffset now)
@@ -228,8 +239,30 @@ public sealed class ServerPool : IDisposable
             return changed;
         }
 
-        var next = _slots.FirstOrDefault(slot => slot.Server is null && !slot.Removing && slot.NextStart <= now);
-        foreach (var slot in _slots.Where(slot => slot.Server is null && slot != next))
+        // The first slot due whose server can start now; a slot that can't (its build isn't ready) shows why and lets the
+        // next one go. With one build for every slot they all wait on the same thing, which the first shows.
+        Slot? next = null;
+        string? firstBlocker = null;
+        foreach (var slot in _slots.Where(slot => slot.Server is null && !slot.Removing && slot.NextStart <= now))
+        {
+            if (_starter.Blocker(slot.Instance) is not { } blocker)
+            {
+                next = slot;
+                break;
+            }
+
+            if (firstBlocker is null || blocker != firstBlocker)
+            {
+                changed |= slot.SetNote(blocker);
+                firstBlocker ??= blocker;
+            }
+            else
+            {
+                changed |= slot.SetNote("waiting for its turn");
+            }
+        }
+
+        foreach (var slot in _slots.Where(slot => slot.Server is null && slot != next && (slot.NextStart > now || next is not null && slot.Instance > next.Instance)))
         {
             changed |= slot.SetNote(slot.NextStart > now ? $"next start in {(slot.NextStart - now).TotalSeconds:0} s" : "waiting for its turn");
         }
@@ -237,11 +270,6 @@ public sealed class ServerPool : IDisposable
         if (next is null)
         {
             return changed;
-        }
-
-        if (_starter.Blocker() is { } blocker)
-        {
-            return next.SetNote(blocker) | changed;
         }
 
         try

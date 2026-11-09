@@ -188,6 +188,10 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     public partial bool HasBattleRoyale { get; set; }
 
+    /// <summary>Some server hosts Battle Royale, the selected build's or another build's extra ones (Core-Launcher #18): the page shows them apart.</summary>
+    [ObservableProperty]
+    public partial bool ShowsBattleRoyale { get; set; }
+
     /// <summary>The player's own client (their player name) is running.</summary>
     [ObservableProperty]
     public partial bool ClientRunning { get; set; }
@@ -315,6 +319,7 @@ public sealed partial class MainViewModel : ObservableObject
             Instances = settings.Servers.Instances;
             BattleRoyaleInstances = settings.Servers.BattleRoyaleInstances;
             HasBattleRoyale = _host.BuildHasBattleRoyale;
+            ShowsBattleRoyale = _host.AnyBattleRoyale;
             UsingRemote = settings.Backend.UseRemote;
             HostingOffText = UsingRemote
                 ? $"You're playing on {_host.BackendDescription}. Turn on Host servers to host matches for it from this PC: your friend adds this PC's public IP under Settings → Trusted Hosting IPs in their admin panel first."
@@ -816,11 +821,23 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
-    /// <summary>"Server 3", or "Battle Royale server 3" when the build hosts both modes.</summary>
-    private string ServerName(int instance) =>
-        !_host.BuildHasBattleRoyale ? $"Server {instance}"
-        : _host.HostsBattleRoyale(instance) ? $"Battle Royale server {instance}"
-        : $"Save the World server {instance}";
+    /// <summary>
+    /// "Server 3", or "Battle Royale server 3" when the servers host both modes, with the build after it when it isn't
+    /// the selected one (another build's extra server, or one Switch idle servers moved: Core-Launcher #18).
+    /// </summary>
+    private string ServerName(int instance)
+    {
+        var name = !_host.AnyBattleRoyale ? $"Server {instance}"
+            : _host.HostsBattleRoyale(instance) ? $"Battle Royale server {instance}"
+            : $"Save the World server {instance}";
+        return OtherBuild(instance) is { } build ? $"{name} ({build})" : name;
+    }
+
+    /// <summary>The name of the build server <paramref name="instance"/> hosts when it isn't the selected build; otherwise null.</summary>
+    private string? OtherBuild(int instance) =>
+        _host.ServerBuild(instance) is { } build && !string.Equals(build.Name, _host.Settings.FindSelectedBuild()?.Name, StringComparison.OrdinalIgnoreCase)
+            ? build.Name
+            : null;
 
     private void SyncServerRows(ObservableCollection<ServerRowViewModel> rows, IReadOnlyList<ServerSlotView> slots)
     {
@@ -836,7 +853,7 @@ public sealed partial class MainViewModel : ObservableObject
                 rows.Add(new ServerRowViewModel(_host.Servers, ShowServerLog));
             }
 
-            rows[index].Update(slots[index], _host.ServerPlayers(slots[index]));
+            rows[index].Update(slots[index], _host.ServerPlayers(slots[index]), OtherBuild(slots[index].Instance));
         }
     }
 
@@ -1164,9 +1181,14 @@ public sealed partial class ServerRowViewModel(ServerPool pool, Action<int> show
     [ObservableProperty]
     public partial bool Occupied { get; set; }
 
-    public void Update(ServerSlotView slot, SessionPlayers? players)
+    /// <summary>The build it hosts when that isn't the selected one (Core-Launcher #18); blank otherwise.</summary>
+    [ObservableProperty]
+    public partial string Build { get; set; } = "";
+
+    public void Update(ServerSlotView slot, SessionPlayers? players, string? build = null)
     {
         Instance = slot.Instance;
+        Build = build ?? "";
         Players = players?.Describe() ?? "";
         Occupied = players is { Current: > 0 };
         (State, StateBrush) = slot.State switch

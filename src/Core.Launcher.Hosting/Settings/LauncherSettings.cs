@@ -80,6 +80,13 @@ public sealed class BuildSettings
     /// </summary>
     public bool CoreDefaultsAdded { get; set; }
 
+    /// <summary>
+    /// Servers kept running for this build on top of the selected build's (Core-Launcher #18), whichever build is
+    /// selected, so players of another build have servers too: Battle Royale on a build that has it, otherwise Save the
+    /// World (<see cref="Servers.ServerPlan"/>). 0, the default, hosts it only while it is the selected build.
+    /// </summary>
+    public int ExtraServers { get; set; }
+
     public string ExecutablePath => System.IO.Path.Combine(Path, Executable);
 }
 
@@ -197,6 +204,13 @@ public sealed class ServerSettings
     /// Core-ServerAssets into its Paks folder, verified by SHA-256 (<see cref="Components.ServerAssets"/>). Off removes Core's pak.
     /// </summary>
     public bool DownloadServerAssets { get; set; } = true;
+
+    /// <summary>
+    /// Moves an idle server (ready, nobody in it) to a build whose players wait for a server none of the running ones can
+    /// take, as the backend's GET /core/api/demand says (<see cref="Servers.ServerSwitcher"/>, Core-Launcher #18). The
+    /// build has to be one of the launcher's builds. Off by default.
+    /// </summary>
+    public bool SwitchIdleServers { get; set; }
 
     /// <summary>A server that hasn't logged "Server ready" by then is restarted; 0 waits forever.</summary>
     public int ReadyTimeoutSeconds { get; set; } = 180;
