@@ -108,8 +108,22 @@ public sealed class DllStore
         foreach (var asset in assets)
         {
             _log($"Downloading {asset.Name} ({asset.Size:N0} bytes) from release {release.Tag}");
-            await _github.DownloadAssetAsync(asset, Path.Combine(folder, asset.Name),
-                progress is null ? null : new Progress<string>(text => progress.Report($"Downloading {asset.Name}: {text}")), cancellation);
+            // GitHub's download host sometimes answers a 5xx or times out (Core-Launcher #19): try again a couple of times
+            // before falling back to the newest downloaded release.
+            for (var attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    await _github.DownloadAssetAsync(asset, Path.Combine(folder, asset.Name),
+                        progress is null ? null : new Progress<string>(text => progress.Report($"Downloading {asset.Name}: {text}")), cancellation);
+                    break;
+                }
+                catch (Exception exception) when (attempt < DownloadAttempts && !cancellation.IsCancellationRequested && IsTransient(exception))
+                {
+                    _log($"Downloading {asset.Name} failed ({exception.Message}), trying again ({attempt + 1} of {DownloadAttempts})");
+                    await Task.Delay(TimeSpan.FromSeconds(2 * attempt), cancellation);
+                }
+            }
         }
 
         await File.WriteAllTextAsync(Path.Combine(folder, MarkerName),
@@ -118,7 +132,18 @@ public sealed class DllStore
         _log($"Release {release.Tag} ready");
     }
 
-    private void UseRelease(string folder, string tag)
+    private const int DownloadAttempts = 3;
+
+    // A server error, a rate limit or a timeout: worth another try. A 404 or a bad file isn't.
+    private static bool IsTransient(Exception exception) => exception switch
+    {
+        HttpRequestException { StatusCode: null } => true,
+        HttpRequestException { StatusCode: { } status } => (int)status >= 500 || (int)status == 429,
+        TaskCanceledException or IOException => true,
+        _ => false
+    };
+
+        private void UseRelease(string folder, string tag)
     {
         lock (_gate)
         {
