@@ -12,8 +12,8 @@ This repository does NOT include Fortnite game files. Core-Backend, a Node.js ru
 
 | Status | Fortnite versions |
 | --- | --- |
-| Supported ✅ | 1.1 – 4.4.2 |
-| In progress 🚧 | 4.5 |
+| Supported ✅ | 1.1 – 4.5 |
+| In progress 🚧 | 5.0 |
 
 Core moves forward one build at a time and skips builds nobody has a copy of, so the supported builds are always one range: every build from the first version to the last one listed. Fortnite 3.4 and 4.3 are not supported: nobody has a copy of them, so the range skips them. The build Core V2 is being developed on ([Version support](https://github.com/PongooDev/CoreV2#version-support)) is added here as **in progress** once Core runs on it.
 
@@ -52,8 +52,10 @@ Core moves forward one build at a time and skips builds nobody has a copy of, so
 | 4.4.0 | Release-4.4 CL-4117433 (UE 4.20) | Supported ✅ |
 | 4.4.1 | Release-4.4 CL-4127312 (UE 4.20) | Supported ✅ |
 | 4.4.2 | Release-4.4.x CL-4132537 (UE 4.20) | Supported ✅ |
-| 4.5 | Release-4.5 CL-4159770 (UE 4.20) | In progress 🚧 |
-| 4.5 | Release-4.5 CL-4166199 (UE 4.20) | In progress 🚧 |
+| 4.5 | Release-4.5 CL-4159770 (UE 4.20) | Supported ✅ |
+| 4.5 | Release-4.5 CL-4166199 (UE 4.20) | Supported ✅ |
+| 5.0 | Release-5.0 CL-4204761 (UE 4.21) | In progress 🚧 |
+| 5.0 | Release-5.0 CL-4214610 (UE 4.21) | In progress 🚧 |
 
 </details>
 

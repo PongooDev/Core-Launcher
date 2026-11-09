@@ -152,6 +152,15 @@ public static partial class KnownBuilds
     /// <summary>Fortnite 4.5, ++Fortnite+Release-4.5 CL-4166199 on UE 4.20: the later of the two builds called v4.5.</summary>
     public const int Fortnite45Later = 4166199;
 
+    /// <summary>Fortnite 5.0, ++Fortnite+Release-5.0 CL-4204761 on UE 4.21, Season 5: the earlier of the two builds called v5.00 (Core-ServerAssets names its pak 5.00).</summary>
+    public const int Fortnite50 = 4204761;
+
+    /// <summary>
+    /// Fortnite 5.0, ++Fortnite+Release-5.0 CL-4214610 on UE 4.21.0: the later of the two builds called v5.00 (Core-ServerAssets
+    /// names its pak 5.0.1, but the exe's own build string is Release-5.0). 5.0 is the first UE 4.21 build Core knows.
+    /// </summary>
+    public const int Fortnite50Later = 4214610;
+
     /// <summary>
     /// What a Battle Royale server gets. Core takes the map and playlist from the build's own data (on 1.7.2 the Battle
     /// Royale zone theme's Athena_Terrain and solo playlist; the match's playlist comes with its assignment) and
@@ -253,8 +262,10 @@ public static partial class KnownBuilds
         new(Fortnite440, "4.4.0", "Fortnite 4.4.0 (CL-4117433)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite441, "4.4.1", "Fortnite 4.4.1 (CL-4127312)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite442, "4.4.2", "Fortnite 4.4.2 (CL-4132537)", BuildSupport.Full, [], BattleRoyale: true),
-        new(Fortnite45, "4.5", "Fortnite 4.5 (CL-4159770)", BuildSupport.InProgress, [], BattleRoyale: true),
-        new(Fortnite45Later, "4.5", "Fortnite 4.5 (CL-4166199)", BuildSupport.InProgress, [], BattleRoyale: true),
+        new(Fortnite45, "4.5", "Fortnite 4.5 (CL-4159770)", BuildSupport.Full, [], BattleRoyale: true),
+        new(Fortnite45Later, "4.5", "Fortnite 4.5 (CL-4166199)", BuildSupport.Full, [], BattleRoyale: true),
+        new(Fortnite50, "5.0", "Fortnite 5.0 (CL-4204761)", BuildSupport.InProgress, [], BattleRoyale: true),
+        new(Fortnite50Later, "5.0", "Fortnite 5.0 (CL-4214610)", BuildSupport.InProgress, [], BattleRoyale: true),
     ];
 
     private static KnownBuild? Find(int changelist) => Array.Find(Builds, build => build.Changelist == changelist);
