@@ -25,7 +25,7 @@
                                       IsEnabled="{Binding CanChangeBuild}" ToolTip="Close the game and turn hosting off to change the build" />
                             <TextBlock Text="{Binding BuildDetail}" Style="{StaticResource Muted}" Margin="14,0,0,0" VerticalAlignment="Center" />
                         </StackPanel>
-                        <CheckBox Style="{StaticResource Switch}" Content="Decrypt packed builds (1.9.1+) — decrypts once and keeps a backup; leave it on" FontSize="13" Margin="0,12,0,0"
+                        <CheckBox Style="{StaticResource Switch}" Visibility="Collapsed" Content="Decrypt packed builds (1.9.1+) — decrypts once and keeps a backup; leave it on" FontSize="13" Margin="0,12,0,0"
                                   IsChecked="{Binding DecryptPackedBuilds}"
                                   ToolTip="On: the first launch of an Arxan-packed build (1.9.1 and up) decrypts its exe once, keeping the original as FortniteClient-Win64-Shipping.exe.ORIGINAL.bak; later launches use the decrypted exe as it is, so leave this on. Off: the next launch restores each build's original exe from that backup. New, and only proven on some builds." />
 

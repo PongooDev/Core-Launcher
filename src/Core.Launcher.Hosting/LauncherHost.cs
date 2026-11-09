@@ -576,7 +576,7 @@ public sealed class LauncherHost : IAsyncDisposable
 
         // Decryption (when on, for Arxan builds) runs inside Start and its first run takes a few seconds, so launch off the UI
         // thread; the decryptor marshals its progress to the UI through the Changed event.
-        var gameStart = new GameStart($"Client {login}", build, build.ClientDlls, LaunchArguments.Client(build, backend, login, effectivePassword), false, output, settings.DecryptPackedBuilds);
+        var gameStart = new GameStart($"Client {login}", build, build.ClientDlls, LaunchArguments.Client(build, backend, login, effectivePassword), false, output, false);
         var session = new ClientSession(login, await Task.Run(() => _launcher.Start(gameStart)));
         lock (_gate)
         {
@@ -781,7 +781,7 @@ public sealed class LauncherHost : IAsyncDisposable
 
             WarnAboutSupport(build, output);
             WriteServerConfig();
-            return host._launcher.Start(new GameStart($"Server {instance}", build, build.ServerDlls, arguments, true, output, settings.DecryptPackedBuilds));
+            return host._launcher.Start(new GameStart($"Server {instance}", build, build.ServerDlls, arguments, true, output, false));
         }
 
         private void WriteServerConfig()
