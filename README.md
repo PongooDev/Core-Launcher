@@ -56,8 +56,8 @@ Core moves forward one build at a time and skips builds nobody has a copy of, so
 | 4.5 | Release-4.5 CL-4166199 (UE 4.20) | Supported ✅ |
 | 5.0 | Release-5.0 CL-4204761 (UE 4.21) | Supported ✅ |
 | 5.0 | Release-5.0 CL-4214610 (UE 4.21) | Supported ✅ |
-| 5.10 | Release-5.10 CL-4225813 (UE 4.21) | In progress 🚧 |
-| 5.10 | Release-5.10 CL-4240749 (UE 4.21) | In progress 🚧 |
+| 5.10 | Release-5.10 CL-4225813 (UE 4.21) | Supported ✅ |
+| 5.10 | Release-5.10 CL-4240749 (UE 4.21) | Supported ✅ |
 | 5.21 | Release-5.21 CL-4288479 (UE 4.21) | In progress 🚧 |
 
 </details>
