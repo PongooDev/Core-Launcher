@@ -167,6 +167,9 @@ public static partial class KnownBuilds
     /// <summary>Fortnite 5.10, ++Fortnite+Release-5.10 CL-4240749 on UE 4.21, Season 5: the later of the two builds called v5.10.</summary>
     public const int Fortnite510 = 4240749;
 
+    /// <summary>Fortnite 5.21, ++Fortnite+Release-5.21 CL-4288479 on UE 4.21, Season 5.</summary>
+    public const int Fortnite521 = 4288479;
+
     /// <summary>
     /// What a Battle Royale server gets. Core takes the map and playlist from the build's own data (on 1.7.2 the Battle
     /// Royale zone theme's Athena_Terrain and solo playlist; the match's playlist comes with its assignment) and
@@ -272,8 +275,9 @@ public static partial class KnownBuilds
         new(Fortnite45Later, "4.5", "Fortnite 4.5 (CL-4166199)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite50, "5.0", "Fortnite 5.0 (CL-4204761)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite50Later, "5.0", "Fortnite 5.0 (CL-4214610)", BuildSupport.Full, [], BattleRoyale: true),
-        new(Fortnite510Earlier, "5.10", "Fortnite 5.10 (CL-4225813)", BuildSupport.InProgress, [], BattleRoyale: true),
-        new(Fortnite510, "5.10", "Fortnite 5.10 (CL-4240749)", BuildSupport.InProgress, [], BattleRoyale: true),
+        new(Fortnite510Earlier, "5.10", "Fortnite 5.10 (CL-4225813)", BuildSupport.Full, [], BattleRoyale: true),
+        new(Fortnite510, "5.10", "Fortnite 5.10 (CL-4240749)", BuildSupport.Full, [], BattleRoyale: true),
+        new(Fortnite521, "5.21", "Fortnite 5.21 (CL-4288479)", BuildSupport.InProgress, [], BattleRoyale: true),
     ];
 
     private static KnownBuild? Find(int changelist) => Array.Find(Builds, build => build.Changelist == changelist);
