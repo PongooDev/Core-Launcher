@@ -179,6 +179,12 @@ public static partial class KnownBuilds
     /// <summary>Fortnite 5.41, ++Fortnite+Release-5.41 CL-4363240 on UE 4.21, Season 5 (the 5.41 hotfix).</summary>
     public const int Fortnite541 = 4363240;
 
+    /// <summary>Fortnite 6.00, ++Fortnite+Release-6.00 CL-4395664 on UE 4.21, Season 6: the earlier of the two builds called v6.00 (https://fortnite.fandom.com/wiki/Update_v6.00).</summary>
+    public const int Fortnite600Earlier = 4395664;
+
+    /// <summary>Fortnite 6.00, ++Fortnite+Release-6.00 CL-4402180 on UE 4.21, Season 6: the later of the two builds called v6.00.</summary>
+    public const int Fortnite600 = 4402180;
+
     /// <summary>
     /// What a Battle Royale server gets. Core takes the map and playlist from the build's own data (on 1.7.2 the Battle
     /// Royale zone theme's Athena_Terrain and solo playlist; the match's playlist comes with its assignment) and
@@ -289,7 +295,9 @@ public static partial class KnownBuilds
         new(Fortnite521, "5.21", "Fortnite 5.21 (CL-4288479)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite530, "5.30", "Fortnite 5.30 (CL-4305896)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite540, "5.40", "Fortnite 5.40 (CL-4352937)", BuildSupport.Full, [], BattleRoyale: true),
-        new(Fortnite541, "5.41", "Fortnite 5.41 (CL-4363240)", BuildSupport.InProgress, [], BattleRoyale: true),
+        new(Fortnite541, "5.41", "Fortnite 5.41 (CL-4363240)", BuildSupport.Full, [], BattleRoyale: true),
+        new(Fortnite600Earlier, "6.00", "Fortnite 6.00 (CL-4395664)", BuildSupport.InProgress, [], BattleRoyale: true),
+        new(Fortnite600, "6.00", "Fortnite 6.00 (CL-4402180)", BuildSupport.InProgress, [], BattleRoyale: true),
     ];
 
     private static KnownBuild? Find(int changelist) => Array.Find(Builds, build => build.Changelist == changelist);
