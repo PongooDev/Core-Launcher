@@ -197,6 +197,15 @@ public static partial class KnownBuilds
     /// <summary>Fortnite 6.02, ++Fortnite+Release-6.02 CL-4461277 on UE 4.21, Season 6: the later of the two builds called v6.02.</summary>
     public const int Fortnite602 = 4461277;
 
+    /// <summary>Fortnite 6.10, ++Fortnite+Release-6.10 CL-4464155 on UE 4.21, Season 6: the earliest of the three builds called v6.10, with the Quadcrasher two-seater vehicle and the Events tab for in-game tournaments (https://fortnite.fandom.com/wiki/Update_v6.10).</summary>
+    public const int Fortnite610Earliest = 4464155;
+
+    /// <summary>Fortnite 6.10, ++Fortnite+Release-6.10 CL-4476098 on UE 4.21, Season 6: the middle of the three builds called v6.10.</summary>
+    public const int Fortnite610Earlier = 4476098;
+
+    /// <summary>Fortnite 6.10, ++Fortnite+Release-6.10 CL-4480234 on UE 4.21, Season 6: the latest of the three builds called v6.10.</summary>
+    public const int Fortnite610 = 4480234;
+
     /// <summary>
     /// What a Battle Royale server gets. Core takes the map and playlist from the build's own data (on 1.7.2 the Battle
     /// Royale zone theme's Athena_Terrain and solo playlist; the match's playlist comes with its assignment) and
@@ -312,8 +321,11 @@ public static partial class KnownBuilds
         new(Fortnite600, "6.00", "Fortnite 6.00 (CL-4402180)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite601Earlier, "6.01", "Fortnite 6.01 (CL-4417689)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite601, "6.01", "Fortnite 6.01 (CL-4424678)", BuildSupport.Full, [], BattleRoyale: true),
-        new(Fortnite602Earlier, "6.02", "Fortnite 6.02 (CL-4442095)", BuildSupport.InProgress, [], BattleRoyale: true),
-        new(Fortnite602, "6.02", "Fortnite 6.02 (CL-4461277)", BuildSupport.InProgress, [], BattleRoyale: true),
+        new(Fortnite602Earlier, "6.02", "Fortnite 6.02 (CL-4442095)", BuildSupport.Full, [], BattleRoyale: true),
+        new(Fortnite602, "6.02", "Fortnite 6.02 (CL-4461277)", BuildSupport.Full, [], BattleRoyale: true),
+        new(Fortnite610Earliest, "6.10", "Fortnite 6.10 (CL-4464155)", BuildSupport.InProgress, [], BattleRoyale: true),
+        new(Fortnite610Earlier, "6.10", "Fortnite 6.10 (CL-4476098)", BuildSupport.InProgress, [], BattleRoyale: true),
+        new(Fortnite610, "6.10", "Fortnite 6.10 (CL-4480234)", BuildSupport.InProgress, [], BattleRoyale: true),
     ];
 
     private static KnownBuild? Find(int changelist) => Array.Find(Builds, build => build.Changelist == changelist);
