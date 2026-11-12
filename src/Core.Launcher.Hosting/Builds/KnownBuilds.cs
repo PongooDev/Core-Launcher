@@ -185,6 +185,12 @@ public static partial class KnownBuilds
     /// <summary>Fortnite 6.00, ++Fortnite+Release-6.00 CL-4402180 on UE 4.21, Season 6: the later of the two builds called v6.00.</summary>
     public const int Fortnite600 = 4402180;
 
+    /// <summary>Fortnite 6.01, ++Fortnite+Release-6.01 CL-4417689 on UE 4.21, Season 6: the earlier of the two builds called v6.01 (https://fortnite.fandom.com/wiki/Update_v6.01).</summary>
+    public const int Fortnite601Earlier = 4417689;
+
+    /// <summary>Fortnite 6.01, ++Fortnite+Release-6.01 CL-4424678 on UE 4.21, Season 6: the later of the two builds called v6.01.</summary>
+    public const int Fortnite601 = 4424678;
+
     /// <summary>
     /// What a Battle Royale server gets. Core takes the map and playlist from the build's own data (on 1.7.2 the Battle
     /// Royale zone theme's Athena_Terrain and solo playlist; the match's playlist comes with its assignment) and
@@ -296,8 +302,10 @@ public static partial class KnownBuilds
         new(Fortnite530, "5.30", "Fortnite 5.30 (CL-4305896)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite540, "5.40", "Fortnite 5.40 (CL-4352937)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite541, "5.41", "Fortnite 5.41 (CL-4363240)", BuildSupport.Full, [], BattleRoyale: true),
-        new(Fortnite600Earlier, "6.00", "Fortnite 6.00 (CL-4395664)", BuildSupport.InProgress, [], BattleRoyale: true),
-        new(Fortnite600, "6.00", "Fortnite 6.00 (CL-4402180)", BuildSupport.InProgress, [], BattleRoyale: true),
+        new(Fortnite600Earlier, "6.00", "Fortnite 6.00 (CL-4395664)", BuildSupport.Full, [], BattleRoyale: true),
+        new(Fortnite600, "6.00", "Fortnite 6.00 (CL-4402180)", BuildSupport.Full, [], BattleRoyale: true),
+        new(Fortnite601Earlier, "6.01", "Fortnite 6.01 (CL-4417689)", BuildSupport.InProgress, [], BattleRoyale: true),
+        new(Fortnite601, "6.01", "Fortnite 6.01 (CL-4424678)", BuildSupport.InProgress, [], BattleRoyale: true),
     ];
 
     private static KnownBuild? Find(int changelist) => Array.Find(Builds, build => build.Changelist == changelist);
