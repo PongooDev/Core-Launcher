@@ -57,11 +57,21 @@ public static class PurchaseFlowConfig
     public static string Url(BackendEndpoint backend) => $"{backend.Scheme}:///{backend.Url[(backend.Scheme.Length + "://".Length)..]}/purchase";
 
     /// <summary>
-    /// Sets [EpicPurchaseFlow] Prod in <paramref name="path"/>, keeping its other sections and keys, its encoding and line
-    /// endings; creates it when it's missing. Returns whether it wrote the file. Throws <see cref="IOException"/> or
-    /// <see cref="UnauthorizedAccessException"/> when it can't.
+    /// Clears [EpicPurchaseFlow] ProdAltDomains, the page's other domains (Core-Backend #346). The flow reads them with
+    /// Prod (6.20 0x11339F0) and, after the page's own cookie, sets the same cookie on each one (0x7F0150): it swaps the
+    /// URL's domain (FGenericPlatformHttp::GetUrlDomain, 0x1FD08B0) for the other domain, and with <see cref="Url"/>'s
+    /// triple slash that domain is empty, so the next cookie is never set and the flow never goes on (0x7E9400): the
+    /// Store's black screen with a spinner. The pak's DefaultGame.ini has one (launcher-website-prod.ak.epicgames.com)
+    /// from at least 6.02 to 6.21; cleared, the page's own cookie is the only one, and a build without any is unchanged.
     /// </summary>
-    public static bool Write(string path, string url) => Write(path, Section, [(Key, url)]);
+    public static readonly (string Key, string Value) ClearAltDomains = ("!ProdAltDomains", "ClearArray");
+
+    /// <summary>
+    /// Sets [EpicPurchaseFlow] Prod in <paramref name="path"/> and clears ProdAltDomains (<see cref="ClearAltDomains"/>),
+    /// keeping its other sections and keys, its encoding and line endings; creates it when it's missing. Returns whether
+    /// it wrote the file. Throws <see cref="IOException"/> or <see cref="UnauthorizedAccessException"/> when it can't.
+    /// </summary>
+    public static bool Write(string path, string url) => Write(path, Section, [(Key, url), ClearAltDomains]);
 
     /// <summary>Sets <paramref name="entries"/> in [<paramref name="section"/>] of <paramref name="path"/>, as <see cref="Write(string, string)"/> does Prod.</summary>
     public static bool Write(string path, string section, IReadOnlyList<(string Key, string Value)> entries)
@@ -86,8 +96,11 @@ public static class PurchaseFlowConfig
         return true;
     }
 
-    /// <summary>Replaces the Prod line under [EpicPurchaseFlow] (dropping any repeats of it), or adds it, or adds the section.</summary>
-    public static string Merge(string existing, string url) => Merge(existing, Section, [(Key, url)]);
+    /// <summary>
+    /// Replaces the Prod line under [EpicPurchaseFlow] (dropping any repeats of it), or adds it, or adds the section; and
+    /// the same for the line that clears ProdAltDomains.
+    /// </summary>
+    public static string Merge(string existing, string url) => Merge(existing, Section, [(Key, url), ClearAltDomains]);
 
     /// <summary>Sets each key in [<paramref name="section"/>], as <see cref="Merge(string, string)"/> does Prod.</summary>
     public static string Merge(string existing, string section, IReadOnlyList<(string Key, string Value)> entries)

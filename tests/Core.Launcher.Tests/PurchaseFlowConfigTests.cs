@@ -32,7 +32,7 @@ public sealed class PurchaseFlowConfigTests
         var ini = folder.Combine("Saved", "Config", "WindowsClient", "Game.ini");
 
         Assert.True(PurchaseFlowConfig.Write(ini, LocalUrl));
-        Assert.Equal($"[EpicPurchaseFlow]\r\nProd={LocalUrl}\r\n", File.ReadAllText(ini));
+        Assert.Equal($"[EpicPurchaseFlow]\r\nProd={LocalUrl}\r\n!ProdAltDomains=ClearArray\r\n", File.ReadAllText(ini));
         Assert.False(PurchaseFlowConfig.Write(ini, LocalUrl));
     }
 
@@ -41,9 +41,9 @@ public sealed class PurchaseFlowConfigTests
     {
         var existing = "[/Script/FortniteGame.FortGameUserSettings]\r\nbShowFPS=True\r\n\r\n[Paths]\r\nFoo=Bar\r\n";
 
-        Assert.Equal(existing + $"\r\n[EpicPurchaseFlow]\r\nProd={LocalUrl}\r\n", PurchaseFlowConfig.Merge(existing, LocalUrl));
-        Assert.Equal($"[A]\nB=1\n\n[EpicPurchaseFlow]\nProd={LocalUrl}\n", PurchaseFlowConfig.Merge("[A]\nB=1\n", LocalUrl));
-        Assert.Equal($"[A]\r\nB=1\r\n\r\n[EpicPurchaseFlow]\r\nProd={LocalUrl}\r\n", PurchaseFlowConfig.Merge("[A]\r\nB=1", LocalUrl));
+        Assert.Equal(existing + $"\r\n[EpicPurchaseFlow]\r\nProd={LocalUrl}\r\n!ProdAltDomains=ClearArray\r\n", PurchaseFlowConfig.Merge(existing, LocalUrl));
+        Assert.Equal($"[A]\nB=1\n\n[EpicPurchaseFlow]\nProd={LocalUrl}\n!ProdAltDomains=ClearArray\n", PurchaseFlowConfig.Merge("[A]\nB=1\n", LocalUrl));
+        Assert.Equal($"[A]\r\nB=1\r\n\r\n[EpicPurchaseFlow]\r\nProd={LocalUrl}\r\n!ProdAltDomains=ClearArray\r\n", PurchaseFlowConfig.Merge("[A]\r\nB=1", LocalUrl));
     }
 
     [Fact]
@@ -52,14 +52,14 @@ public sealed class PurchaseFlowConfigTests
         var existing = "[A]\r\nProd=keep\r\n\r\n[EpicPurchaseFlow]\r\nGamedev=gd\r\nProd=https://launcher-website-prod07.ol.epicgames.com/purchase\r\nStage=st\r\nprod=repeat\r\n\r\n[B]\r\nC=1\r\n";
 
         Assert.Equal(
-            $"[A]\r\nProd=keep\r\n\r\n[EpicPurchaseFlow]\r\nGamedev=gd\r\nProd={LocalUrl}\r\nStage=st\r\n\r\n[B]\r\nC=1\r\n",
+            $"[A]\r\nProd=keep\r\n\r\n[EpicPurchaseFlow]\r\nGamedev=gd\r\nProd={LocalUrl}\r\nStage=st\r\n!ProdAltDomains=ClearArray\r\n\r\n[B]\r\nC=1\r\n",
             PurchaseFlowConfig.Merge(existing, LocalUrl));
     }
 
     [Fact]
     public void Adds_prod_to_a_section_without_it()
     {
-        Assert.Equal($"[EpicPurchaseFlow]\r\nStage=st\r\nProd={LocalUrl}\r\n\r\n[B]\r\nC=1\r\n",
+        Assert.Equal($"[EpicPurchaseFlow]\r\nStage=st\r\nProd={LocalUrl}\r\n!ProdAltDomains=ClearArray\r\n\r\n[B]\r\nC=1\r\n",
             PurchaseFlowConfig.Merge("[EpicPurchaseFlow]\r\nStage=st\r\n\r\n[B]\r\nC=1\r\n", LocalUrl));
     }
 
@@ -75,7 +75,27 @@ public sealed class PurchaseFlowConfigTests
 
         var bytes = File.ReadAllBytes(ini);
         Assert.Equal([0xFF, 0xFE], bytes[..2]);
-        Assert.Equal("[EpicPurchaseFlow]\nProd=https:///core.example.com/purchase\n\n[A]\nName=Ünïcode\n", File.ReadAllText(ini));
+        Assert.Equal("[EpicPurchaseFlow]\nProd=https:///core.example.com/purchase\n!ProdAltDomains=ClearArray\n\n[A]\nName=Ünïcode\n", File.ReadAllText(ini));
+    }
+
+    // Core-Backend #346: from 6.02 the pak's [EpicPurchaseFlow] has ProdAltDomains, which hung 6.20's purchase flow after
+    // the page's cookie (the triple slash leaves GetUrlDomain no domain to swap). The NoRedist file clears them, and a file
+    // written before (Prod only) gets the line on the next launch.
+    [Fact]
+    public void Clears_the_alt_domains_once_and_adds_the_line_to_an_older_file()
+    {
+        using var folder = new TempFolder();
+        var ini = folder.Combine("NoRedist", "DefaultGame.ini");
+        Directory.CreateDirectory(Path.GetDirectoryName(ini)!);
+        File.WriteAllText(ini, $"[EpicPurchaseFlow]\r\nProd={LocalUrl}\r\n");
+
+        Assert.True(PurchaseFlowConfig.Write(ini, LocalUrl));
+        Assert.Equal($"[EpicPurchaseFlow]\r\nProd={LocalUrl}\r\n!ProdAltDomains=ClearArray\r\n", File.ReadAllText(ini));
+        Assert.False(PurchaseFlowConfig.Write(ini, LocalUrl));
+
+        // Repeats of the clear line go, as repeats of Prod do.
+        Assert.Equal($"[EpicPurchaseFlow]\r\nProd={LocalUrl}\r\n!ProdAltDomains=ClearArray\r\n",
+            PurchaseFlowConfig.Merge("[EpicPurchaseFlow]\r\nProd=old\r\n!ProdAltDomains=Clear\r\n!prodaltdomains=Clear\r\n", LocalUrl));
     }
 
     [Fact]
