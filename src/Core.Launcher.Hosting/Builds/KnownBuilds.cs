@@ -215,6 +215,9 @@ public static partial class KnownBuilds
     /// <summary>Fortnite 6.22, ++Fortnite+Release-6.22 CL-4543176 on UE 4.21, Season 6: adds the Heavy Assault Rifle, the Team Terror limited-time mode with Cube Monsters and a returning Blitz mode, and NFL outfits (https://fortnite.fandom.com/wiki/Update_v6.22).</summary>
     public const int Fortnite622 = 4543176;
 
+    /// <summary>Fortnite 6.30, ++Fortnite+Release-6.30 CL-4573096 on UE 4.21, Season 6: adds the Food Fight limited-time mode and the Mounted Turret trap, and in Save the World the Homebase menus with Upgrades and Research pages and the Last Word Revolver (per press coverage, https://wccftech.com/fortnite-update-6-30-save-the-world/; the wiki page https://fortnite.fandom.com/wiki/Update_v6.30 could not be fetched).</summary>
+    public const int Fortnite630 = 4573096;
+
     /// <summary>
     /// What a Battle Royale server gets. Core takes the map and playlist from the build's own data (on 1.7.2 the Battle
     /// Royale zone theme's Athena_Terrain and solo playlist; the match's playlist comes with its assignment) and
@@ -337,7 +340,8 @@ public static partial class KnownBuilds
         new(Fortnite610, "6.10", "Fortnite 6.10 (CL-4480234)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite620, "6.20", "Fortnite 6.20 (CL-4497486)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite621, "6.21", "Fortnite 6.21 (CL-4526925)", BuildSupport.Full, [], BattleRoyale: true),
-        new(Fortnite622, "6.22", "Fortnite 6.22 (CL-4543176)", BuildSupport.InProgress, [], BattleRoyale: true),
+        new(Fortnite622, "6.22", "Fortnite 6.22 (CL-4543176)", BuildSupport.Full, [], BattleRoyale: true),
+        new(Fortnite630, "6.30", "Fortnite 6.30 (CL-4573096)", BuildSupport.InProgress, [], BattleRoyale: true),
     ];
 
     private static KnownBuild? Find(int changelist) => Array.Find(Builds, build => build.Changelist == changelist);
