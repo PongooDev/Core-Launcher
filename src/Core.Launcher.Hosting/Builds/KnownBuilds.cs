@@ -212,6 +212,9 @@ public static partial class KnownBuilds
     /// <summary>Fortnite 6.21, ++Fortnite+Release-6.21 CL-4526925 on UE 4.21, Season 6: adds the Balloons item, the Dim Mak Igor Hero in Save the World, and vaults the Semi-Auto Sniper, Guided Missile and Dual Pistols (https://fortnite.fandom.com/wiki/Update_v6.21).</summary>
     public const int Fortnite621 = 4526925;
 
+    /// <summary>Fortnite 6.22, ++Fortnite+Release-6.22 CL-4543176 on UE 4.21, Season 6: adds the Heavy Assault Rifle, the Team Terror limited-time mode with Cube Monsters and a returning Blitz mode, and NFL outfits (https://fortnite.fandom.com/wiki/Update_v6.22).</summary>
+    public const int Fortnite622 = 4543176;
+
     /// <summary>
     /// What a Battle Royale server gets. Core takes the map and playlist from the build's own data (on 1.7.2 the Battle
     /// Royale zone theme's Athena_Terrain and solo playlist; the match's playlist comes with its assignment) and
@@ -333,7 +336,8 @@ public static partial class KnownBuilds
         new(Fortnite610Earlier, "6.10", "Fortnite 6.10 (CL-4476098)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite610, "6.10", "Fortnite 6.10 (CL-4480234)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite620, "6.20", "Fortnite 6.20 (CL-4497486)", BuildSupport.Full, [], BattleRoyale: true),
-        new(Fortnite621, "6.21", "Fortnite 6.21 (CL-4526925)", BuildSupport.InProgress, [], BattleRoyale: true),
+        new(Fortnite621, "6.21", "Fortnite 6.21 (CL-4526925)", BuildSupport.Full, [], BattleRoyale: true),
+        new(Fortnite622, "6.22", "Fortnite 6.22 (CL-4543176)", BuildSupport.InProgress, [], BattleRoyale: true),
     ];
 
     private static KnownBuild? Find(int changelist) => Array.Find(Builds, build => build.Changelist == changelist);

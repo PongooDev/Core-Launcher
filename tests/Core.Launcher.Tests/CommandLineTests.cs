@@ -116,7 +116,9 @@ public sealed partial class CommandLineTests
         Assert.Equal(BuildSupport.Full, KnownBuilds.SupportOf(KnownBuilds.Fortnite610Earlier));
         Assert.Equal(BuildSupport.Full, KnownBuilds.SupportOf(KnownBuilds.Fortnite610));
         Assert.Equal(BuildSupport.Full, KnownBuilds.SupportOf(KnownBuilds.Fortnite620));
-        Assert.Equal(BuildSupport.InProgress, KnownBuilds.SupportOf(KnownBuilds.Fortnite621));
+        Assert.Equal(BuildSupport.Full, KnownBuilds.SupportOf(KnownBuilds.Fortnite621));
+        Assert.Equal(BuildSupport.InProgress, KnownBuilds.SupportOf(KnownBuilds.Fortnite622));
+        Assert.True(KnownBuilds.HasBattleRoyale(KnownBuilds.Fortnite622));
         Assert.True(KnownBuilds.HasBattleRoyale(KnownBuilds.Fortnite621));
         Assert.True(KnownBuilds.HasBattleRoyale(KnownBuilds.Fortnite620));
         Assert.True(KnownBuilds.HasBattleRoyale(KnownBuilds.Fortnite610Earliest));
