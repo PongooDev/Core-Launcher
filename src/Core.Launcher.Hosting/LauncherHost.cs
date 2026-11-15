@@ -630,7 +630,8 @@ public sealed class LauncherHost : IAsyncDisposable
     /// Points the Store's purchase page at the backend in the build's NoRedist\DefaultGame.ini (<see cref="PurchaseFlowConfig"/>):
     /// the game reads it on the front end's first frame (3.1 RegisterForEpicPurchasingDisplay, 0xD496C0), before the
     /// backend's hotfix can set it, and a cooked build ignores the saved Game.ini (Core-Backend #244). And the page's
-    /// single sign-on at the backend, in NoRedist\DefaultEngine.ini (Core-Backend #248).
+    /// single sign-on at the backend, in NoRedist\DefaultEngine.ini (Core-Backend #248). For a build after 6.00 both
+    /// files also go in a pak (<see cref="ConfigPak"/>), as 6.20 and later read no loose .ini (Core-Backend #355).
     /// </summary>
     private void WritePurchaseFlow(BuildSettings build, BackendEndpoint backend)
     {
@@ -664,6 +665,48 @@ public sealed class LauncherHost : IAsyncDisposable
             // The flow's sign-on opens Epic's accounts site, and the Store shows "A PROBLEM OCCURRED".
             Log.Write($"Couldn't write the purchase page's sign-in to {engineIni} ({exception.Message}); the Store's V-Bucks packs may not open");
         }
+
+        // From 6.20 at the latest the game reads no loose .ini, so the same text goes in a pak (Core-Backend #355).
+        var paks = ServerAssets.PaksFolder(build.Path);
+        if (!ConfigPak.Applies(build.Changelist) || !Directory.Exists(paks))
+        {
+            return;
+        }
+
+        try
+        {
+            var files = new List<(string Name, byte[] Data)>
+            {
+                (ConfigPak.GameIni, IniBytes(path, PurchaseFlowConfig.Merge("", url))),
+                (ConfigPak.EngineIni, IniBytes(engineIni, PurchaseFlowConfig.Merge("", PurchaseFlowConfig.IdentitySection, identity))),
+            };
+            if (ConfigPak.Write(paks, files, ServerAssets.SignsPaks(paks)))
+            {
+                Log.Write($"Wrote {ConfigPak.PakPath(paks)}: this build reads no loose .ini, so the pak carries the purchase page {url}");
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // A game still running from this build holds the pak open; the next start writes it.
+            Log.Write($"Couldn't write {ConfigPak.PakPath(paks)} ({exception.Message}); the Store's V-Bucks packs may open Epic's page");
+        }
+    }
+
+    /// <summary>The loose file's bytes as written, or <paramref name="fallback"/> in UTF-8 when it can't be read.</summary>
+    private static byte[] IniBytes(string path, string fallback)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                return File.ReadAllBytes(path);
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+        }
+
+        return System.Text.Encoding.UTF8.GetBytes(fallback);
     }
 
     public void StopClient(string login) => ClientFor(login)?.Game.Terminate();

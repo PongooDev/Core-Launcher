@@ -189,6 +189,9 @@ public sealed class ServerAssets
     /// <summary>Core's pak, before the platform: pakchunkCoreServerAssets-WindowsClient_P.pak.</summary>
     public const string PakPrefix = "pakchunkCoreServerAssets-";
 
+    /// <summary>The start of every pak Core writes (server assets, Processes.ConfigPak's config), never a build's own.</summary>
+    public const string CorePakPrefix = "pakchunkCore";
+
     public static readonly TimeSpan ManifestTimeout = TimeSpan.FromSeconds(15);
 
     /// <summary>A download fails when no byte arrives for this long (it is then tried again, resuming).</summary>
@@ -350,14 +353,20 @@ public sealed class ServerAssets
     /// WindowsClient), and _P, the engine's patch suffix, so it mounts above the client paks and its assets win over
     /// the stripped copies some of them hold.
     /// </summary>
-    public static string PakFileName(string paksFolder)
+    public static string PakFileName(string paksFolder) => $"{PakPrefix}{Platform(paksFolder)}_P.pak";
+
+    /// <summary>
+    /// The platform the build's own paks name (pakchunk0-WindowsClient.pak gives WindowsClient), WindowsClient when none
+    /// does. Core's own paks (pakchunkCore...) are left out.
+    /// </summary>
+    public static string Platform(string paksFolder)
     {
         var platform = "WindowsClient";
         if (Directory.Exists(paksFolder))
         {
             var game = Directory.EnumerateFiles(paksFolder, "pakchunk*-*.pak")
                 .Select(Path.GetFileNameWithoutExtension)
-                .Where(name => name is not null && !name.StartsWith(PakPrefix, StringComparison.OrdinalIgnoreCase))
+                .Where(name => name is not null && !name.StartsWith(CorePakPrefix, StringComparison.OrdinalIgnoreCase))
                 .Order(StringComparer.OrdinalIgnoreCase)
                 .FirstOrDefault();
             if (game is not null)
@@ -371,8 +380,15 @@ public sealed class ServerAssets
             }
         }
 
-        return $"{PakPrefix}{platform}_P.pak";
+        return platform;
     }
+
+    /// <summary>
+    /// Whether the build signs its paks: its own pakchunk0 has a .sig next to it, which such a build needs for every pak
+    /// it mounts.
+    /// </summary>
+    public static bool SignsPaks(string paksFolder) =>
+        Directory.Exists(paksFolder) && Directory.EnumerateFiles(paksFolder, "pakchunk0*.sig").Any();
 
     public static ServerAssetsDecision Decide(bool enabled, int changelist, ServerAssetsManifest? manifest, InstalledPak? installed)
     {

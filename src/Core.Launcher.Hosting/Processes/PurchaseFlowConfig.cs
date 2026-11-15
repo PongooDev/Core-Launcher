@@ -15,7 +15,8 @@ namespace Core.Launcher.Hosting.Processes;
 /// takes NoRedist\Default&lt;Name&gt;.ini after Default&lt;Name&gt;.ini (GetSourceIniHierarchyFilenames, 3.5.2 0x12C7F80),
 /// and the pak file reads a loose file for anything that isn't a uasset, umap, ubulk or uexp (FPakPlatformFile::
 /// IsNonPakFilenameAllowed, 3.5.2 0x269FC20, no filename security delegate bound), so a loose one overrides the pak's Prod.
-/// Clients only: servers show no Store.
+/// From 6.20 at the latest that check refuses loose .ini files too, so for builds after 6.00 the same text also goes in a
+/// pak (<see cref="ConfigPak"/>, Core-Backend #355). Clients only: servers show no Store.
 /// </para>
 /// <para>
 /// The page's sign-in (Core-Backend #248): before loading the page the flow sets the player's token as a cookie, and the
@@ -67,11 +68,22 @@ public static class PurchaseFlowConfig
     public static readonly (string Key, string Value) ClearAltDomains = ("!ProdAltDomains", "ClearArray");
 
     /// <summary>
+    /// A config value in quotes, as the pak's own Prod is (Core-Backend #355): the ini reader takes a quoted value whole,
+    /// with <c>\\</c> and <c>\"</c> for a backslash and a quote (FParse::QuotedString), while in an unquoted one a line
+    /// reader that strips comments ends the value at the first <c>//</c> (FParse::LineExtended), which left a hotfixed
+    /// URL as "http:" (Core-Backend #349).
+    /// </summary>
+    public static string Quoted(string value) => $"\"{value.Replace("\\", "\\\\").Replace("\"", "\\\"")}\"";
+
+    /// <summary>[EpicPurchaseFlow]'s entries: Prod, quoted (<see cref="Quoted"/>), and the line clearing ProdAltDomains.</summary>
+    public static IReadOnlyList<(string Key, string Value)> Entries(string url) => [(Key, Quoted(url)), ClearAltDomains];
+
+    /// <summary>
     /// Sets [EpicPurchaseFlow] Prod in <paramref name="path"/> and clears ProdAltDomains (<see cref="ClearAltDomains"/>),
     /// keeping its other sections and keys, its encoding and line endings; creates it when it's missing. Returns whether
     /// it wrote the file. Throws <see cref="IOException"/> or <see cref="UnauthorizedAccessException"/> when it can't.
     /// </summary>
-    public static bool Write(string path, string url) => Write(path, Section, [(Key, url), ClearAltDomains]);
+    public static bool Write(string path, string url) => Write(path, Section, Entries(url));
 
     /// <summary>Sets <paramref name="entries"/> in [<paramref name="section"/>] of <paramref name="path"/>, as <see cref="Write(string, string)"/> does Prod.</summary>
     public static bool Write(string path, string section, IReadOnlyList<(string Key, string Value)> entries)
@@ -100,7 +112,7 @@ public static class PurchaseFlowConfig
     /// Replaces the Prod line under [EpicPurchaseFlow] (dropping any repeats of it), or adds it, or adds the section; and
     /// the same for the line that clears ProdAltDomains.
     /// </summary>
-    public static string Merge(string existing, string url) => Merge(existing, Section, [(Key, url), ClearAltDomains]);
+    public static string Merge(string existing, string url) => Merge(existing, Section, Entries(url));
 
     /// <summary>Sets each key in [<paramref name="section"/>], as <see cref="Merge(string, string)"/> does Prod.</summary>
     public static string Merge(string existing, string section, IReadOnlyList<(string Key, string Value)> entries)
