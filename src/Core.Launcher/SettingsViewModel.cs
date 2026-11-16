@@ -229,6 +229,21 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
     }
 
+    /// <summary>Settings → Builds, Discord (CoreV2 #467).</summary>
+    public bool DiscordRichPresence
+    {
+        get => Settings.DiscordRichPresence;
+        set
+        {
+            Settings.DiscordRichPresence = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public string DiscordRichPresenceHint => _host.RichPresence.Available
+        ? "Shows Core on your Discord profile while Discord runs on this PC: who you're logged in as, and whether you're in the launcher, in the lobby or in a match, with the time since your game started. Discord's own Activity Privacy settings can hide it too."
+        : "Shows Core on your Discord profile while Discord runs on this PC. This launcher version doesn't have Core's Discord application yet, so nothing is shown until an update adds it.";
+
     public bool UseRelease
     {
         get => Settings.Dlls.Source == DllSource.Release;

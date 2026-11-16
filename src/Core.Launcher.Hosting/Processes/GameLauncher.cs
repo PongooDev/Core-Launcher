@@ -112,6 +112,9 @@ public sealed class RunningGame : IServerInstance
 
     public GameProcess Process { get; }
 
+    /// <summary>The build it runs.</summary>
+    public BuildSettings Build => _start.Build;
+
     public int Id => Process.Id;
 
     public DateTime StartedAt { get; }

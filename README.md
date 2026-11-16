@@ -213,8 +213,15 @@ Settings are saved in `%LOCALAPPDATA%\Core-Launcher\settings.json`.
 | Ready timeout | `180` s | `0` waits forever |
 | Download server assets for hosted servers | On | Installs the build's server assets pak before its servers start ([What it does](#what-it-does)); off removes it |
 | Server login | `CoreServer{n}` | `{n}` is the server's number, so each server has its own account |
+| Show what I'm doing on Discord (Builds) | On | Discord Rich Presence while Discord runs on this PC ([Discord](#discord)) |
 
 The launcher adds `-AUTH_LOGIN`, `-AUTH_PASSWORD` and `-AUTH_TYPE=epic` itself. It adds `-httpproxy=127.0.0.1:<port>` when the build uses it, `-CoreBackend=http://127.0.0.1:<port>` for processes that load `CoreRedirect.dll` (both with the friend's address instead when you play on a friend's backend), `-McpRegion=` for servers (the region they host: the first of the backend's **Server Regions**, on its admin panel's Matchmaking page, or `NA` when none is ticked; a friend's backend gives its own, and a build whose server arguments name a region other than NA keeps it), and `-nullrhi -unattended` for servers (no renderer, and engine message boxes are logged instead of waiting for a click, as dedicated servers run). The shipping exe drops any switch missing from its command line whitelist, `-nullrhi` included, so before a build's first server starts the launcher patches its exe the way Reboot Launcher does: four client-only switches in the whitelist become `-log -nosplash -nosound -nullrhi`. Core's server makes the same change in memory, so an exe the launcher can't write to still works. Battle Royale servers also get `-CoreMode=BattleRoyale`: Core takes the map and playlist from the build itself and registers the server with Core-Backend's matchmaking.
+
+## Discord
+
+While Discord runs on the same PC, your profile shows **Core**, **Logged in as** your player name (the account's name when you sign in with an email; the email itself is never shown), and **In the launcher**, **Playing Fortnite 6.30** while the game starts, then **In Lobby** or **In a match**, with the time since the game started. The launcher talks to Discord over its local pipe (`\\.\pipe\discord-ipc-0` to `-9`) only when there is something new to show; if Discord isn't running it stays quiet and tries again at the next change. Lobby and match come from Core-Backend's `GET /core/api/presence` (a backend from November 2026 or later, yours or a friend's), one request held open while the game runs that the backend answers when the state changes; an older backend shows **Playing Fortnite 6.30** throughout. Turn it off in Settings → Builds → Discord.
+
+It needs Core's application on the Discord Developer Portal: until its id is in `DiscordPresence.ApplicationId` (`src/Core.Launcher.Hosting/Discord/DiscordPresence.cs`), nothing is shown and nothing touches Discord.
 
 ## Logs
 

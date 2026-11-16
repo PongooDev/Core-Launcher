@@ -387,6 +387,9 @@ public static partial class KnownBuilds
     /// <summary>The known build's name ("Fortnite 1.2 (CL-3541083)"), or null for an unsupported changelist.</summary>
     public static string? NameOf(int changelist) => Find(changelist)?.Name;
 
+    /// <summary>The Fortnite version players call the known build ("1.1", "6.30"), or null for an unsupported changelist.</summary>
+    public static string? VersionOf(int changelist) => Find(changelist)?.Version;
+
     /// <summary>"Fortnite 1.1 to 1.7.2" (the fully supported builds, for messages).</summary>
     public static string SupportedNames => Versions(BuildSupport.Full);
 

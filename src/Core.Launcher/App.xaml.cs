@@ -58,6 +58,8 @@ public partial class App : Application
         window.Closed += (_, _) => Shutdown();
         MainWindow = window;
         window.Show();
+        // Only the app shows a Discord activity: the tests' hosts never start it.
+        host.RichPresence.Start();
     }
 
     /// <summary>

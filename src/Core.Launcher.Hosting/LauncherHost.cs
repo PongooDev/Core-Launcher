@@ -2,6 +2,7 @@ using System.Text.Json;
 using Core.Launcher.Hosting.Backend;
 using Core.Launcher.Hosting.Builds;
 using Core.Launcher.Hosting.Components;
+using Core.Launcher.Hosting.Discord;
 using Core.Launcher.Hosting.Dlls;
 using Core.Launcher.Hosting.Logging;
 using Core.Launcher.Hosting.Native;
@@ -77,6 +78,7 @@ public sealed class LauncherHost : IAsyncDisposable
         ServerAssets = new ServerAssets(_http, paths.ServerAssets, Log.Write);
         _starter = new ServerStarter(this);
         Servers = new ServerPool(_starter, Log, TimeProvider.System);
+        RichPresence = new RichPresence(this, new DiscordPresence(DiscordPresence.ApplicationId, Log.Write), BackendPresence.CreateHttpClient());
 
         Backend.Changed += OnChanged;
         Servers.Changed += OnChanged;
@@ -105,6 +107,9 @@ public sealed class LauncherHost : IAsyncDisposable
     public BackendHost Backend { get; }
 
     public ServerPool Servers { get; }
+
+    /// <summary>The player's Discord activity (CoreV2 #467); the app starts it with its window.</summary>
+    public RichPresence RichPresence { get; }
 
     /// <summary>The hosted build's server assets pak (Core-ServerAssets), checked before its first server starts.</summary>
     public ServerAssets ServerAssets { get; }
@@ -715,6 +720,7 @@ public sealed class LauncherHost : IAsyncDisposable
     {
         Log.Write("Shutting down");
         _shutdown.Cancel();
+        await RichPresence.DisposeAsync();
         await _updates;
         await Servers.StopAllAsync(ShutdownTimeout);
         var clients = Clients;

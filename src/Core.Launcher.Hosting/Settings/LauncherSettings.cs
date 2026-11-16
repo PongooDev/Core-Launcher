@@ -41,6 +41,14 @@ public sealed class LauncherSettings
     /// </summary>
     public bool DecryptPackedBuilds { get; set; }
 
+    /// <summary>
+    /// Shows Core on the player's Discord profile while Discord runs on this PC (<see cref="Discord.RichPresence"/>, CoreV2
+    /// #467): who they're logged in as, and whether they're in the launcher, in the lobby or in a match, with the time
+    /// since the game started. On by default; nothing is shown until the launcher has Core's Discord application id
+    /// (<see cref="Discord.DiscordPresence.ApplicationId"/>).
+    /// </summary>
+    public bool DiscordRichPresence { get; set; } = true;
+
     public DllSettings Dlls { get; set; } = new();
 
     public BackendSettings Backend { get; set; } = new();
