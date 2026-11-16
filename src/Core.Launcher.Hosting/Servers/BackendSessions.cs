@@ -215,6 +215,16 @@ public sealed class BackendSessions : IDisposable
 /// <summary>The players in a server's matchmaking session; <see cref="Max"/> is 0 when the backend doesn't say.</summary>
 public sealed record SessionPlayers(int Current, int Max)
 {
+    /// <summary>
+    /// The most players a Battle Royale match has (100). The game registers its session with more public slots than that (120 in
+    /// Core-Backend's logs of 6.21 servers, which sessionSummary's maxPlayers passes on: Core-Launcher #20 showed "1 / 120"),
+    /// so a Battle Royale server's card shows the match's own size.
+    /// </summary>
+    public const int BattleRoyaleMax = 100;
+
+    /// <summary>These players with <see cref="Max"/> held to <see cref="BattleRoyaleMax"/>, for a Battle Royale server.</summary>
+    public SessionPlayers ForBattleRoyale() => Max > BattleRoyaleMax ? this with { Max = BattleRoyaleMax } : this;
+
     /// <summary>"Empty", "1 / 4 players", "3 players": shown on the server's card.</summary>
     public string Describe() => Current == 0 ? "Empty"
         : Max > 0 ? $"{Current} / {Max} players"

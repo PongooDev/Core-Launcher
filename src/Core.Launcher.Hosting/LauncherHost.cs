@@ -750,6 +750,9 @@ public sealed class LauncherHost : IAsyncDisposable
 
     private void OnChanged() => Changed?.Invoke();
 
+    /// <summary>Whether the selected build has Creative (7.00 on, Core-Launcher #20): its Battle Royale servers host Creative parties too.</summary>
+    public bool BuildHasCreative => Settings.FindSelectedBuild() is { } build && KnownBuilds.HasCreative(build.Changelist);
+
     /// <summary>Whether the selected build has Battle Royale, so some servers host it.</summary>
     public bool BuildHasBattleRoyale => Settings.FindSelectedBuild() is { } build && KnownBuilds.HasBattleRoyale(build.Changelist);
 
@@ -760,13 +763,10 @@ public sealed class LauncherHost : IAsyncDisposable
         {
             lock (_gate)
             {
-                return BuildHasBattleRoyale || _plan.Any(assignment => assignment.Mode == ServerMode.BattleRoyale);
+                return BuildHasBattleRoyale || _plan.Any(assignment => assignment.BattleRoyale);
             }
         }
     }
-
-    /// <summary>Whether the selected build has Creative (7.00 on, Core-Launcher #20), so some servers are kept for it.</summary>
-    public bool BuildHasCreative => Settings.FindSelectedBuild() is { } build && KnownBuilds.HasCreative(build.Changelist);
 
     /// <summary>
     /// What server <paramref name="instance"/> hosts (<see cref="ServerPlan"/>): the build it was moved to by Switch idle
@@ -787,22 +787,8 @@ public sealed class LauncherHost : IAsyncDisposable
         assignment is null ? settings.FindSelectedBuild()
         : settings.Builds.FirstOrDefault(build => string.Equals(build.Name, assignment.Build, StringComparison.OrdinalIgnoreCase));
 
-    /// <summary>
-    /// What server <paramref name="instance"/> hosts: Save the World, Battle Royale (<see cref="ServerSettings.BattleRoyaleInstances"/>,
-    /// or another build's extra servers) or Creative (<see cref="ServerSettings.CreativeInstances"/>).
-    /// </summary>
-    public ServerMode ModeOf(int instance)
-    {
-        if (ServerAssignment(instance) is { } assignment)
-        {
-            return assignment.Mode;
-        }
-
-        var servers = Settings.Servers;
-        return BuildHasCreative && servers.HostsCreative(instance) ? ServerMode.Creative
-            : BuildHasBattleRoyale && servers.HostsBattleRoyale(instance) ? ServerMode.BattleRoyale
-            : ServerMode.SaveTheWorld;
-    }
+    /// <summary>Whether server <paramref name="instance"/> hosts Battle Royale (<see cref="ServerSettings.BattleRoyaleInstances"/>, or another build's extra servers).</summary>
+    public bool HostsBattleRoyale(int instance) => ServerAssignment(instance)?.BattleRoyale ?? (BuildHasBattleRoyale && Settings.Servers.HostsBattleRoyale(instance));
 
     /// <summary>
     /// Settings → Servers, Switch idle servers (Core-Launcher #18): after each pool tick, moves an idle server to a build
@@ -859,15 +845,7 @@ public sealed class LauncherHost : IAsyncDisposable
         OnChanged();
     }
 
-    private static string Describe(ServerAssignment assignment) => $"{assignment.Build} ({ModeName(assignment.Mode)})";
-
-    /// <summary>"Save the World", "Battle Royale" or "Creative".</summary>
-    public static string ModeName(ServerMode mode) => mode switch
-    {
-        ServerMode.BattleRoyale => "Battle Royale",
-        ServerMode.Creative => "Creative",
-        _ => "Save the World",
-    };
+    private static string Describe(ServerAssignment assignment) => $"{assignment.Build} ({(assignment.BattleRoyale ? "Battle Royale" : "Save the World")})";
 
     private static bool SameJson<T>(T left, T right) => JsonSerializer.Serialize(left) == JsonSerializer.Serialize(right);
 
@@ -944,20 +922,14 @@ public sealed class LauncherHost : IAsyncDisposable
         {
             var settings = host.Settings;
             var build = host.ServerBuild(instance) ?? throw new InvalidOperationException("Its build isn't in Settings → Builds any more");
-            var mode = host.ModeOf(instance);
+            var battleRoyale = host.HostsBattleRoyale(instance);
             var backend = Backend() ?? throw new InvalidOperationException("The backend isn't ready");
             // The admin panel's first Server Region (Core-Backend #142), NA when none is ticked; a build's own -McpRegion wins.
             var region = host._region.Region(backend) ?? BackendRegion.DefaultRegion;
-            // A Creative server starts as a Battle Royale one: its playlist comes with its matchmaking assignment (KnownBuilds.BattleRoyaleServerArguments).
-            var arguments = LaunchArguments.Server(build, backend, ServerLogin(settings, instance), mode != ServerMode.SaveTheWorld, region);
+            var arguments = LaunchArguments.Server(build, backend, ServerLogin(settings, instance), battleRoyale, region);
             var output = host.ServerLog(instance);
             output.Write($"(launcher) --- {DateTime.Now:yyyy-MM-dd HH:mm:ss} ---");
-            output.Write($"(launcher) {build.Name}, {ModeName(mode)}");
-            if (mode == ServerMode.Creative)
-            {
-                output.Write("(launcher) Kept for Creative: it starts as a Battle Royale server, and the backend gives it a Creative party or a Battle Royale match, whichever comes first");
-            }
-
+            output.Write($"(launcher) {build.Name}, {(battleRoyale ? "Battle Royale" : "Save the World")}");
             if (settings.Backend.UseRemote)
             {
                 output.Write($"(launcher) Hosting for {host.BackendDescription} ({backend.Url}) as {ServerLogin(settings, instance)}");

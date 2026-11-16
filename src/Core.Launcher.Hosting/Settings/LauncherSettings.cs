@@ -208,13 +208,6 @@ public sealed class ServerSettings
     public int BattleRoyaleInstances { get; set; } = 2;
 
     /// <summary>
-    /// On a build with Creative (7.00 on, Core-Launcher #20), how many servers are kept for it, after the Battle Royale
-    /// ones. Each Creative party takes a server of its own, which its friends can join (up to 16 players). They start as
-    /// Battle Royale's do, and the backend's matchmaking gives a free one to whichever match comes, Creative or Battle Royale.
-    /// </summary>
-    public int CreativeInstances { get; set; } = 1;
-
-    /// <summary>
     /// Before a build's servers start, install its server assets pak (server-only content the PC paks lack) from
     /// Core-ServerAssets into its Paks folder, verified by SHA-256 (<see cref="Components.ServerAssets"/>). Off removes Core's pak.
     /// </summary>
@@ -272,10 +265,4 @@ public sealed class ServerSettings
 
     /// <summary>Whether server <paramref name="instance"/> (from 1) hosts Battle Royale on a build that has it: the ones after <see cref="Instances"/>.</summary>
     public bool HostsBattleRoyale(int instance) => instance > Instances;
-
-    /// <summary>
-    /// Whether server <paramref name="instance"/> (from 1) is kept for Creative on a build that has it: the ones after
-    /// <see cref="Instances"/> and <see cref="BattleRoyaleInstances"/>.
-    /// </summary>
-    public bool HostsCreative(int instance) => instance > Instances + BattleRoyaleInstances;
 }

@@ -165,6 +165,17 @@ public sealed class BackendSessionsTests
     }
 
     [Fact]
+    public void ABattleRoyaleServerShowsTheMatchsSizeNotTheSessionsPublicSlots()
+    {
+        // Core-Launcher #20: the game registers 120 public slots, which the card showed as "1 / 120 players".
+        Assert.Equal("1 / 100 players", new SessionPlayers(1, 120).ForBattleRoyale().Describe());
+        Assert.Equal("1 / 100 players", new SessionPlayers(1, 100).ForBattleRoyale().Describe());
+        Assert.Equal("1 / 16 players", new SessionPlayers(1, 16).ForBattleRoyale().Describe());
+        Assert.Equal("1 player", new SessionPlayers(1, 0).ForBattleRoyale().Describe());
+        Assert.Equal("1 / 120 players", new SessionPlayers(1, 120).Describe());
+    }
+
+    [Fact]
     public async Task AServersNewestSessionGivesItsPlayers()
     {
         List(WithPlayers(Session("CoreServer1", 7777, Started.AddSeconds(-30)), 2, 4), WithPlayers(Session("CoreServer1", 7777, Started.AddSeconds(40)), 1, 4));

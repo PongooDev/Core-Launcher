@@ -168,21 +168,7 @@
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock Text="Battle Royale servers" FontSize="14" />
                         <TextBlock Text="Each Battle Royale match takes a server of its own." Style="{StaticResource Subtle}" />
-                    </StackPanel>
-                </DockPanel>
-                <DockPanel Margin="0,12,0,0" Visibility="{Binding HasCreative, Converter={StaticResource Visible}}">
-                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                        <Button Width="34" Height="32" Padding="0" Command="{Binding ChangeCreativeInstancesCommand}" CommandParameter="-1" ToolTip="One Creative server fewer">
-                            <TextBlock Text="&#xE738;" Style="{StaticResource Icon}" FontSize="11" />
-                        </Button>
-                        <TextBlock Text="{Binding CreativeInstances}" FontSize="16" FontWeight="SemiBold" Width="40" TextAlignment="Center" VerticalAlignment="Center" />
-                        <Button Width="34" Height="32" Padding="0" Command="{Binding ChangeCreativeInstancesCommand}" CommandParameter="1" ToolTip="One Creative server more">
-                            <TextBlock Text="&#xE710;" Style="{StaticResource Icon}" FontSize="11" />
-                        </Button>
-                    </StackPanel>
-                    <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="Creative servers" FontSize="14" />
-                        <TextBlock Text="Each Creative party takes a server of its own. They start as Battle Royale servers, so a Battle Royale match can take one too." Style="{StaticResource Subtle}" TextWrapping="Wrap" />
+                        <TextBlock Text="Battle Royale servers also host Creative islands on 7.00 and later." Style="{StaticResource Subtle}" Visibility="{Binding HasCreative, Converter={StaticResource Visible}}" />
                     </StackPanel>
                 </DockPanel>
             </StackPanel>
@@ -202,10 +188,6 @@
                     <StackPanel Visibility="{Binding ShowsBattleRoyale, Converter={StaticResource Visible}}">
                         <TextBlock Text="Battle Royale" Style="{StaticResource SectionTitle}" Margin="0,8,0,10" />
                         <ItemsControl ItemsSource="{Binding BattleRoyaleServers}" Margin="0,0,-16,0" ItemsPanel="{StaticResource ServerCards}" ItemTemplate="{StaticResource ServerCard}" />
-                    </StackPanel>
-                    <StackPanel Visibility="{Binding HasCreative, Converter={StaticResource Visible}}">
-                        <TextBlock Text="Creative" Style="{StaticResource SectionTitle}" Margin="0,8,0,10" />
-                        <ItemsControl ItemsSource="{Binding CreativeServers}" Margin="0,0,-16,0" ItemsPanel="{StaticResource ServerCards}" ItemTemplate="{StaticResource ServerCard}" />
                     </StackPanel>
                 </StackPanel>
             </ScrollViewer>

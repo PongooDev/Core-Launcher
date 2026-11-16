@@ -233,11 +233,11 @@ public static partial class KnownBuilds
     /// registers the server with the matchmaking service that Battle Royale's players queue on, so the launcher needs no
     /// per-build map. Core-Docs/Athena-Plan.md.
     /// <para>
-    /// Creative's servers (<see cref="HasCreative"/>) get the same: Core has no mode of its own for Creative. A Creative
-    /// match is a Battle Royale server's whose matchmaking assignment names Playlist_PlaygroundV2 (PlaylistId 35, 16
-    /// players): Core-Backend gives each Creative party a free server of its own at once, and CoreV2 runs Creative's
-    /// stripped server code (the hub's rifts, islands from the backend's DSS) on 7.00's Creative classes and that
-    /// playlist's bEnableCreativeMode (CoreV2 #471, Core-Backend d0ecb0d).
+    /// These servers host Creative too, on builds that have it (<see cref="HasCreative"/>): Core has no mode of its own for
+    /// Creative. A Creative match is a Battle Royale server's whose matchmaking assignment names Playlist_PlaygroundV2
+    /// (PlaylistId 35, 16 players): Core-Backend gives each Creative party a free server of its own at once, and CoreV2
+    /// runs Creative's stripped server code (the hub's rifts, islands from the backend's DSS) on 7.00's Creative classes
+    /// and that playlist's bEnableCreativeMode (CoreV2 #471, Core-Backend d0ecb0d). Core-Launcher #20.
     /// </para>
     /// </summary>
     public const string BattleRoyaleServerArguments = "-CoreMode=BattleRoyale";
@@ -398,15 +398,14 @@ public static partial class KnownBuilds
     public static bool HasBattleRoyale(int changelist) => Find(changelist)?.BattleRoyale ?? false;
 
     /// <summary>
-    /// Whether Core hosts Creative on this build (<see cref="ServerSettings.CreativeInstances"/>, Core-Launcher #20): 7.00 on,
-    /// where Creative came in. Its servers are Battle Royale ones (<see cref="BattleRoyaleServerArguments"/>).
+    /// Whether the build has Creative (7.00 on, where it came in). It has no servers of its own: Battle Royale's host its
+    /// parties (<see cref="BattleRoyaleServerArguments"/>), and the Servers page says so (Core-Launcher #20).
     /// </summary>
     public static bool HasCreative(int changelist) => Find(changelist)?.Creative ?? false;
 
-    /// <summary>How many servers the launcher keeps running for this build: Battle Royale's and then Creative's come on top of the others.</summary>
+    /// <summary>How many servers the launcher keeps running for this build: Battle Royale's come on top of the others.</summary>
     public static int ServerCount(ServerSettings servers, BuildSettings? build) =>
-        servers.Instances + (build is not null && HasBattleRoyale(build.Changelist) ? servers.BattleRoyaleInstances : 0)
-        + (build is not null && HasCreative(build.Changelist) ? servers.CreativeInstances : 0);
+        servers.Instances + (build is not null && HasBattleRoyale(build.Changelist) ? servers.BattleRoyaleInstances : 0);
 
     /// <summary>The known build's name ("Fortnite 1.2 (CL-3541083)"), or null for an unsupported changelist.</summary>
     public static string? NameOf(int changelist) => Find(changelist)?.Name;
