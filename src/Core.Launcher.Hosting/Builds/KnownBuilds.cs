@@ -221,7 +221,7 @@ public static partial class KnownBuilds
     /// <summary>Fortnite 6.31, ++Fortnite+Release-6.31 CL-4573279 on UE 4.21, Season 6: adds the Team Rumble limited-time mode and Epic and Legendary Pump Shotguns, and in Save the World the R.O.S.I.E. Constructor, the Six Feet Under Shovel and Canny Valley Act 2 (https://fortnite.fandom.com/wiki/Update_v6.31).</summary>
     public const int Fortnite631 = 4573279;
 
-    /// <summary>Fortnite 7.00, ++Fortnite+Release-7.00 CL-4629139 on UE 4.21, Season 7 (released 6 December 2018): moves Battle Royale to the iceberg map with Polar Peak and Frosty Flights, adds the X-4 Stormwing plane, Wraps, ziplines and Creative early access, and in Save the World Canny Valley Act 3 (https://fortnite.fandom.com/wiki/Update_v7.00).</summary>
+    /// <summary>Fortnite 7.00, ++Fortnite+Release-7.00 CL-4629139 on UE 4.22 (the first 4.22 build), Season 7 (released 6 December 2018): moves Battle Royale to the iceberg map with Polar Peak and Frosty Flights, adds the X-4 Stormwing plane, Wraps, ziplines and Creative early access, and in Save the World Canny Valley Act 3 (https://fortnite.fandom.com/wiki/Update_v7.00).</summary>
     public const int Fortnite700 = 4629139;
 
     /// <summary>

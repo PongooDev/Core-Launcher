@@ -76,7 +76,7 @@ Core moves forward one build at a time and skips builds nobody has a copy of, so
 | 6.22 | Release-6.22 CL-4543176 (UE 4.21) | Supported ✅ |
 | 6.30 | Release-6.30 CL-4573096 (UE 4.21) | Supported ✅ |
 | 6.31 | Release-6.31 CL-4573279 (UE 4.21) | Supported ✅ |
-| 7.00 | Release-7.00 CL-4629139 (UE 4.21) | In progress 🚧 |
+| 7.00 | Release-7.00 CL-4629139 (UE 4.22) | In progress 🚧 |
 
 </details>
 
