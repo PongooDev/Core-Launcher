@@ -894,7 +894,7 @@ public sealed partial class MainViewModel : ObservableObject
     private void ChangeInstances(string delta)
     {
         var updated = SettingsStore.Clone(_host.Settings);
-        updated.Servers.Instances = Math.Clamp(updated.Servers.Instances + int.Parse(delta), 1, SettingsStore.MaxInstances);
+        updated.Servers.Instances = Math.Clamp(updated.Servers.Instances + int.Parse(delta), 0, SettingsStore.MaxInstances);
         if (updated.Servers.Instances != _host.Settings.Servers.Instances)
         {
             _host.SaveSettings(updated);

@@ -263,6 +263,29 @@ public sealed class ServerPlanTests
     }
 
     [Fact]
+    public void ZeroServersOfEveryKindIsAnEmptyPlanThatNothingTripsOn()
+    {
+        using var folder = new TempFolder();
+        var store = new SettingsStore(folder.Combine("settings.json"));
+        var settings = Settings(Build("7.00", 4_000_000 + 3_000_000));
+        settings.Servers.Instances = 0;
+        settings.Servers.BattleRoyaleInstances = 0;
+        settings.Servers.CreativeInstances = 0;
+        store.Save(settings);
+        var loaded = store.Load();
+        Assert.Equal(0, loaded.Servers.Instances);
+        Assert.Equal(0, loaded.Servers.BattleRoyaleInstances);
+        Assert.Equal(0, loaded.Servers.CreativeInstances);
+
+        Assert.Empty(ServerPlan.For(loaded));
+        Assert.Equal(0, KnownBuilds.ServerCount(loaded.Servers, loaded.FindSelectedBuild()));
+
+        var switcher = new ServerSwitcher(_time);
+        Assert.Null(switcher.Assignment([], 1));
+        Assert.Null(switcher.Decide([], [], _ => null, [new BuildDemand(4166199, false, 3)], _ => new ServerAssignment("4.5", ServerMode.SaveTheWorld)));
+    }
+
+    [Fact]
     public void OlderSettingsLoadWithNoExtraServersAndSwitchingOff()
     {
         using var folder = new TempFolder();
