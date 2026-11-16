@@ -9,11 +9,10 @@ public sealed class DiscordPresence : IAsyncDisposable
 {
     /// <summary>
     /// Core's application on the Discord Developer Portal (https://discord.com/developers/applications): the presence
-    /// shows under its name ("Playing Core") with its art. Empty, the presence is off and nothing touches Discord or the
-    /// backend. To set it: create the application named "Core", copy its Application ID (General Information) here, and
-    /// upload the art asset <see cref="LargeImageKey"/> (Rich Presence → Art Assets).
+    /// shows under its name ("Playing Core") with its art asset <see cref="LargeImageKey"/>. Created by MrPodge6 for Core
+    /// (CoreV2 #467) and approved by the owner. Empty, the presence is off and nothing touches Discord or the backend.
     /// </summary>
-    public const string ApplicationId = "";
+    public const string ApplicationId = "1571859629510631545";
 
     /// <summary>The art asset the activity shows as its large image; Discord shows none while the application has no asset of that name.</summary>
     public const string LargeImageKey = "core";

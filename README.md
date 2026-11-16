@@ -223,7 +223,7 @@ The launcher adds `-AUTH_LOGIN`, `-AUTH_PASSWORD` and `-AUTH_TYPE=epic` itself. 
 
 While Discord runs on the same PC, your profile shows **Core**, **Logged in as** your player name (the account's name when you sign in with an email; the email itself is never shown), and **In the launcher**, **Playing Fortnite 6.30** while the game starts, then **In Lobby** or **In a match**, with the time since the game started. The launcher talks to Discord over its local pipe (`\\.\pipe\discord-ipc-0` to `-9`) only when there is something new to show; if Discord isn't running it stays quiet and tries again at the next change. Lobby and match come from Core-Backend's `GET /core/api/presence` (a backend from November 2026 or later, yours or a friend's), one request held open while the game runs that the backend answers when the state changes; an older backend shows **Playing Fortnite 6.30** throughout. Turn it off in Settings → Builds → Discord.
 
-It needs Core's application on the Discord Developer Portal: until its id is in `DiscordPresence.ApplicationId` (`src/Core.Launcher.Hosting/Discord/DiscordPresence.cs`), nothing is shown and nothing touches Discord.
+It uses Core's application on the Discord Developer Portal, whose id is `DiscordPresence.ApplicationId` (`src/Core.Launcher.Hosting/Discord/DiscordPresence.cs`). With the id empty, nothing is shown and nothing touches Discord.
 
 ## Logs
 
