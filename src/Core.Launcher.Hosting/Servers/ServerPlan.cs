@@ -3,9 +3,36 @@ using Core.Launcher.Hosting.Settings;
 
 namespace Core.Launcher.Hosting.Servers;
 
-/// <summary>What a server slot hosts: a build (by its name in the settings) and whether in Battle Royale.</summary>
-public sealed record ServerAssignment(string Build, bool BattleRoyale)
+/// <summary>What a server hosts.</summary>
+public enum ServerMode
 {
+    /// <summary>Save the World: every server of a build without Battle Royale, and the selected build's first ones.</summary>
+    SaveTheWorld,
+
+    /// <summary>Battle Royale (<see cref="KnownBuilds.BattleRoyaleServerArguments"/>): its matches come from the backend's matchmaking.</summary>
+    BattleRoyale,
+
+    /// <summary>
+    /// Creative, on a build that has it (<see cref="KnownBuilds.HasCreative"/>, 7.00 on): a Battle Royale server that the
+    /// launcher keeps for Creative. It starts as Battle Royale's do (<see cref="KnownBuilds.BattleRoyaleServerArguments"/>),
+    /// and the backend's matchmaking gives it whichever match comes, a Creative party's or a Battle Royale one.
+    /// </summary>
+    Creative,
+}
+
+/// <summary>What a server slot hosts: a build (by its name in the settings) and its mode.</summary>
+public sealed record ServerAssignment(string Build, ServerMode Mode)
+{
+    /// <summary>
+    /// Whether it starts as a Battle Royale server and takes its matches from the backend's matchmaking: Battle Royale's
+    /// servers and Creative's. Core-Backend gives a Creative party (Playlist_PlaygroundV2) any free one of its build.
+    /// </summary>
+    public bool BattleRoyale => Mode != ServerMode.SaveTheWorld;
+
+    /// <summary>
+    /// Whether a server of this assignment takes <paramref name="other"/>'s players: the same build, and both Save the
+    /// World or both on the matchmaking service (Battle Royale's and Creative's servers take each other's matches).
+    /// </summary>
     public bool Same(ServerAssignment? other) =>
         other is not null && other.BattleRoyale == BattleRoyale && string.Equals(other.Build, Build, StringComparison.OrdinalIgnoreCase);
 }
@@ -18,9 +45,10 @@ public sealed record ServerSwitch(int Instance, ServerAssignment From, ServerAss
 
 /// <summary>
 /// Which build each server slot hosts (Core-Launcher #18). The selected build keeps today's servers: Servers to keep
-/// running (Save the World) and, on a build with Battle Royale, the Battle Royale servers after them. Every build with
-/// Extra servers (Settings → Builds) gets that many more after those, whichever build is selected: Battle Royale on a
-/// build that has it, otherwise Save the World. So with no extra servers anywhere nothing changes.
+/// running (Save the World), on a build with Battle Royale the Battle Royale servers after them, and on a build with
+/// Creative (7.00 on, Core-Launcher #20) the Creative servers after those. Every build with Extra servers (Settings →
+/// Builds) gets that many more after those, whichever build is selected: Battle Royale on a build that has it, otherwise
+/// Save the World. So with no extra servers anywhere nothing changes.
 /// </summary>
 public static class ServerPlan
 {
@@ -29,15 +57,20 @@ public static class ServerPlan
         var selected = settings.FindSelectedBuild();
         var name = selected?.Name ?? "";
         var plan = new List<ServerAssignment>();
-        plan.AddRange(Enumerable.Repeat(new ServerAssignment(name, false), settings.Servers.Instances));
+        plan.AddRange(Enumerable.Repeat(new ServerAssignment(name, ServerMode.SaveTheWorld), settings.Servers.Instances));
         if (selected is not null && KnownBuilds.HasBattleRoyale(selected.Changelist))
         {
-            plan.AddRange(Enumerable.Repeat(new ServerAssignment(name, true), settings.Servers.BattleRoyaleInstances));
+            plan.AddRange(Enumerable.Repeat(new ServerAssignment(name, ServerMode.BattleRoyale), settings.Servers.BattleRoyaleInstances));
+        }
+
+        if (selected is not null && KnownBuilds.HasCreative(selected.Changelist))
+        {
+            plan.AddRange(Enumerable.Repeat(new ServerAssignment(name, ServerMode.Creative), settings.Servers.CreativeInstances));
         }
 
         foreach (var build in settings.Builds.Where(build => build.ExtraServers > 0))
         {
-            plan.AddRange(Enumerable.Repeat(new ServerAssignment(build.Name, KnownBuilds.HasBattleRoyale(build.Changelist)), build.ExtraServers));
+            plan.AddRange(Enumerable.Repeat(new ServerAssignment(build.Name, ModeOf(build.Changelist, true)), build.ExtraServers));
         }
 
         return plan;
@@ -49,8 +82,11 @@ public static class ServerPlan
     /// </summary>
     public static ServerAssignment? Resolve(LauncherSettings settings, BuildDemand demand) =>
         settings.Builds.FirstOrDefault(build => build.Changelist == demand.Changelist && build.Changelist > 0 && KnownBuilds.CanHost(build)) is { } found
-            ? new ServerAssignment(found.Name, demand.BattleRoyale && KnownBuilds.HasBattleRoyale(found.Changelist))
+            ? new ServerAssignment(found.Name, ModeOf(found.Changelist, demand.BattleRoyale))
             : null;
+
+    private static ServerMode ModeOf(int changelist, bool battleRoyale) =>
+        battleRoyale && KnownBuilds.HasBattleRoyale(changelist) ? ServerMode.BattleRoyale : ServerMode.SaveTheWorld;
 }
 
 /// <summary>
@@ -134,9 +170,12 @@ public sealed class ServerSwitcher(TimeProvider time)
             }
 
             var from = Assignment(plan, candidate.Instance)!;
+            var to = target;
             if (candidate.Instance <= plan.Count && target.Same(plan[candidate.Instance - 1]))
             {
+                // Back on its plan's assignment, which may be a Creative server taking Battle Royale's players.
                 _overrides.Remove(candidate.Instance);
+                to = plan[candidate.Instance - 1];
             }
             else
             {
@@ -144,7 +183,7 @@ public sealed class ServerSwitcher(TimeProvider time)
             }
 
             _idleSince.Remove(candidate.Instance);
-            return new ServerSwitch(candidate.Instance, from, target);
+            return new ServerSwitch(candidate.Instance, from, to);
         }
 
         return null;

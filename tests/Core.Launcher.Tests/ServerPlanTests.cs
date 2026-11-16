@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Core.Launcher.Hosting;
 using Core.Launcher.Hosting.Builds;
 using Core.Launcher.Hosting.Dlls;
 using Core.Launcher.Hosting.Logging;
@@ -33,10 +34,10 @@ public sealed class ServerPlanTests
     {
         var withBattleRoyale = Settings(Build("4.5", 4166199), Build("1.2", KnownBuilds.Fortnite12));
         Assert.Equal(KnownBuilds.ServerCount(withBattleRoyale.Servers, withBattleRoyale.FindSelectedBuild()), ServerPlan.For(withBattleRoyale).Count);
-        Assert.Equal([new ServerAssignment("4.5", false), new ServerAssignment("4.5", true)], ServerPlan.For(withBattleRoyale));
+        Assert.Equal([new ServerAssignment("4.5", ServerMode.SaveTheWorld), new ServerAssignment("4.5", ServerMode.BattleRoyale)], ServerPlan.For(withBattleRoyale));
 
         var saveTheWorldOnly = Settings(Build("1.2", KnownBuilds.Fortnite12), Build("4.5", 4166199));
-        Assert.Equal([new ServerAssignment("1.2", false)], ServerPlan.For(saveTheWorldOnly));
+        Assert.Equal([new ServerAssignment("1.2", ServerMode.SaveTheWorld)], ServerPlan.For(saveTheWorldOnly));
         Assert.Equal(1, KnownBuilds.ServerCount(saveTheWorldOnly.Servers, saveTheWorldOnly.FindSelectedBuild()));
     }
 
@@ -45,12 +46,12 @@ public sealed class ServerPlanTests
     {
         var settings = Settings(Build("1.2", KnownBuilds.Fortnite12, extra: 1), Build("4.5", 4166199, extra: 2), Build("3.0", 3901517));
         Assert.Equal(
-            [new ServerAssignment("1.2", false), new ServerAssignment("1.2", false), new ServerAssignment("4.5", true), new ServerAssignment("4.5", true)],
+            [new ServerAssignment("1.2", ServerMode.SaveTheWorld), new ServerAssignment("1.2", ServerMode.SaveTheWorld), new ServerAssignment("4.5", ServerMode.BattleRoyale), new ServerAssignment("4.5", ServerMode.BattleRoyale)],
             ServerPlan.For(settings));
 
         settings.SelectedBuild = "3.0";
         Assert.Equal(
-            [new ServerAssignment("3.0", false), new ServerAssignment("3.0", true), new ServerAssignment("1.2", false), new ServerAssignment("4.5", true), new ServerAssignment("4.5", true)],
+            [new ServerAssignment("3.0", ServerMode.SaveTheWorld), new ServerAssignment("3.0", ServerMode.BattleRoyale), new ServerAssignment("1.2", ServerMode.SaveTheWorld), new ServerAssignment("4.5", ServerMode.BattleRoyale), new ServerAssignment("4.5", ServerMode.BattleRoyale)],
             ServerPlan.For(settings));
     }
 
@@ -61,9 +62,9 @@ public sealed class ServerPlanTests
         off.ServerDlls = [DllRole.Redirect];
         var settings = Settings(Build("1.2", KnownBuilds.Fortnite12), off, Build("4.5", 4166199));
 
-        Assert.Equal(new ServerAssignment("4.5", true), ServerPlan.Resolve(settings, new BuildDemand(4166199, true, 1)));
-        Assert.Equal(new ServerAssignment("4.5", false), ServerPlan.Resolve(settings, new BuildDemand(4166199, false, 1)));
-        Assert.Equal(new ServerAssignment("1.2", false), ServerPlan.Resolve(settings, new BuildDemand(KnownBuilds.Fortnite12, true, 1)));
+        Assert.Equal(new ServerAssignment("4.5", ServerMode.BattleRoyale), ServerPlan.Resolve(settings, new BuildDemand(4166199, true, 1)));
+        Assert.Equal(new ServerAssignment("4.5", ServerMode.SaveTheWorld), ServerPlan.Resolve(settings, new BuildDemand(4166199, false, 1)));
+        Assert.Equal(new ServerAssignment("1.2", ServerMode.SaveTheWorld), ServerPlan.Resolve(settings, new BuildDemand(KnownBuilds.Fortnite12, true, 1)));
         Assert.Null(ServerPlan.Resolve(settings, new BuildDemand(3901517, true, 1)));
     }
 
@@ -84,8 +85,8 @@ public sealed class ServerPlanTests
         _time.Advance(TimeSpan.FromSeconds(1));
 
         // The last server, the selected build's Battle Royale one, goes; nothing else moves while it restarts on 3.0.
-        Assert.Equal(new ServerSwitch(2, new ServerAssignment("4.5", true), new ServerAssignment("3.0", true)), Decide());
-        Assert.Equal(new ServerAssignment("3.0", true), switcher.Assignment(plan, 2));
+        Assert.Equal(new ServerSwitch(2, new ServerAssignment("4.5", ServerMode.BattleRoyale), new ServerAssignment("3.0", ServerMode.BattleRoyale)), Decide());
+        Assert.Equal(new ServerAssignment("3.0", ServerMode.BattleRoyale), switcher.Assignment(plan, 2));
         slots = [Slot(1), Slot(2, ServerState.Stopping)];
         Assert.Null(Decide());
 
@@ -100,7 +101,7 @@ public sealed class ServerPlanTests
         players[2] = new SessionPlayers(0, 100);
         Assert.Null(Decide());
         _time.Advance(ServerSwitcher.IdleFor);
-        Assert.Equal(new ServerSwitch(2, new ServerAssignment("3.0", true), new ServerAssignment("4.5", true)), Decide());
+        Assert.Equal(new ServerSwitch(2, new ServerAssignment("3.0", ServerMode.BattleRoyale), new ServerAssignment("4.5", ServerMode.BattleRoyale)), Decide());
         Assert.Equal(plan[1], switcher.Assignment(plan, 2));
     }
 
@@ -131,6 +132,109 @@ public sealed class ServerPlanTests
         // A server whose players the backend doesn't count never counts as idle.
         players[1] = null;
         Assert.Null(Decide(new BuildDemand(3901517, true, 1)));
+    }
+
+    [Fact]
+    public void CreativeServersComeAfterTheBattleRoyaleOnesOnABuildWithCreative()
+    {
+        // 7.00 (Core-Launcher #20): Save the World's, Battle Royale's, then Creative's, and extra servers are Battle Royale's.
+        var settings = Settings(Build("7.00", KnownBuilds.Fortnite700, extra: 1), Build("6.31", KnownBuilds.Fortnite631));
+        settings.Servers.CreativeInstances = 2;
+        Assert.Equal(
+            [new ServerAssignment("7.00", ServerMode.SaveTheWorld), new ServerAssignment("7.00", ServerMode.BattleRoyale),
+             new ServerAssignment("7.00", ServerMode.Creative), new ServerAssignment("7.00", ServerMode.Creative), new ServerAssignment("7.00", ServerMode.BattleRoyale)],
+            ServerPlan.For(settings));
+        Assert.Equal(4, KnownBuilds.ServerCount(settings.Servers, settings.FindSelectedBuild()));
+
+        // Builds before 7.00 have no Creative: their servers are as they were, whatever the count says.
+        settings.SelectedBuild = "6.31";
+        Assert.Equal(
+            [new ServerAssignment("6.31", ServerMode.SaveTheWorld), new ServerAssignment("6.31", ServerMode.BattleRoyale), new ServerAssignment("7.00", ServerMode.BattleRoyale)],
+            ServerPlan.For(settings));
+        Assert.Equal(2, KnownBuilds.ServerCount(settings.Servers, settings.FindSelectedBuild()));
+        var saveTheWorldOnly = Settings(Build("1.2", KnownBuilds.Fortnite12));
+        saveTheWorldOnly.Servers.CreativeInstances = 3;
+        Assert.Equal([new ServerAssignment("1.2", ServerMode.SaveTheWorld)], ServerPlan.For(saveTheWorldOnly));
+
+        // A Creative server starts as a Battle Royale one and takes its build's Battle Royale players (Core-Backend's
+        // matchmaking gives a free server either kind of match); Save the World's are another matter.
+        var creative = new ServerAssignment("7.00", ServerMode.Creative);
+        Assert.True(creative.BattleRoyale);
+        Assert.True(creative.Same(new ServerAssignment("7.00", ServerMode.BattleRoyale)));
+        Assert.False(creative.Same(new ServerAssignment("7.00", ServerMode.SaveTheWorld)));
+        Assert.False(creative.Same(new ServerAssignment("6.31", ServerMode.BattleRoyale)));
+        Assert.False(new ServerAssignment("7.00", ServerMode.SaveTheWorld).BattleRoyale);
+        // The backend's demand names Battle Royale or Save the World, never Creative.
+        Assert.Equal(new ServerAssignment("7.00", ServerMode.BattleRoyale), ServerPlan.Resolve(settings, new BuildDemand(KnownBuilds.Fortnite700, true, 1)));
+    }
+
+    [Fact]
+    public void ACreativeServerTakesItsBuildsBattleRoyalePlayersAndGoesBackToCreative()
+    {
+        var settings = Settings(Build("7.00", KnownBuilds.Fortnite700), Build("6.31", KnownBuilds.Fortnite631));
+        settings.Servers.Instances = 0;
+        settings.Servers.BattleRoyaleInstances = 0;
+        settings.Servers.CreativeInstances = 1;
+        var plan = ServerPlan.For(settings);
+        Assert.Equal([new ServerAssignment("7.00", ServerMode.Creative)], plan);
+        var switcher = new ServerSwitcher(_time);
+        IReadOnlyList<ServerSlotView> slots = [Slot(1, ServerState.Starting)];
+        var players = new Dictionary<int, SessionPlayers?> { [1] = null };
+        ServerSwitch? Decide(params BuildDemand[] waiting) =>
+            switcher.Decide(plan, slots, slot => players[slot.Instance], waiting, demand => ServerPlan.Resolve(settings, demand));
+
+        // Booting, it takes 7.00's Battle Royale players itself.
+        Assert.Null(Decide(new BuildDemand(KnownBuilds.Fortnite700, true, 1)));
+
+        // Idle, it moves to 6.31's waiting players, then back to Creative once 7.00's wait.
+        slots = [Slot(1)];
+        players[1] = new SessionPlayers(0, 16);
+        Decide();
+        _time.Advance(ServerSwitcher.IdleFor);
+        Assert.Equal(new ServerSwitch(1, new ServerAssignment("7.00", ServerMode.Creative), new ServerAssignment("6.31", ServerMode.BattleRoyale)),
+            Decide(new BuildDemand(KnownBuilds.Fortnite631, true, 1)));
+        Assert.Equal(new ServerAssignment("6.31", ServerMode.BattleRoyale), switcher.Assignment(plan, 1));
+        Decide();
+        _time.Advance(ServerSwitcher.IdleFor);
+        Assert.Equal(new ServerSwitch(1, new ServerAssignment("6.31", ServerMode.BattleRoyale), new ServerAssignment("7.00", ServerMode.Creative)),
+            Decide(new BuildDemand(KnownBuilds.Fortnite700, true, 1)));
+        Assert.Equal(new ServerAssignment("7.00", ServerMode.Creative), switcher.Assignment(plan, 1));
+        Assert.False(switcher.HasOverrides);
+    }
+
+    [Fact]
+    public async Task TheLauncherKeepsCreativeServersOnlyForABuildWithCreative()
+    {
+        // Not started, so no plan yet: each slot's mode comes from the settings, as for a slot past the plan.
+        using var folder = new TempFolder();
+        var host = new LauncherHost(new LauncherPaths(folder.Combine("Launcher")));
+        try
+        {
+            var settings = SettingsStore.Clone(host.Settings);
+            settings.Servers.Enabled = false;
+            settings.Servers.Instances = 1;
+            settings.Servers.BattleRoyaleInstances = 1;
+            settings.Servers.CreativeInstances = 2;
+            settings.Builds.Add(Build("7.00", KnownBuilds.Fortnite700));
+            settings.Builds.Add(Build("6.31", KnownBuilds.Fortnite631));
+            settings.SelectedBuild = "7.00";
+            host.SaveSettings(settings);
+
+            Assert.True(host.BuildHasCreative);
+            Assert.Equal([ServerMode.SaveTheWorld, ServerMode.BattleRoyale, ServerMode.Creative, ServerMode.Creative], Enumerable.Range(1, 4).Select(host.ModeOf));
+            Assert.Equal(["Save the World", "Battle Royale", "Creative"], new[] { ServerMode.SaveTheWorld, ServerMode.BattleRoyale, ServerMode.Creative }.Select(LauncherHost.ModeName));
+
+            settings = SettingsStore.Clone(host.Settings);
+            settings.SelectedBuild = "6.31";
+            host.SaveSettings(settings);
+
+            Assert.False(host.BuildHasCreative);
+            Assert.Equal([ServerMode.SaveTheWorld, ServerMode.BattleRoyale, ServerMode.BattleRoyale, ServerMode.BattleRoyale], Enumerable.Range(1, 4).Select(host.ModeOf));
+        }
+        finally
+        {
+            await host.DisposeAsync();
+        }
     }
 
     [Fact]
@@ -167,13 +271,20 @@ public sealed class ServerPlanTests
         var settings = store.Load();
         Assert.Equal(0, settings.Builds.Single().ExtraServers);
         Assert.False(settings.Servers.SwitchIdleServers);
+        // Settings from before Creative (Core-Launcher #20) keep one Creative server, used only on a build with Creative.
+        Assert.Equal(1, settings.Servers.CreativeInstances);
 
         settings.Builds.Single().ExtraServers = 99;
         settings.Servers.SwitchIdleServers = true;
+        settings.Servers.CreativeInstances = 99;
         store.Save(settings);
         var loaded = store.Load();
         Assert.Equal(SettingsStore.MaxInstances, loaded.Builds.Single().ExtraServers);
         Assert.True(loaded.Servers.SwitchIdleServers);
+        Assert.Equal(SettingsStore.MaxInstances, loaded.Servers.CreativeInstances);
+        loaded.Servers.CreativeInstances = -1;
+        store.Save(loaded);
+        Assert.Equal(0, store.Load().Servers.CreativeInstances);
     }
 
     private sealed class BlockingStarter : IServerStarter

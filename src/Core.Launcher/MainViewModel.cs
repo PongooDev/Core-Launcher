@@ -83,6 +83,9 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>The servers hosting Battle Royale, on a build that has it.</summary>
     public ObservableCollection<ServerRowViewModel> BattleRoyaleServers { get; } = [];
 
+    /// <summary>The servers kept for Creative, on a build that has it (7.00 on, Core-Launcher #20).</summary>
+    public ObservableCollection<ServerRowViewModel> CreativeServers { get; } = [];
+
     public ObservableCollection<LogTabViewModel> Logs { get; } = [];
 
     public ObservableCollection<string> Activity { get; } = [];
@@ -191,6 +194,13 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>Some server hosts Battle Royale, the selected build's or another build's extra ones (Core-Launcher #18): the page shows them apart.</summary>
     [ObservableProperty]
     public partial bool ShowsBattleRoyale { get; set; }
+
+    [ObservableProperty]
+    public partial int CreativeInstances { get; set; }
+
+    /// <summary>The selected build has Creative (7.00 on, Core-Launcher #20): the Servers page offers Creative servers and shows them apart.</summary>
+    [ObservableProperty]
+    public partial bool HasCreative { get; set; }
 
     /// <summary>The player's own client (their player name) is running.</summary>
     [ObservableProperty]
@@ -320,6 +330,8 @@ public sealed partial class MainViewModel : ObservableObject
             BattleRoyaleInstances = settings.Servers.BattleRoyaleInstances;
             HasBattleRoyale = _host.BuildHasBattleRoyale;
             ShowsBattleRoyale = _host.AnyBattleRoyale;
+            CreativeInstances = settings.Servers.CreativeInstances;
+            HasCreative = _host.BuildHasCreative;
             UsingRemote = settings.Backend.UseRemote;
             HostingOffText = UsingRemote
                 ? $"You're playing on {_host.BackendDescription}. Turn on Host servers to host matches for it from this PC: your friend adds this PC's public IP under Settings → Trusted Hosting IPs in their admin panel first."
@@ -375,8 +387,9 @@ public sealed partial class MainViewModel : ObservableObject
     private void RefreshServers()
     {
         var slots = _host.Servers.Slots;
-        SyncServerRows(Servers, slots.Where(slot => !_host.HostsBattleRoyale(slot.Instance)).ToList());
-        SyncServerRows(BattleRoyaleServers, slots.Where(slot => _host.HostsBattleRoyale(slot.Instance)).ToList());
+        SyncServerRows(Servers, slots.Where(slot => _host.ModeOf(slot.Instance) == ServerMode.SaveTheWorld).ToList());
+        SyncServerRows(BattleRoyaleServers, slots.Where(slot => _host.ModeOf(slot.Instance) == ServerMode.BattleRoyale).ToList());
+        SyncServerRows(CreativeServers, slots.Where(slot => _host.ModeOf(slot.Instance) == ServerMode.Creative).ToList());
 
         foreach (var slot in slots)
         {
@@ -822,14 +835,12 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     /// <summary>
-    /// "Server 3", or "Battle Royale server 3" when the servers host both modes, with the build after it when it isn't
-    /// the selected one (another build's extra server, or one Switch idle servers moved: Core-Launcher #18).
+    /// "Server 3", or "Battle Royale server 3" (or "Creative server 3") when the servers host several modes, with the build
+    /// after it when it isn't the selected one (another build's extra server, or one Switch idle servers moved: Core-Launcher #18).
     /// </summary>
     private string ServerName(int instance)
     {
-        var name = !_host.AnyBattleRoyale ? $"Server {instance}"
-            : _host.HostsBattleRoyale(instance) ? $"Battle Royale server {instance}"
-            : $"Save the World server {instance}";
+        var name = !_host.AnyBattleRoyale ? $"Server {instance}" : $"{LauncherHost.ModeName(_host.ModeOf(instance))} server {instance}";
         return OtherBuild(instance) is { } build ? $"{name} ({build})" : name;
     }
 
@@ -863,6 +874,17 @@ public sealed partial class MainViewModel : ObservableObject
         var updated = SettingsStore.Clone(_host.Settings);
         updated.Servers.BattleRoyaleInstances = Math.Clamp(updated.Servers.BattleRoyaleInstances + int.Parse(delta), 0, SettingsStore.MaxInstances);
         if (updated.Servers.BattleRoyaleInstances != _host.Settings.Servers.BattleRoyaleInstances)
+        {
+            _host.SaveSettings(updated);
+        }
+    }
+
+    [RelayCommand]
+    private void ChangeCreativeInstances(string delta)
+    {
+        var updated = SettingsStore.Clone(_host.Settings);
+        updated.Servers.CreativeInstances = Math.Clamp(updated.Servers.CreativeInstances + int.Parse(delta), 0, SettingsStore.MaxInstances);
+        if (updated.Servers.CreativeInstances != _host.Settings.Servers.CreativeInstances)
         {
             _host.SaveSettings(updated);
         }

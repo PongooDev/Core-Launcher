@@ -157,6 +157,37 @@ public sealed partial class CommandLineTests
         Assert.Equal(2, KnownBuilds.ServerCount(servers, Cert()));
         Assert.False(servers.HostsBattleRoyale(2));
         Assert.True(servers.HostsBattleRoyale(3));
+
+        // 7.00 adds one Creative server after those (Core-Launcher #20).
+        Assert.Equal(1, servers.CreativeInstances);
+        Assert.Equal(5, KnownBuilds.ServerCount(servers, new BuildSettings { Changelist = KnownBuilds.Fortnite700 }));
+        Assert.False(servers.HostsCreative(4));
+        Assert.True(servers.HostsCreative(5));
+    }
+
+    [Fact]
+    public void OnlyBuildsWithCreativeKeepCreativeServersWhichStartAsBattleRoyaleOnes()
+    {
+        // Creative came in with 7.00 (Season 7's early access, CoreV2 #471): no earlier build has it.
+        Assert.True(KnownBuilds.HasCreative(KnownBuilds.Fortnite700));
+        Assert.True(KnownBuilds.HasBattleRoyale(KnownBuilds.Fortnite700));
+        foreach (var changelist in new[]
+                 {
+                     KnownBuilds.Cert, KnownBuilds.Fortnite12, KnownBuilds.Fortnite172, KnownBuilds.Fortnite45Later, KnownBuilds.Fortnite601,
+                     KnownBuilds.Fortnite622, KnownBuilds.Fortnite630, KnownBuilds.Fortnite631, 3968866,
+                 })
+        {
+            Assert.False(KnownBuilds.HasCreative(changelist));
+        }
+
+        // Core has no mode of its own for Creative: a Creative server is a Battle Royale one, which the backend's
+        // matchmaking gives a Creative party (Playlist_PlaygroundV2), the playlist coming with the assignment.
+        Assert.Equal("-CoreMode=BattleRoyale", KnownBuilds.BattleRoyaleServerArguments);
+        var build = KnownBuilds.Create(@"F:\Builds\7.00", new BuildVersion(4, 22, 0, KnownBuilds.Fortnite700, "++Fortnite+Release-7.00"), allowUnsupported: false);
+        var server = Split("x.exe " + LaunchArguments.Server(build, 5595, "CoreServer4", battleRoyale: true));
+        Assert.Single(server, argument => argument.StartsWith("-CoreMode=", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("-CoreMode=BattleRoyale", server);
+        Assert.DoesNotContain(server, argument => argument.StartsWith("-CoreMap=", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
