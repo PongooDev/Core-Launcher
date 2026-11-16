@@ -221,6 +221,9 @@ public static partial class KnownBuilds
     /// <summary>Fortnite 6.31, ++Fortnite+Release-6.31 CL-4573279 on UE 4.21, Season 6: adds the Team Rumble limited-time mode and Epic and Legendary Pump Shotguns, and in Save the World the R.O.S.I.E. Constructor, the Six Feet Under Shovel and Canny Valley Act 2 (https://fortnite.fandom.com/wiki/Update_v6.31).</summary>
     public const int Fortnite631 = 4573279;
 
+    /// <summary>Fortnite 7.00, ++Fortnite+Release-7.00 CL-4629139 on UE 4.21, Season 7 (released 6 December 2018): moves Battle Royale to the iceberg map with Polar Peak and Frosty Flights, adds the X-4 Stormwing plane, Wraps, ziplines and Creative early access, and in Save the World Canny Valley Act 3 (https://fortnite.fandom.com/wiki/Update_v7.00).</summary>
+    public const int Fortnite700 = 4629139;
+
     /// <summary>
     /// What a Battle Royale server gets. Core takes the map and playlist from the build's own data (on 1.7.2 the Battle
     /// Royale zone theme's Athena_Terrain and solo playlist; the match's playlist comes with its assignment) and
@@ -345,7 +348,8 @@ public static partial class KnownBuilds
         new(Fortnite621, "6.21", "Fortnite 6.21 (CL-4526925)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite622, "6.22", "Fortnite 6.22 (CL-4543176)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite630, "6.30", "Fortnite 6.30 (CL-4573096)", BuildSupport.Full, [], BattleRoyale: true),
-        new(Fortnite631, "6.31", "Fortnite 6.31 (CL-4573279)", BuildSupport.InProgress, [], BattleRoyale: true),
+        new(Fortnite631, "6.31", "Fortnite 6.31 (CL-4573279)", BuildSupport.Full, [], BattleRoyale: true),
+        new(Fortnite700, "7.00", "Fortnite 7.00 (CL-4629139)", BuildSupport.InProgress, [], BattleRoyale: true),
     ];
 
     private static KnownBuild? Find(int changelist) => Array.Find(Builds, build => build.Changelist == changelist);
