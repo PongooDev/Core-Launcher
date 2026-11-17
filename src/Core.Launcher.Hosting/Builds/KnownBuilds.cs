@@ -227,6 +227,9 @@ public static partial class KnownBuilds
     /// <summary>Fortnite 7.10, ++Fortnite+Release-7.10 CL-4667333 on UE 4.22, Season 7 (released 18 December 2018): brings the 14 Days of Fortnite event with new and returning limited-time modes, Heavy Assault Rifle and Balloon changes and ground vehicles that slide on ice, and in Save the World the Frostnite survival mode (https://fortnite.fandom.com/wiki/Update_v7.10).</summary>
     public const int Fortnite710 = 4667333;
 
+    /// <summary>Fortnite 7.20, ++Fortnite+Release-7.20 CL-4727874 on UE 4.22, Season 7 (released 15 January 2019): the season's next content update, with the changes listed in its patch notes (https://fortnite.fandom.com/wiki/Update_v7.20).</summary>
+    public const int Fortnite720 = 4727874;
+
     /// <summary>
     /// What a Battle Royale server gets. Core takes the map and playlist from the build's own data (on 1.7.2 the Battle
     /// Royale zone theme's Athena_Terrain and solo playlist; the match's playlist comes with its assignment) and
@@ -362,7 +365,8 @@ public static partial class KnownBuilds
         new(Fortnite630, "6.30", "Fortnite 6.30 (CL-4573096)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite631, "6.31", "Fortnite 6.31 (CL-4573279)", BuildSupport.Full, [], BattleRoyale: true),
         new(Fortnite700, "7.00", "Fortnite 7.00 (CL-4629139)", BuildSupport.Full, [], BattleRoyale: true, Creative: true),
-        new(Fortnite710, "7.10", "Fortnite 7.10 (CL-4667333)", BuildSupport.InProgress, [], BattleRoyale: true, Creative: true),
+        new(Fortnite710, "7.10", "Fortnite 7.10 (CL-4667333)", BuildSupport.Full, [], BattleRoyale: true, Creative: true),
+        new(Fortnite720, "7.20", "Fortnite 7.20 (CL-4727874)", BuildSupport.InProgress, [], BattleRoyale: true, Creative: true),
     ];
 
     private static KnownBuild? Find(int changelist) => Array.Find(Builds, build => build.Changelist == changelist);
