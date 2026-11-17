@@ -208,6 +208,7 @@ Settings are saved in `%LOCALAPPDATA%\Core-Launcher\settings.json`.
 | Play on | My own backend | Or a friend's backend: a name and an address (`host` or `host:port`, port 5595 by default, or `https://host` behind an https reverse proxy), with a saved list |
 | Port | `5595` | `0` lets the backend pick a free port |
 | Data folder | `Backend\data` | Your own folder uses its `data` folder, the one `npm start` uses |
+| Trust the local backend's certificate (Backend, Local https) | Off | Needed to buy V-Bucks on 7.00 and later ([Buying V-Bucks on 7.00 and later](#buying-v-bucks-on-700-and-later)); your own backend only |
 | Host servers | On | Autohost on or off |
 | Servers to keep running | `2` | Save the World's on a build with Battle Royale |
 | Battle Royale servers | `2` | On a build with Battle Royale (1.7.2 on), on top of the servers above; each match takes a server of its own; on a build with Creative (7.00 on) they also host Creative islands, as the backend gives each Creative party a free one |
@@ -219,6 +220,21 @@ Settings are saved in `%LOCALAPPDATA%\Core-Launcher\settings.json`.
 | Show what I'm doing on Discord (Builds) | On | Discord Rich Presence while Discord runs on this PC ([Discord](#discord)) |
 
 The launcher adds `-AUTH_LOGIN`, `-AUTH_PASSWORD` and `-AUTH_TYPE=epic` itself. It adds `-httpproxy=127.0.0.1:<port>` when the build uses it, `-CoreBackend=http://127.0.0.1:<port>` for processes that load `CoreRedirect.dll` (both with the friend's address instead when you play on a friend's backend), `-McpRegion=` for servers (the region they host: the first of the backend's **Server Regions**, on its admin panel's Matchmaking page, or `NA` when none is ticked; a friend's backend gives its own, and a build whose server arguments name a region other than NA keeps it), and `-nullrhi -unattended` for servers (no renderer, and engine message boxes are logged instead of waiting for a click, as dedicated servers run). The shipping exe drops any switch missing from its command line whitelist, `-nullrhi` included, so before a build's first server starts the launcher patches its exe the way Reboot Launcher does: four client-only switches in the whitelist become `-log -nosplash -nosound -nullrhi`. Core's server makes the same change in memory, so an exe the launcher can't write to still works. Battle Royale servers also get `-CoreMode=BattleRoyale`: Core takes the map and playlist from the build itself and registers the server with Core-Backend's matchmaking.
+
+### Buying V-Bucks on 7.00 and later
+
+From 7.00 the game opens its V-Bucks purchase page (also the Founder's and starter packs) at `https://127.0.0.1:<port>`,
+in a built-in browser that only accepts a certificate Windows trusts. Core-Backend serves https on its own port with a
+certificate it makes for itself on its first start ([Core-Backend's README](https://github.com/PongooDev/Core-Backend#local-https-buying-v-bucks-on-700-and-later)):
+its root can only vouch for `127.0.0.1` and `localhost` (a critical name constraint), and its private key was never kept.
+
+Settings → Backend → **Trust the local backend's certificate (needed to buy V-Bucks on 7.00 and later)** gets that root
+from your own running backend (`GET /core/api/tls/root.crt`), checks it is exactly such a root, and adds it to your
+user's trusted roots (`CurrentUser\Root`). Windows asks you to confirm first; no admin rights are needed. **Remove**
+takes every Core local root out again (Windows asks for each), and the section shows whether the current one is trusted.
+It's off until you press the button, and it is only offered for your own backend, never a friend's. If the backend's data
+folder is reset it makes a new root: the section then says the trusted one is outdated, and you trust it again. Builds
+up to 6.31 don't need it.
 
 ## Discord
 

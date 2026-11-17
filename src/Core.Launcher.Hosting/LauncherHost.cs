@@ -106,6 +106,9 @@ public sealed class LauncherHost : IAsyncDisposable
 
     public BackendHost Backend { get; }
 
+    /// <summary>The opt-in trust of the local backend's https root, for buying V-Bucks on 7.00+ (Core-Backend #377).</summary>
+    public LocalCertificateTrust CertificateTrust { get; } = new(new CurrentUserRootStore(), LocalCertificateTrust.CreateHttpClient());
+
     public ServerPool Servers { get; }
 
     /// <summary>The player's Discord activity (CoreV2 #467); the app starts it with its window.</summary>

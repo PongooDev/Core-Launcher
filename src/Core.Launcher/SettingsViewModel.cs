@@ -31,6 +31,8 @@ public sealed partial class SettingsViewModel : ObservableObject
         {
             SavedRemotes.Add(remote);
         }
+
+        _ = RefreshCertificateTrustAsync();
     }
 
     /// <summary>Friends' backends saved in the settings (the same objects, so edits and removals save with the rest).</summary>
@@ -166,6 +168,73 @@ public sealed partial class SettingsViewModel : ObservableObject
         Settings.Backend.SavedRemotes.Remove(remote);
         SavedRemotes.Remove(remote);
         SelectedSavedRemote = null;
+    }
+
+    // The local backend's https root, for buying V-Bucks on 7.00 and later (Core-Backend #377, LocalCertificateTrust).
+    // Off until the user clicks Trust; Windows asks them to confirm each add and remove. Only for their own backend.
+    private System.Security.Cryptography.X509Certificates.X509Certificate2? _localRoot;
+
+    [ObservableProperty]
+    public partial string CertificateTrustMessage { get; set; } = "Checking…";
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(TrustLocalCertificateCommand))]
+    public partial bool CanTrustCertificate { get; set; }
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(RemoveLocalCertificateCommand))]
+    public partial bool CanRemoveCertificate { get; set; }
+
+    [ObservableProperty]
+    public partial bool CertificateTrusted { get; set; }
+
+    private async Task RefreshCertificateTrustAsync()
+    {
+        try
+        {
+            var (status, root) = await _host.CertificateTrust.CheckAsync(_host.Backend.LocalEndpoint);
+            _localRoot?.Dispose();
+            _localRoot = root;
+            CertificateTrustMessage = status.Message;
+            CertificateTrusted = status.State == LocalTrustState.Trusted;
+            CanTrustCertificate = status.CanTrust && root is not null;
+            CanRemoveCertificate = status.CanRemove;
+        }
+        catch (Exception exception) when (exception is System.Security.Cryptography.CryptographicException or InvalidOperationException or IOException)
+        {
+            CertificateTrustMessage = $"Couldn't check the certificate ({exception.Message}).";
+            CanTrustCertificate = false;
+        }
+    }
+
+    [RelayCommand]
+    private Task CheckCertificateTrustAsync() => RefreshCertificateTrustAsync();
+
+    [RelayCommand(CanExecute = nameof(CanTrustCertificate))]
+    private async Task TrustLocalCertificateAsync()
+    {
+        await RefreshCertificateTrustAsync();
+        if (_localRoot is not { } root || !CanTrustCertificate)
+        {
+            return;
+        }
+
+        var added = _host.CertificateTrust.Trust(root);
+        _host.Log.Write(added ? $"Trusted the local backend's root certificate ({root.Thumbprint}) for the current user"
+            : "The local backend's root certificate wasn't trusted (Windows' prompt was declined)");
+        await RefreshCertificateTrustAsync();
+        if (!added)
+        {
+            CertificateTrustMessage = "Not trusted: Windows didn't add it (the prompt was declined).";
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanRemoveCertificate))]
+    private async Task RemoveLocalCertificateAsync()
+    {
+        var removed = _host.CertificateTrust.RemoveAll();
+        _host.Log.Write($"Removed {removed} Core local root certificate(s) from the current user's trusted roots");
+        await RefreshCertificateTrustAsync();
     }
 
     public LauncherSettings Settings { get; }

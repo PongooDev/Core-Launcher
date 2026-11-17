@@ -288,6 +288,37 @@
                                 <TextBlock Style="{StaticResource Hint}" Text="Empty uses the launcher's Backend\data, or for your own folder its data folder (the one npm start uses)." />
                             </StackPanel>
                         </Border>
+                        <Border Style="{StaticResource Section}">
+                            <StackPanel>
+                                <TextBlock Text="LOCAL HTTPS (OPTIONAL)" Style="{StaticResource Heading}" />
+                                <TextBlock Style="{StaticResource Hint}" Margin="0,4,0,0"
+                                           Text="7.00 and later open the V-Bucks purchase page at https://127.0.0.1, which only works once Windows trusts your backend's own certificate. Off until you turn it on; Windows asks you to confirm." />
+                                <TextBlock Style="{StaticResource Hint}"
+                                           Text="The certificate is limited to 127.0.0.1 and localhost, so it can't vouch for any other site. Its private key was never kept, so nothing else can be signed with it." />
+                                <WrapPanel Margin="0,12,0,0">
+                                    <Button Margin="0,0,8,8" Command="{Binding TrustLocalCertificateCommand}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="&#xE72E;" Style="{StaticResource Icon}" FontSize="12" Margin="0,0,8,0" />
+                                            <TextBlock Text="Trust the local backend's certificate (needed to buy V-Bucks on 7.00 and later)" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Margin="0,0,8,8" Content="Remove" Command="{Binding RemoveLocalCertificateCommand}"
+                                            ToolTip="Takes Core's local certificate out of your trusted roots again" />
+                                    <Button Margin="0,0,8,8" Content="Check again" Command="{Binding CheckCertificateTrustCommand}" />
+                                </WrapPanel>
+                                <TextBlock Text="{Binding CertificateTrustMessage}" TextWrapping="Wrap">
+                                    <TextBlock.Style>
+                                        <Style TargetType="{x:Type TextBlock}" BasedOn="{StaticResource Muted}">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding CertificateTrusted}" Value="True">
+                                                    <Setter Property="Foreground" Value="{StaticResource GoodBrush}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </StackPanel>
+                        </Border>
                         </StackPanel>
                     </StackPanel>
                 </ScrollViewer>

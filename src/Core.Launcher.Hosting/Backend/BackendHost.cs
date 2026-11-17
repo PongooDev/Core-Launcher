@@ -103,6 +103,9 @@ public sealed partial class BackendHost : IAsyncDisposable
     /// <summary>The admin panel of the backend in use (started here or already running), or null while it isn't reachable.</summary>
     public string? AdminPanelUrl => State == BackendState.Ready && Port is { } port && !Target.Remote ? $"http://127.0.0.1:{port}{AdminPath}" : null;
 
+    /// <summary>This PC's backend in use (started here or already running) while it is ready; null for a friend's.</summary>
+    public BackendEndpoint? LocalEndpoint => State == BackendState.Ready && Port is { } port && !Target.Remote ? BackendEndpoint.Local(port) : null;
+
     /// <summary>The registration page of the backend in use (local or friend's).</summary>
     public string? RegisterUrl => PageUrl(RegisterPath);
 
