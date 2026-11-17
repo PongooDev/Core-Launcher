@@ -26,7 +26,7 @@ The owner's rule: agents review every open PR, make it right and merge it themse
    the PR branch and `git push`. If not, merge first (step 8) and fix on main right after, in this session. Commit
    trailers as AGENTS.md section 7 (Freebuff/Codebuff: `Agent: Freebuff`); the pre-commit hook runs, never
    `--no-verify`.
-7. `dotnet build`, then `launcher_tests` (core MCP) or
+7. `dotnet build`, then `launcher_tests` (core MCP; poll its `job_id` until done) or
    `tests\Core.Launcher.Tests\bin\Debug\net10.0-windows\win-x64\Core.Launcher.Tests.exe`.
 8. Merge with the repo's usual merge commit: `gh pr merge <n> -R PongooDev/Core-Launcher --merge`.
 9. Comment on the PR: what you changed and why, and what was verified.

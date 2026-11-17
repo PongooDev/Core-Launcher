@@ -17,7 +17,8 @@ Rules: AGENTS.md sections 1 and 2. Depth: `docs/agents/knownbuilds.md`, `docs/ag
 4. Make the change. Build-specific behaviour is gated by CL through `KnownBuilds`. Nothing new written into game
    builds; downloads stay size and SHA-256 checked; unproven features off by default.
 5. Add or update tests in `tests/Core.Launcher.Tests/`.
-6. Test: `launcher_tests` (core MCP, if available), else
+6. Test: `launcher_tests` (core MCP, if available; if it returns a `job_id`, call it again with just that `job_id`
+   until it reports the result), else
    ```
    dotnet build
    tests\Core.Launcher.Tests\bin\Debug\net10.0-windows\win-x64\Core.Launcher.Tests.exe

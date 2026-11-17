@@ -70,7 +70,9 @@ is the CoreV2 checkout's path with `\` and `:` turned into `-`. Read it; **never
 
 ## 4. Build, test and release commands
 
-Prefer the core MCP's `launcher_tests` (if available). Fallback, from the worktree:
+Prefer the core MCP's `launcher_tests` (if available). It runs in a worker: a call waits up to about 100 s, then
+returns a `job_id`; call `launcher_tests` again with just that `job_id` until it reports the result. Fallback, from
+the worktree:
 
 ```
 dotnet build
@@ -158,7 +160,10 @@ writing into game builds), with a comment. Steps: the `review-and-merge-pr` skil
 
 ## 9. Tools: MCP servers
 
-- **core MCP** (if available): `project_status`, `launcher_tests`. Prefer them over hand-typed commands.
+The servers are configured in `%USERPROFILE%\.agents\mcp.json`: `core`, `ida-13337` to `ida-13341`, and `fmodel`.
+
+- **core MCP** (if available): `project_status`, `launcher_tests` (returns a `job_id` to poll, section 4). Prefer
+  them over hand-typed commands.
 - **IDA MCPs** (`ida-13337` to `ida-13341`) and the **fmodel MCP**: read-only. Run `project_status` first to learn
   which port holds which build. **Never** patch, rename, define or `idb_save`.
 
