@@ -11,8 +11,8 @@ Rules: AGENTS.md sections 1 and 2. Depth: `docs/agents/knownbuilds.md`, `docs/ag
 2. Read the issue and comments: `gh issue view <n> -R PongooDev/Core-Launcher --comments`.
 3. Worktree:
    ```
-   git -C C:\Users\tkenn\Documents\GitHub\Core-Launcher fetch origin
-   git -C C:\Users\tkenn\Documents\GitHub\Core-Launcher worktree add -b fix-<n> H:\CoreWork\la-<n> origin/main
+   git -C $env:USERPROFILE\Documents\GitHub\Core-Launcher fetch origin
+   git -C $env:USERPROFILE\Documents\GitHub\Core-Launcher worktree add -b fix-<n> H:\CoreWork\la-<n> origin/main
    ```
 4. Make the change. Build-specific behaviour is gated by CL through `KnownBuilds`. Nothing new written into game
    builds; downloads stay size and SHA-256 checked; unproven features off by default.
@@ -26,6 +26,7 @@ Rules: AGENTS.md sections 1 and 2. Depth: `docs/agents/knownbuilds.md`, `docs/ag
 7. Self-review the diff: only your files staged; no warnings suppressed; no keys or tokens; README updated for
    user-facing changes; the message says what was verified by tests and what a real install still has to show.
 8. Commit. Freebuff/Codebuff commits end with `Agent: Freebuff` (no Claude Co-Authored-By line); Claude uses its own.
+   The pre-commit hook (`tools/githooks/pre-commit`) runs: never `--no-verify`; fix what it flags.
 9. `git fetch origin`, `git rebase origin/main`, rebuild and retest if needed, `git push origin HEAD:main`.
 10. Release (code changes only):
     ```

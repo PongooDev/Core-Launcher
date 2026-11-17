@@ -6,18 +6,21 @@ the servers running. `CoreServerHost.exe` is a console-only server host. Players
 launcher's auto-update, so **a change isn't delivered until a release is tagged**. This file is for any coding agent
 working here (Freebuff, Codebuff, Claude Code or another). Read all of it before the first change.
 
+Paths: `%USERPROFILE%` is the owner's Windows user folder. In PowerShell write it as `$env:USERPROFILE`, as the
+command examples do.
+
 ## 0. Start of every session
 
 1. Read `H:\CoreWork\HANDOFF.md` (local, shared by every agent, not committed). Don't redo or undo work listed in it.
 2. Run the core MCP's `project_status` (if available) for the build in development and the supported range.
 3. Work in your own git worktree under `H:\CoreWork` (section 5), never in the main checkout
-   `C:\Users\tkenn\Documents\GitHub\Core-Launcher`.
+   `%USERPROFILE%\Documents\GitHub\Core-Launcher`.
 4. If you can't finish, update `H:\CoreWork\HANDOFF.md`: what is in progress, the branch or worktree, what was
    verified, what's next.
 
 Per-build facts are in the read-only knowledge base
-`C:\Users\tkenn\.claude\projects\C--Users-tkenn-Documents-GitHub-CoreV2\memory\MEMORY.md` and the files it links.
-Read it; **never edit it**.
+`%USERPROFILE%\.claude\projects\<the CoreV2 project folder>\memory\MEMORY.md` and the files it links. The folder name
+is the CoreV2 checkout's path with `\` and `:` turned into `-`. Read it; **never edit it**.
 
 ## 1. Project rules
 
@@ -37,12 +40,17 @@ Read it; **never edit it**.
 
 - **Never** run `CoreLauncher.exe` or `CoreServerHost.exe` on the owner's PC: they start a backend on port 5595 and
   game processes. Verify with the tests instead.
-- **Never** launch a Fortnite client or run a full match. **Never** use port 5595.
+- **Never** launch a Fortnite client or run a full match. **Never** use port 5595 for tests. (Restarting the owner's
+  5595 backend after a backend change is Core-Backend's procedure, not this repo's.)
 - **Never** modify, copy, hard-link or overlay anything in `F:\Builds` or `D:\Fortnite Builds`. Tests use temp folders.
 - **Never** kill a process you didn't start; stop what you started before you finish.
 - **Never** print, copy or commit pak AES keys, tokens or signing material.
 - Run any Python that reads downloaded or untrusted files with `python -I`.
 - Work in worktrees under `H:\CoreWork`. Rebase onto `origin/main` before pushing. Stage only your own paths.
+- **Pre-commit hooks:** `tools/githooks/pre-commit` runs on every commit (enabled per clone with
+  `git config core.hooksPath tools/githooks`; this checkout has it on). It blocks pak AES keys, private keys, files
+  over 5 MB, build output and dependency folders (`bin`, `obj`, `x64`, `.vs`, `node_modules`), binaries, game files
+  and agent-local files. **Never** bypass it (`--no-verify`); fix what it flags.
 - Close an issue only with a comment naming the fixing commit (and the release that ships it).
 
 ## 3. Repo map
@@ -93,7 +101,7 @@ updater skips.
 1. Read `HANDOFF.md`; run `project_status`.
 2. Read the issue and its comments (`gh issue view <n> -R PongooDev/Core-Launcher --comments`), and the logs
    (`Launcher.log`, `Backend.log`, `Core\*_log_<pid>.txt`).
-3. Worktree: `git -C C:\Users\tkenn\Documents\GitHub\Core-Launcher worktree add -b fix-<n> H:\CoreWork\la-<n> origin/main`.
+3. Worktree: `git -C $env:USERPROFILE\Documents\GitHub\Core-Launcher worktree add -b fix-<n> H:\CoreWork\la-<n> origin/main`.
 4. Change the code, keeping old builds' behaviour unless the change is for them (gate by CL via `KnownBuilds`).
 5. Add or update tests for the behaviour.
 6. `dotnet build`, run the test exe (or `launcher_tests`).
@@ -120,6 +128,15 @@ updater skips.
   `Co-Authored-By` line. Each Freebuff commit is reviewed later, so say what was verified and how.
 - Close an issue only with a comment naming the commit and the release. Reopen when the reporter says it still happens.
 - Unfinished work goes in `H:\CoreWork\HANDOFF.md`, not in a pushed WIP branch.
+
+**Pull requests: review, fix, merge.** Agents review every open PR, make it right and merge it themselves (the
+owner's rule). Check it out in a worktree (`gh pr checkout`), review it against sections 1 and 6 (nothing new written
+into game builds, checked downloads, build-specific behaviour gated by `KnownBuilds`, tests, no warnings), rework what
+is wrong (push to the PR branch when maintainers can edit it; otherwise merge first and fix on main right after, in
+the same session), build and run the tests, merge with `gh pr merge <n> --merge` (the repo's usual merge commit),
+comment on the PR with what was changed and why, then **tag a release** (section 4). Reject a PR only when it adds
+something the project has ruled out (CoreClient changes without the owner's OK, risky features on by default,
+writing into game builds), with a comment. Steps: the `review-and-merge-pr` skill.
 
 ## 8. Mistakes made here before (don't repeat them)
 
@@ -157,7 +174,7 @@ at a time. Check `KnownBuilds.cs`, the README status table, `git tag`, and `proj
 | [docs/agents/knownbuilds.md](docs/agents/knownbuilds.md) | adding a build, promoting the in-development build, build-specific launch settings |
 | [docs/agents/releasing.md](docs/agents/releasing.md) | tagging a release, checking the run, what counts as a change |
 
-Skill in `.claude/skills/`: `launcher-change-and-release`.
+Skills in `.claude/skills/`: `launcher-change-and-release`, `review-and-merge-pr`.
 
 Related repos: [CoreV2](https://github.com/PongooDev/CoreV2) (the DLLs; its `docs/agents/new-build-bringup.md` is the
 full new-build routine), [Core-Backend](https://github.com/PongooDev/Core-Backend),
