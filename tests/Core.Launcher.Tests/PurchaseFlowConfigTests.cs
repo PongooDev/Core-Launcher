@@ -122,4 +122,28 @@ public sealed class PurchaseFlowConfigTests
         Assert.Equal("[OnlineSubsystemMcp.OnlineIdentityMcp]\r\nDomain=keep\r\nProtocol=http\r\nRedirectUrl=127.0.0.1:5595\r\n\r\n[B]\r\nC=1\r\n",
             PurchaseFlowConfig.Merge(existing, PurchaseFlowConfig.IdentitySection, entries));
     }
+
+    [Theory]
+    [InlineData(4573279, true)]
+    [InlineData(4629139, false)]
+    [InlineData(4667333, false)]
+    public void Protocol_is_written_only_before_7_00(int changelist, bool keeps)
+    {
+        var entries = PurchaseFlowConfig.IdentityEntries(BackendEndpoint.Local(5595), changelist);
+        var removals = PurchaseFlowConfig.IdentityRemovals(changelist);
+        Assert.Equal(keeps, entries.Any(entry => entry.Key == "Protocol"));
+        Assert.Contains(("RedirectUrl", "127.0.0.1:5595"), entries);
+
+        using var folder = new TempFolder();
+        var ini = folder.Combine("NoRedist", "DefaultEngine.ini");
+        Directory.CreateDirectory(Path.GetDirectoryName(ini)!);
+        File.WriteAllText(ini, "[OnlineSubsystemMcp.OnlineIdentityMcp]\r\nProtocol=http\r\nRedirectUrl=127.0.0.1:5595\r\n\r\n[B]\r\nProtocol=keep\r\n");
+
+        Assert.Equal(!keeps, PurchaseFlowConfig.Write(ini, PurchaseFlowConfig.IdentitySection, entries, removals));
+        var text = File.ReadAllText(ini);
+        Assert.Equal(keeps, text.Contains("Protocol=http"));
+        Assert.Contains("Protocol=keep", text);
+        Assert.Contains("RedirectUrl=127.0.0.1:5595", text);
+        Assert.Equal(keeps, PurchaseFlowConfig.Merge("", PurchaseFlowConfig.IdentitySection, entries, removals).Contains("Protocol="));
+    }
 }

@@ -657,12 +657,13 @@ public sealed class LauncherHost : IAsyncDisposable
 
         // The page's single sign-on (Core-Backend #248): Protocol://RedirectUrl/exchange is the backend's.
         var engineIni = PurchaseFlowConfig.EngineIniPath(build.Path);
-        var identity = PurchaseFlowConfig.IdentityEntries(backend);
+        var identity = PurchaseFlowConfig.IdentityEntries(backend, build.Changelist);
+        var removals = PurchaseFlowConfig.IdentityRemovals(build.Changelist);
         try
         {
-            if (PurchaseFlowConfig.Write(engineIni, PurchaseFlowConfig.IdentitySection, identity))
+            if (PurchaseFlowConfig.Write(engineIni, PurchaseFlowConfig.IdentitySection, identity, removals))
             {
-                Log.Write($"Wrote {engineIni}: the purchase page signs in at {identity[0].Value}://{identity[1].Value}/exchange");
+                Log.Write($"Wrote {engineIni}: the purchase page signs in at {backend.Scheme}://{identity[^1].Value}/exchange");
             }
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
@@ -683,7 +684,7 @@ public sealed class LauncherHost : IAsyncDisposable
             var files = new List<(string Name, byte[] Data)>
             {
                 (ConfigPak.GameIni, IniBytes(path, PurchaseFlowConfig.Merge("", url))),
-                (ConfigPak.EngineIni, IniBytes(engineIni, PurchaseFlowConfig.Merge("", PurchaseFlowConfig.IdentitySection, identity))),
+                (ConfigPak.EngineIni, IniBytes(engineIni, PurchaseFlowConfig.Merge("", PurchaseFlowConfig.IdentitySection, identity, removals))),
             };
             if (ConfigPak.Write(paks, files, ServerAssets.SignsPaks(paks)))
             {

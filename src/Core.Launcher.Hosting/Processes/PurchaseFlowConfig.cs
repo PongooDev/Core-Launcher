@@ -1,5 +1,6 @@
 using System.Text;
 using Core.Launcher.Hosting.Backend;
+using Core.Launcher.Hosting.Builds;
 
 namespace Core.Launcher.Hosting.Processes;
 
@@ -47,8 +48,22 @@ public static class PurchaseFlowConfig
     /// [OnlineSubsystemMcp.OnlineIdentityMcp]'s Protocol and RedirectUrl for the backend: the single sign-on page is
     /// Protocol://RedirectUrl/exchange (Core-Backend's /exchange), e.g. http and 127.0.0.1:5595.
     /// </summary>
-    public static IReadOnlyList<(string Key, string Value)> IdentityEntries(BackendEndpoint backend) =>
-        [("Protocol", backend.Scheme), ("RedirectUrl", backend.Url[(backend.Scheme.Length + "://".Length)..])];
+    public static IReadOnlyList<(string Key, string Value)> IdentityEntries(BackendEndpoint backend, int changelist = 0)
+    {
+        var redirect = ("RedirectUrl", backend.Url[(backend.Scheme.Length + "://".Length)..]);
+        return KeepsProtocol(changelist) ? [("Protocol", backend.Scheme), redirect] : [redirect];
+    }
+
+    /// <summary>
+    /// Whether the build takes [OnlineSubsystemMcp.OnlineIdentityMcp] Protocol from the config. 7.00 (CL-4629139) sets any
+    /// other Protocol than https back to "https" at load, and from 7.10 (CL-4667333) FBaseServiceMcp::GetBaseUrl calls
+    /// FPlatformMisc::RequestExit when the protocol isn't https, so the client quit at login. From 7.00 the launcher
+    /// writes no Protocol line (and removes one an earlier launcher wrote, <see cref="IdentityRemovals"/>).
+    /// </summary>
+    public static bool KeepsProtocol(int changelist) => changelist < KnownBuilds.Fortnite700;
+
+    /// <summary>The keys of [OnlineSubsystemMcp.OnlineIdentityMcp] the launcher no longer writes for the build, to be removed from an existing file.</summary>
+    public static IReadOnlyList<string> IdentityRemovals(int changelist) => KeepsProtocol(changelist) ? [] : ["Protocol"];
 
     /// <summary>
     /// As Core-Backend's purchaseFlowUrl (src/services/fortnite/purchase.js): http:///host:port/purchase. The triple slash
@@ -86,7 +101,7 @@ public static class PurchaseFlowConfig
     public static bool Write(string path, string url) => Write(path, Section, Entries(url));
 
     /// <summary>Sets <paramref name="entries"/> in [<paramref name="section"/>] of <paramref name="path"/>, as <see cref="Write(string, string)"/> does Prod.</summary>
-    public static bool Write(string path, string section, IReadOnlyList<(string Key, string Value)> entries)
+    public static bool Write(string path, string section, IReadOnlyList<(string Key, string Value)> entries, IReadOnlyList<string>? remove = null)
     {
         string existing = "";
         Encoding encoding = new UTF8Encoding(false);
@@ -97,7 +112,7 @@ public static class PurchaseFlowConfig
             encoding = reader.CurrentEncoding;
         }
 
-        var merged = Merge(existing, section, entries);
+        var merged = Merge(existing, section, entries, remove);
         if (merged == existing && File.Exists(path))
         {
             return false;
@@ -115,14 +130,45 @@ public static class PurchaseFlowConfig
     public static string Merge(string existing, string url) => Merge(existing, Section, Entries(url));
 
     /// <summary>Sets each key in [<paramref name="section"/>], as <see cref="Merge(string, string)"/> does Prod.</summary>
-    public static string Merge(string existing, string section, IReadOnlyList<(string Key, string Value)> entries)
+    public static string Merge(string existing, string section, IReadOnlyList<(string Key, string Value)> entries, IReadOnlyList<string>? remove = null)
     {
+        foreach (var key in remove ?? [])
+        {
+            existing = RemoveKey(existing, section, key);
+        }
+
         foreach (var (key, value) in entries)
         {
             existing = MergeOne(existing, section, key, value);
         }
 
         return existing;
+    }
+
+    /// <summary>Drops every <paramref name="key"/> line under [<paramref name="section"/>], keeping the rest as it is.</summary>
+    private static string RemoveKey(string existing, string section, string key)
+    {
+        var newline = existing.Contains("\r\n") || !existing.Contains('\n') ? "\r\n" : "\n";
+        var lines = existing.Replace("\r\n", "\n").Split('\n').ToList();
+        var start = lines.FindIndex(line => line.Trim().Equals($"[{section}]", StringComparison.OrdinalIgnoreCase));
+        if (start < 0)
+        {
+            return existing;
+        }
+
+        var end = lines.FindIndex(start + 1, line => line.TrimStart().StartsWith('['));
+        end = end < 0 ? lines.Count : end;
+        var found = false;
+        for (var index = end - 1; index > start; index--)
+        {
+            if (IsKey(lines[index], key))
+            {
+                lines.RemoveAt(index);
+                found = true;
+            }
+        }
+
+        return found ? string.Join(newline, lines) : existing;
     }
 
     private static string MergeOne(string existing, string section, string key, string value)
