@@ -246,6 +246,28 @@ public sealed class LocalCertificateTrust(IRootCertificateStore store, HttpClien
             : new(LocalTrustState.NotTrusted, "Not trusted.", 0);
     }
 
+    /// <summary>
+    /// What a player starting a build whose purchase page opens at https://127.0.0.1 (7.00 and later,
+    /// <see cref="Processes.PurchaseFlowConfig.SignInScheme"/>) needs to know when that page can't open there, null when it
+    /// can (Windows trusts the backend's current root). The game itself only says "PageLoadFail": its purchase flow passes
+    /// the browser's load error on without the error's code or text (7.20 0x8E82E0), and nothing else logs it.
+    /// </summary>
+    public static string? PurchasePageWarning(LocalTrustStatus status, int port)
+    {
+        var page = $"Buying V-Bucks in this build opens https://127.0.0.1:{port}";
+        return status.State switch
+        {
+            LocalTrustState.Trusted => null,
+            LocalTrustState.NotTrusted => $"{page}, and Windows doesn't trust your backend's certificate, so the Store would say \"PageLoadFail\". "
+                + "In Settings → Backend → Local https, press the trust button and answer Yes.",
+            LocalTrustState.Outdated => $"{page}, and Windows trusts an earlier certificate of your backend, not the one it uses now, so the Store would say "
+                + "\"PageLoadFail\". In Settings → Backend → Local https, press the trust button again and answer Yes.",
+            LocalTrustState.NoHttps => $"{page}, and your backend doesn't answer https (an older Core-Backend), so the Store would say \"PageLoadFail\". "
+                + "Restart the backend once Core-Backend is updated.",
+            _ => $"{page}; whether Windows trusts your backend's certificate couldn't be checked. {status.Message}",
+        };
+    }
+
     /// <summary>Adds the root to the user's trusted roots (Windows asks first). False when the user said no there.</summary>
     public bool Trust(X509Certificate2 root)
     {

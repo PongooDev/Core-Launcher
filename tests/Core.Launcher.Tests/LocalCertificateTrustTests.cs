@@ -264,6 +264,43 @@ public sealed class LocalCertificateTrustTests
         Assert.True(status.CanRemove);
     }
 
+    [Fact]
+    public async Task APlayersStartSaysWhyThePurchasePageWouldNotOpen()
+    {
+        var earlier = CoreRoot();
+        var current = CoreRoot();
+        Func<HttpResponseMessage> answer = () => Text(HttpStatusCode.OK, Pem(current));
+        var routes = new Routes { ["http://127.0.0.1:5711/core/api/tls/root.crt"] = () => answer() };
+        var store = new MemoryStore();
+        var trust = new LocalCertificateTrust(store, new HttpClient(routes));
+
+        var (status, fetched) = await trust.CheckAsync(Local, TestContext.Current.CancellationToken);
+        var warning = LocalCertificateTrust.PurchasePageWarning(status, Local.Port);
+        Assert.StartsWith("Buying V-Bucks in this build opens https://127.0.0.1:5711, and Windows doesn't trust your backend's certificate", warning);
+        Assert.Contains("PageLoadFail", warning);
+        Assert.Contains("Settings → Backend → Local https", warning);
+
+        Assert.True(trust.Trust(fetched!));
+        (status, _) = await trust.CheckAsync(Local, TestContext.Current.CancellationToken);
+        Assert.Null(LocalCertificateTrust.PurchasePageWarning(status, Local.Port));
+
+        // The backend's data folder was reset: a new root, and the trusted one is the earlier.
+        store.Held.Clear();
+        store.Held.Add(earlier);
+        (status, _) = await trust.CheckAsync(Local, TestContext.Current.CancellationToken);
+        Assert.Contains("an earlier certificate of your backend", LocalCertificateTrust.PurchasePageWarning(status, Local.Port));
+
+        // A Core-Backend from before local https.
+        answer = () => Text(HttpStatusCode.NotFound, "{}");
+        (status, _) = await trust.CheckAsync(Local, TestContext.Current.CancellationToken);
+        Assert.Contains("doesn't answer https", LocalCertificateTrust.PurchasePageWarning(status, Local.Port));
+
+        // The backend didn't answer.
+        answer = () => throw new HttpRequestException("refused");
+        (status, _) = await trust.CheckAsync(Local, TestContext.Current.CancellationToken);
+        Assert.Contains("couldn't be checked", LocalCertificateTrust.PurchasePageWarning(status, Local.Port));
+    }
+
     private static HttpResponseMessage Text(HttpStatusCode status, string body) =>
         new(status) { Content = new StringContent(body, Encoding.ASCII, "application/x-pem-file") };
 

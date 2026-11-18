@@ -109,6 +109,13 @@ public sealed class LauncherHost : IAsyncDisposable
     /// <summary>The opt-in trust of the local backend's https root, for buying V-Bucks on 7.00+ (Core-Backend #377).</summary>
     public LocalCertificateTrust CertificateTrust { get; } = new(new CurrentUserRootStore(), LocalCertificateTrust.CreateHttpClient());
 
+    /// <summary>
+    /// Whether Windows trusts this PC's backend's https root, from the last <see cref="CheckLocalHttpsAsync"/>, while the
+    /// selected build opens its purchase page over https (7.00 and later); null otherwise (an older build, a friend's
+    /// backend, the backend not ready) and before the first check.
+    /// </summary>
+    public LocalTrustStatus? LocalHttps { get; private set; }
+
     public ServerPool Servers { get; }
 
     /// <summary>The player's Discord activity (CoreV2 #467); the app starts it with its window.</summary>
@@ -620,6 +627,69 @@ public sealed class LauncherHost : IAsyncDisposable
 
             OnChanged();
         }, TaskScheduler.Default);
+        _ = NoteLocalHttpsAsync(build, output);
+    }
+
+    /// <summary>
+    /// Checks whether Windows trusts this PC's backend's https root when <paramref name="build"/> (the selected one when
+    /// null) opens its purchase page over https (<see cref="PurchaseFlowConfig.SignInScheme"/>, 7.00 and later, Core-Backend
+    /// #377). The game's browser refuses the page otherwise and the game only says "PageLoadFail", so the home page's
+    /// status line says it before a purchase (MainViewModel) and a client's start logs it. Sets <see cref="LocalHttps"/>.
+    /// </summary>
+    public async Task<LocalTrustStatus?> CheckLocalHttpsAsync(BuildSettings? build = null, CancellationToken cancellation = default)
+    {
+        build ??= Settings.FindSelectedBuild();
+        LocalTrustStatus? status = null;
+        if (build is not null && Backend.LocalEndpoint is { } local && PurchaseFlowConfig.SignInScheme(local, build.Changelist) == "https")
+        {
+            try
+            {
+                var (checkedStatus, root) = await CertificateTrust.CheckAsync(local, cancellation);
+                root?.Dispose();
+                status = checkedStatus;
+            }
+            catch (Exception exception) when (exception is System.Security.Cryptography.CryptographicException or InvalidOperationException or IOException)
+            {
+                status = new LocalTrustStatus(LocalTrustState.NoBackend, $"Couldn't check the certificate ({exception.Message}).");
+            }
+        }
+
+        if (LocalHttps != status)
+        {
+            LocalHttps = status;
+            OnChanged();
+        }
+
+        return status;
+    }
+
+    /// <summary>
+    /// A client's start notes in its log and Launcher.log whether its purchase page can open at the local backend's https
+    /// (<see cref="CheckLocalHttpsAsync"/>): a report with either log then says which step the Store's "PageLoadFail" is.
+    /// </summary>
+    private async Task NoteLocalHttpsAsync(BuildSettings build, LogChannel output)
+    {
+        try
+        {
+            if (await CheckLocalHttpsAsync(build, _shutdown.Token) is not { } status || Backend.LocalEndpoint is not { } local)
+            {
+                return;
+            }
+
+            if (LocalCertificateTrust.PurchasePageWarning(status, local.Port) is { } warning)
+            {
+                output.Write($"(launcher) {warning}");
+                Log.Write($"Local https for {build.Name}: {status.State}. {status.Message}");
+            }
+            else
+            {
+                Log.Write($"Local https for {build.Name}: Windows trusts the backend's root, so the purchase page can open at https://127.0.0.1:{local.Port}");
+            }
+        }
+        catch (Exception exception) when (exception is OperationCanceledException or ObjectDisposedException)
+        {
+            // The launcher is closing.
+        }
     }
 
     /// <summary>
@@ -666,7 +736,7 @@ public sealed class LauncherHost : IAsyncDisposable
         {
             if (PurchaseFlowConfig.Write(engineIni, PurchaseFlowConfig.IdentitySection, identity, removals))
             {
-                Log.Write($"Wrote {engineIni}: the purchase page signs in at {backend.Scheme}://{identity[^1].Value}/exchange");
+                Log.Write($"Wrote {engineIni}: the purchase page signs in at {PurchaseFlowConfig.SignInScheme(backend, build.Changelist)}://{identity[^1].Value}/exchange");
             }
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)

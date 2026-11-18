@@ -66,6 +66,14 @@ public static class PurchaseFlowConfig
     public static IReadOnlyList<string> IdentityRemovals(int changelist) => KeepsProtocol(changelist) ? [] : ["Protocol"];
 
     /// <summary>
+    /// The scheme the purchase page's sign-in opens with (Protocol://RedirectUrl/exchange): the backend's own before 7.00,
+    /// and https from 7.00, which sets any other Protocol back to https (<see cref="KeepsProtocol"/>). On this PC's plain-http
+    /// backend that is its local https, which the game's browser only opens once Windows trusts the backend's own root
+    /// (Core-Backend #377, <see cref="LocalCertificateTrust"/>).
+    /// </summary>
+    public static string SignInScheme(BackendEndpoint backend, int changelist) => KeepsProtocol(changelist) ? backend.Scheme : "https";
+
+    /// <summary>
     /// As Core-Backend's purchaseFlowUrl (src/services/fortnite/purchase.js): http:///host:port/purchase. The triple slash
     /// is deliberate: the flow takes the page's cookie domain by stripping "http://" or "https://" and cutting at the next
     /// "/", and an empty domain makes the cookie the page's own host; CEF reads the URL as http://host:port/purchase.

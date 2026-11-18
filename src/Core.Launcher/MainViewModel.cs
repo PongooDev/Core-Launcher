@@ -39,6 +39,7 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly DispatcherTimer _clock;
     private readonly Dictionary<int, ServerState> _lastSlots = [];
     private BackendState? _lastBackend;
+    private string? _localHttpsChecked;
     private string? _announcedUpdate;
     private Action? _statusAction;
     private bool _refreshQueued;
@@ -348,6 +349,7 @@ public sealed partial class MainViewModel : ObservableObject
             RefreshBackend();
             RefreshDlls(settings);
             RefreshUpdate();
+            RefreshLocalHttps(settings);
             RefreshStatus(settings);
         }
         finally
@@ -502,6 +504,20 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Checks the local backend's https trust again (<see cref="LauncherHost.CheckLocalHttpsAsync"/>) once the selected
+    /// build or this PC's ready backend changes: what the status line says about buying V-Bucks on 7.00 and later.
+    /// </summary>
+    private void RefreshLocalHttps(LauncherSettings settings)
+    {
+        var key = $"{settings.FindSelectedBuild()?.Changelist}|{_host.Backend.LocalEndpoint?.Port}";
+        if (key != _localHttpsChecked)
+        {
+            _localHttpsChecked = key;
+            _ = _host.CheckLocalHttpsAsync();
+        }
+    }
+
     /// <summary>One plain sentence about whether the player can play, with the one thing that fixes it when not.</summary>
     private void RefreshStatus(LauncherSettings settings)
     {
@@ -591,6 +607,18 @@ public sealed partial class MainViewModel : ObservableObject
         {
             (text, brush) = ("Ready to play · servers are starting", "GoodBrush");
         }
+        else if (_host.LocalHttps?.State is LocalTrustState.NotTrusted or LocalTrustState.Outdated)
+        {
+            // From 7.00 the Store's purchase page opens at https://127.0.0.1 and only loads once Windows trusts the
+            // backend's own root; the game only says "PageLoadFail" (Core-Backend #377).
+            (text, brush) = ("Ready to play · to buy V-Bucks in this build, trust your backend's certificate", "GoodBrush");
+            (actionText, action) = ("Trust it", () => OpenSettingsTab("2"));
+        }
+        else if (_host.LocalHttps?.State == LocalTrustState.NoHttps)
+        {
+            (text, brush) = ("Ready to play · buying V-Bucks in this build needs a Core-Backend with https", "GoodBrush");
+            (actionText, action) = ("Restart the backend", () => _ = _host.RestartBackendAsync());
+        }
         else
         {
             (text, brush) = ("Ready to play", "GoodBrush");
@@ -654,9 +682,14 @@ public sealed partial class MainViewModel : ObservableObject
         timer.Start();
     }
 
-    partial void OnCurrentPageChanged(LauncherPage value)
+    partial void OnCurrentPageChanged(LauncherPage oldValue, LauncherPage newValue)
     {
-        Settings = value == LauncherPage.Settings ? new SettingsViewModel(_host, OnSettingsFinished) : null;
+        Settings = newValue == LauncherPage.Settings ? new SettingsViewModel(_host, OnSettingsFinished) : null;
+        if (oldValue == LauncherPage.Settings)
+        {
+            // Settings → Backend → Local https may have trusted or removed the backend's root.
+            _ = _host.CheckLocalHttpsAsync();
+        }
     }
 
     private void OnSettingsFinished(bool saved)

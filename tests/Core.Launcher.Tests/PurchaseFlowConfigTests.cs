@@ -146,4 +146,16 @@ public sealed class PurchaseFlowConfigTests
         Assert.Contains("RedirectUrl=127.0.0.1:5595", text);
         Assert.Equal(keeps, PurchaseFlowConfig.Merge("", PurchaseFlowConfig.IdentitySection, entries, removals).Contains("Protocol="));
     }
+
+    [Theory]
+    [InlineData(4573279, "http")]
+    [InlineData(4629139, "https")]
+    [InlineData(4667333, "https")]
+    [InlineData(4727874, "https")]
+    [InlineData(0, "http")]
+    public void The_sign_in_opens_over_https_from_7_00_whatever_the_backends_scheme(int changelist, string scheme)
+    {
+        Assert.Equal(scheme, PurchaseFlowConfig.SignInScheme(BackendEndpoint.Local(5595), changelist));
+        Assert.Equal("https", PurchaseFlowConfig.SignInScheme(new BackendEndpoint("core.example.com", 443, Secure: true), changelist));
+    }
 }
