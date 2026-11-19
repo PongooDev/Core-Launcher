@@ -137,6 +137,7 @@ public sealed class BuildDetectorTests
     [Theory]
     [InlineData("14.60-CL-14786821", "14.60", 14786821)]
     [InlineData("Fortnite 7.40 CL-5046157", "7.40", 5046157)]
+    [InlineData("Fortnite 8.00 CL-5203069", "8.00", 5203069)]
     [InlineData("CL-3532353", "", 3532353)]
     public void ReadsFolderNames(string name, string shortName, int changelist)
     {
@@ -151,7 +152,7 @@ public sealed class BuildDetectorTests
         Assert.False(KnownBuilds.CanPlay(unsupported));
         Assert.False(KnownBuilds.CanHost(unsupported));
         Assert.Equal(
-            "Core doesn't support Fortnite 14.60 CL-14786821 yet. It supports Fortnite 1.1 to 7.30, and support for Fortnite 7.40 is in progress. Turn on Allow unsupported builds in Settings → Builds to try it.",
+            "Core doesn't support Fortnite 14.60 CL-14786821 yet. It supports Fortnite 1.1 to 7.40, and support for Fortnite 8.00 is in progress. Turn on Allow unsupported builds in Settings → Builds to try it.",
             KnownBuilds.NotSupported(unsupported, allowUnsupported: false));
 
         var cert = KnownBuilds.Create(@"C:\Cert", new BuildVersion(4, 16, 0, KnownBuilds.Cert, "++Fortnite+Release-Cert"), allowUnsupported: false);
