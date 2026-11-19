@@ -141,13 +141,15 @@ public static class BackendAuthClient
     /// <summary>
     /// As <see cref="AuthenticateAsync"/>, keeping the player's access token and its lifetime when it succeeds: the
     /// launcher's own player-scoped requests (the Islands page's /core/api/creative/islands, Core-Launcher #21) send it.
+    /// The login carries this PC's <see cref="HardwareId"/> (or <paramref name="hardwareId"/>, for tests).
     /// </summary>
     public static async Task<SignInResult> SignInAsync(
         HttpClient http,
         BackendEndpoint endpoint,
         string username,
         string password,
-        CancellationToken cancellation = default)
+        CancellationToken cancellation = default,
+        string? hardwareId = null)
     {
         var trimmedUser = (username ?? "").Trim();
         var trimmedPass = (password ?? "").Trim();
@@ -167,6 +169,12 @@ public static class BackendAuthClient
         // Standard client credentials for Fortnite / DedicatedServer
         var authBytes = Encoding.UTF8.GetBytes($"{LaunchArguments.DedicatedServerClientId}:{LaunchArguments.DedicatedServerClientSecret}");
         request.Headers.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(authBytes));
+
+        // This PC's hashed machine id, for the host's hardware bans (Core-Backend #390); older backends ignore it.
+        if ((hardwareId ?? HardwareId.Current) is { } machine)
+        {
+            request.Headers.TryAddWithoutValidation(HardwareId.HeaderName, machine);
+        }
 
         try
         {
@@ -200,8 +208,10 @@ public static class BackendAuthClient
                         statusCode);
                 }
 
+                // A ban (Core-Backend #390: the account's, the IP address's or this PC's, with a timed ban's end) or the
+                // host's Require hardware ID: the backend's own words. An older backend sends "This account is banned...".
                 return AuthResult.Failure(
-                    "This account has been banned by the server administrator.",
+                    !string.IsNullOrWhiteSpace(errorMessage) ? errorMessage : "This account has been banned by the server administrator.",
                     errorCode,
                     statusCode);
             }

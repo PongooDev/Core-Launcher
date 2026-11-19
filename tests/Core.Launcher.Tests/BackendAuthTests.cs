@@ -262,7 +262,83 @@ public sealed class BackendAuthTests
         var result = await BackendAuthClient.AuthenticateAsync(http, endpoint, "BannedPlayer", "Password123!", TestContext.Current.CancellationToken);
 
         Assert.False(result.Succeeded);
+        Assert.Equal("This account is banned", result.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task AuthenticateShowsTheBackendsBanMessageWithItsEnd()
+    {
+        const string message = "This PC is banned until 2026-11-21 12:00 UTC: aimbot";
+        using var http = new HttpClient(new AuthMockHandler
+        {
+            TokenStatusCode = HttpStatusCode.Forbidden,
+            TokenResponse = $$"""{"errorCode":"errors.com.epicgames.account.account_not_active","errorMessage":"{{message}}"}"""
+        });
+
+        var result = await BackendAuthClient.AuthenticateAsync(http, BackendEndpoint.Local(5595), "Cheater", "Password123!", TestContext.Current.CancellationToken);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(message, result.ErrorMessage);
+        Assert.Equal(403, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task AuthenticateFallsBackToTheOldBanTextWithoutAMessage()
+    {
+        using var http = new HttpClient(new AuthMockHandler { TokenStatusCode = HttpStatusCode.Forbidden, TokenResponse = "{}" });
+
+        var result = await BackendAuthClient.AuthenticateAsync(http, BackendEndpoint.Local(5595), "BannedPlayer", "Password123!", TestContext.Current.CancellationToken);
+
         Assert.Contains("banned by the server administrator", result.ErrorMessage);
+    }
+
+    [Fact]
+    public void HardwareIdIsAPrefixedSha256OfTheMachineGuidNeverTheGuid()
+    {
+        const string guid = "3F2504E0-4F89-11D3-9A0C-0305E82C3301";
+        var expected = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes("CoreLauncher-HWID:3f2504e0-4f89-11d3-9a0c-0305e82c3301")));
+
+        Assert.Equal(expected, HardwareId.FromMachineGuid(guid));
+        Assert.Equal(expected, HardwareId.FromMachineGuid("  3f2504e0-4f89-11d3-9a0c-0305e82c3301 "));
+        Assert.Matches("^[0-9a-f]{64}$", HardwareId.FromMachineGuid(guid)!);
+        Assert.DoesNotContain("3f2504e0", HardwareId.FromMachineGuid(guid)!, StringComparison.OrdinalIgnoreCase);
+        Assert.Null(HardwareId.FromMachineGuid(null));
+        Assert.Null(HardwareId.FromMachineGuid("   "));
+    }
+
+    [Fact]
+    public void HardwareIdOfThisPcIsStable()
+    {
+        var first = HardwareId.Current;
+        Assert.Equal(first, HardwareId.Current);
+        if (first is not null)
+        {
+            Assert.Matches("^[0-9a-f]{64}$", first);
+        }
+    }
+
+    [Fact]
+    public async Task SignInSendsTheHardwareIdHeader()
+    {
+        var handler = new AuthMockHandler { TokenResponse = """{"access_token":"abc","expires_in":28800}""" };
+        using var http = new HttpClient(handler);
+        var id = HardwareId.FromMachineGuid("test-guid")!;
+
+        var result = await BackendAuthClient.SignInAsync(http, BackendEndpoint.Local(5595), "Player", "Password123!", TestContext.Current.CancellationToken, id);
+
+        Assert.True(result.Result.Succeeded);
+        Assert.Equal(id, handler.HardwareHeader);
+    }
+
+    [Fact]
+    public async Task SignInSendsThisPcsHardwareIdByDefault()
+    {
+        var handler = new AuthMockHandler { TokenResponse = """{"access_token":"abc","expires_in":28800}""" };
+        using var http = new HttpClient(handler);
+
+        await BackendAuthClient.AuthenticateAsync(http, BackendEndpoint.Local(5595), "Player", "Password123!", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HardwareId.Current, handler.HardwareHeader);
     }
 
     [Fact]
@@ -287,6 +363,7 @@ public sealed class BackendAuthTests
         public string RequirementsResponse { get; init; } = """{"name":"Core-Backend","version":"1.0.0","requirePassword":false,"passwordRequired":true,"accountExists":true,"hasPassword":true}""";
         public HttpStatusCode TokenStatusCode { get; init; } = HttpStatusCode.OK;
         public string TokenResponse { get; init; } = "{}";
+        public string? HardwareHeader { get; private set; }
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -308,6 +385,7 @@ public sealed class BackendAuthTests
             }
             if (path == BackendAuthClient.OAuthTokenPath)
             {
+                HardwareHeader = request.Headers.TryGetValues(HardwareId.HeaderName, out var values) ? values.Single() : null;
                 return Task.FromResult(new HttpResponseMessage(TokenStatusCode)
                 {
                     Content = new StringContent(TokenResponse, Encoding.UTF8, "application/json")

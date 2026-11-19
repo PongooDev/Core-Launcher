@@ -600,6 +600,14 @@ public sealed class LauncherHost : IAsyncDisposable
             else
             {
                 effectivePassword = LaunchArguments.Password;
+                // The launcher's login with the game's own credentials, so the backend records this PC's hardware id
+                // before the game logs in without one (Core-Backend #390), and a ban or the host's Require hardware ID is
+                // shown here with its reason. Any other answer is left to the game's own login, as before.
+                var authResult = await BackendAuthClient.AuthenticateAsync(_remoteCheck, backend, login, effectivePassword);
+                if (!authResult.Succeeded && authResult.StatusCode == (int)System.Net.HttpStatusCode.Forbidden)
+                {
+                    throw new InvalidOperationException(authResult.ErrorMessage);
+                }
             }
         }
 

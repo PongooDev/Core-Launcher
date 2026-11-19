@@ -145,7 +145,10 @@ backend instead of running their own.
    **Save to list** and **Save**. (Or pick a saved friend under **Play on** on Home; **Join a friend** goes to the same
    settings.)
 2. Press **Play**. You log in to the host's backend with your player name (a new account there the first time), and
-   matchmaking sends you to the host's servers.
+   matchmaking sends you to the host's servers. The launcher's login also sends a hardware ID: a SHA-256 hash of a
+   launcher prefix and your PC's Windows MachineGuid (read only, never sent itself), which the host's backend keeps
+   only as a salted hash for its hardware bans (Core-Backend #390). If you're banned, the launcher shows the host's
+   reason and, for a timed ban, when it ends.
 
 While you play on a friend's backend the launcher runs no backend, and the admin panel stays on the host's PC. You need
 the same Fortnite build as the host. Choose **My own backend** to go back.
