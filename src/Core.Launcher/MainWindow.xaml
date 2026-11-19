@@ -48,6 +48,8 @@
                                  IsChecked="{Binding CurrentPage, Converter={StaticResource Page}, ConverterParameter=Home}" />
                     <RadioButton Style="{StaticResource NavItem}" Tag="&#xE968;" Content="Servers"
                                  IsChecked="{Binding CurrentPage, Converter={StaticResource Page}, ConverterParameter=Servers}" />
+                    <RadioButton Style="{StaticResource NavItem}" Tag="&#xE909;" Content="Islands"
+                                 IsChecked="{Binding CurrentPage, Converter={StaticResource Page}, ConverterParameter=Islands}" />
                     <RadioButton Style="{StaticResource NavItem}" Tag="&#xE9F9;" Content="Logs"
                                  IsChecked="{Binding CurrentPage, Converter={StaticResource Page}, ConverterParameter=Logs}" />
                     <RadioButton Style="{StaticResource NavItem}" Tag="&#xE713;" Content="Settings"
@@ -77,6 +79,8 @@
             <Grid Grid.Row="1" Margin="32,22,32,24">
                 <local:HomePage Visibility="{Binding CurrentPage, Converter={StaticResource Page}, ConverterParameter=Home}" />
                 <local:ServersPage Visibility="{Binding CurrentPage, Converter={StaticResource Page}, ConverterParameter=Servers}" />
+                <local:IslandsPage DataContext="{Binding Islands}"
+                                   Visibility="{Binding DataContext.CurrentPage, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource Page}, ConverterParameter=Islands}" />
                 <local:LogsPage Visibility="{Binding CurrentPage, Converter={StaticResource Page}, ConverterParameter=Logs}" />
                 <local:SettingsPage DataContext="{Binding Settings}"
                                     Visibility="{Binding DataContext.CurrentPage, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource Page}, ConverterParameter=Settings}" />

@@ -489,10 +489,16 @@ public sealed class LauncherHost : IAsyncDisposable
     /// <summary>The registration page of the active backend in use (local or friend's).</summary>
     public string? RegisterUrl => Backend.RegisterUrl ?? (BackendEndpoint.TryParse(Settings.Backend.Remote.Address, out var ep, out _) ? $"{ep.Url}/register" : null);
 
+    /// <summary>
+    /// The backend the player plays on: this PC's running one, or the friend's they chose; null while neither is known.
+    /// </summary>
+    public BackendEndpoint? PlayerBackend =>
+        Backend.Endpoint ?? (Settings.Backend.UseRemote && BackendEndpoint.TryParse(Settings.Backend.Remote.Address, out var ep, out _) ? ep : null);
+
     /// <summary>Checks authentication requirements for the given username against the active backend.</summary>
     public async Task<AuthRequirements?> GetAuthRequirementsAsync(string username)
     {
-        var endpoint = Backend.Endpoint ?? (Settings.Backend.UseRemote && BackendEndpoint.TryParse(Settings.Backend.Remote.Address, out var ep, out _) ? ep : null);
+        var endpoint = PlayerBackend;
         if (endpoint is null)
         {
             return null;

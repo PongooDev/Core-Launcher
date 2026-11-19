@@ -21,6 +21,15 @@ public sealed record AuthResult(bool Succeeded, string? ErrorMessage = null, str
 }
 
 /// <summary>
+/// A sign-in's <see cref="AuthResult"/>, with the player's access token and when it expires when it succeeded (the
+/// backend's own token answer: access_token, expires_in).
+/// </summary>
+public sealed record SignInResult(AuthResult Result, string? AccessToken = null, DateTimeOffset? ExpiresAt = null)
+{
+    public static implicit operator SignInResult(AuthResult result) => new(result);
+}
+
+/// <summary>
 /// Client for Core-Backend's portal and authentication endpoints (/api/portal/status, /core/api/status, and /account/api/oauth/token).
 /// Translates Epic-formatted errors and HTTP status codes (such as 429 and 400 legacy accounts) into user-friendly launcher messages.
 /// </summary>
@@ -126,6 +135,18 @@ public static class BackendAuthClient
         BackendEndpoint endpoint,
         string username,
         string password,
+        CancellationToken cancellation = default) =>
+        (await SignInAsync(http, endpoint, username, password, cancellation)).Result;
+
+    /// <summary>
+    /// As <see cref="AuthenticateAsync"/>, keeping the player's access token and its lifetime when it succeeds: the
+    /// launcher's own player-scoped requests (the Islands page's /core/api/creative/islands, Core-Launcher #21) send it.
+    /// </summary>
+    public static async Task<SignInResult> SignInAsync(
+        HttpClient http,
+        BackendEndpoint endpoint,
+        string username,
+        string password,
         CancellationToken cancellation = default)
     {
         var trimmedUser = (username ?? "").Trim();
@@ -152,12 +173,13 @@ public static class BackendAuthClient
             using var response = await http.SendAsync(request, cancellation);
             var statusCode = (int)response.StatusCode;
 
+            var body = await response.Content.ReadAsStringAsync(cancellation);
             if (response.IsSuccessStatusCode)
             {
-                return AuthResult.Success();
+                var (accessToken, expiresIn) = ParseToken(body);
+                return new SignInResult(AuthResult.Success(), accessToken, expiresIn is { } seconds ? DateTimeOffset.UtcNow.AddSeconds(seconds) : null);
             }
 
-            var body = await response.Content.ReadAsStringAsync(cancellation);
             var (errorCode, errorMessage) = ParseError(body);
 
             if (response.StatusCode == (HttpStatusCode)429)
@@ -223,7 +245,29 @@ public static class BackendAuthClient
         }
     }
 
-    private static (string? ErrorCode, string? ErrorMessage) ParseError(string json)
+    /// <summary>The token answer's access_token and expires_in (seconds); nulls when the body isn't one.</summary>
+    private static (string? AccessToken, double? ExpiresIn) ParseToken(string json)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                return (null, null);
+            }
+
+            var token = root.TryGetProperty("access_token", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString() : null;
+            var expires = root.TryGetProperty("expires_in", out var e) && e.ValueKind == JsonValueKind.Number && e.TryGetDouble(out var seconds) ? seconds : (double?)null;
+            return (string.IsNullOrEmpty(token) ? null : token, expires);
+        }
+        catch (JsonException)
+        {
+            return (null, null);
+        }
+    }
+
+    internal static (string? ErrorCode, string? ErrorMessage) ParseError(string json)
     {
         try
         {

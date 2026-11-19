@@ -18,6 +18,30 @@ public partial class MainWindow : Window
         DataContext = model;
         model.PickFolder = PickFolder;
         model.PromptLogin = (suggestion, validate) => LoginPrompt.Ask(this, suggestion, validate, _model.RegisterUrl);
+        model.Islands.PickSaveFile = PickIslandSaveFile;
+        model.Islands.PickOpenFile = PickIslandOpenFile;
+    }
+
+    private const string IslandFilter = "Core island files (*.coreisland)|*.coreisland|All files (*.*)|*.*";
+
+    private string? PickIslandSaveFile(string suggested)
+    {
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = "Export island",
+            FileName = suggested,
+            DefaultExt = Hosting.Backend.BackendIslands.FileExtension,
+            Filter = IslandFilter,
+            AddExtension = true,
+            OverwritePrompt = true,
+        };
+        return dialog.ShowDialog(this) == true ? dialog.FileName : null;
+    }
+
+    private string? PickIslandOpenFile()
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog { Title = "Import island", Filter = IslandFilter, CheckFileExists = true };
+        return dialog.ShowDialog(this) == true ? dialog.FileName : null;
     }
 
     private string? PickFolder(string title)

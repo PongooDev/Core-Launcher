@@ -92,6 +92,7 @@ Other builds are turned away unless you turn on **Allow unsupported builds** (Se
 
 - [Getting started](#getting-started)
 - [Play with friends](#play-with-friends)
+- [Sharing Creative islands](#sharing-creative-islands)
 - [What it does](#what-it-does)
 - [Updates](#updates)
 - [Settings](#settings)
@@ -117,7 +118,7 @@ Once a client is running, **Launch another client** on Home starts one more with
 
 The sidebar's **Admin panel** opens Core-Backend's admin panel in your browser (while the backend is running).
 
-**Home** says in one line whether you can play, and when something is wrong it offers the fix (for example "Use the running backend" when another program has the backend's port). **Servers** shows each hosted server and lets you change how many run, **Logs** has every log with Copy and Open logs folder, and **Settings** holds the rest.
+**Home** says in one line whether you can play, and when something is wrong it offers the fix (for example "Use the running backend" when another program has the backend's port). **Servers** shows each hosted server and lets you change how many run, **Islands** exports and imports your Creative islands ([Sharing Creative islands](#sharing-creative-islands)), **Logs** has every log with Copy and Open logs folder, and **Settings** holds the rest.
 
 Everything goes in `%LOCALAPPDATA%\Core-Launcher`; nothing is installed system-wide.
 
@@ -174,6 +175,25 @@ the launcher's managed backend updates itself).
 
 Core doesn't check passwords, so anyone who can reach a host's backend can log in with any name: hosts should only
 share the address with people they trust.
+
+## Sharing Creative islands
+
+On one backend, islands are shared with island codes in game. To take an island to **another** Core backend (a
+friend's, or a new one of yours), use the **Islands** page (Core-Launcher #21). It signs in to the backend you play on
+(Home's **Play on**) as your player name and password, and lists your Creative islands with how many of each kind
+(Island, Arctic Island, The Block, Frosty Fortress) are free.
+
+- **Export…** on an island you have built on saves it as a `.coreisland` file: its save, title and description, and
+  the build that saved it. Send the file to whoever you want to share it with.
+- **Import island file…** sends a `.coreisland` file to the backend, which makes it a **new** island of yours in your
+  first free slot of its kind (one never built on, or reset by the backend's admin). It never replaces one of your
+  islands or anyone else's. Open it in game like any of your islands.
+
+An island loads on the build it was saved on or a newer one, so the launcher goes by your selected build: an island
+saved on 7.30 can't be imported while 7.20 is selected ("this island is from a newer build"). When every slot of that
+kind holds an island, the import is refused ("No free Island slots"): the backend's admin can reset one in the admin
+panel (Players → Creative), which keeps a backup of it. This needs a Core-Backend with island files (November 2026 or
+later; the launcher's own backend updates itself); an older backend says it doesn't have them yet.
 
 ## What it does
 

@@ -22,6 +22,7 @@ public enum LauncherPage
 {
     Home,
     Servers,
+    Islands,
     Logs,
     Settings,
 }
@@ -58,6 +59,7 @@ public sealed partial class MainViewModel : ObservableObject
             Activity.Add(line);
         }
 
+        Islands = new IslandsViewModel(host, Toast);
         host.Log.LineWritten += (_, line) => Application.Current?.Dispatcher.BeginInvoke(() => AddActivity(line));
         host.Changed += QueueRefresh;
         _clock = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (_, _) => Refresh(), Dispatcher.CurrentDispatcher);
@@ -66,6 +68,9 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     public LauncherHost Host => _host;
+
+    /// <summary>The Islands page: the player's Creative islands, exported to and imported from files (Core-Launcher #21).</summary>
+    public IslandsViewModel Islands { get; }
 
     public string Version => $"v{_host.Updater.Current.ToString(3)}";
 
@@ -685,6 +690,11 @@ public sealed partial class MainViewModel : ObservableObject
     partial void OnCurrentPageChanged(LauncherPage oldValue, LauncherPage newValue)
     {
         Settings = newValue == LauncherPage.Settings ? new SettingsViewModel(_host, OnSettingsFinished) : null;
+        if (newValue == LauncherPage.Islands)
+        {
+            _ = Islands.RefreshAsync();
+        }
+
         if (oldValue == LauncherPage.Settings)
         {
             // Settings → Backend → Local https may have trusted or removed the backend's root.
