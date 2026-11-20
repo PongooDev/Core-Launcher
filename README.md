@@ -235,6 +235,7 @@ Settings are saved in `%LOCALAPPDATA%\Core-Launcher\settings.json`.
 | Port | `5595` | `0` lets the backend pick a free port |
 | Data folder | `Backend\data` | Your own folder uses its `data` folder, the one `npm start` uses |
 | Trust the local backend's certificate (Backend, Local https) | Off | Needed to buy V-Bucks on 7.00 and later ([Buying V-Bucks on 7.00 and later](#buying-v-bucks-on-700-and-later)); your own backend only |
+| Ask me at launch when Windows doesn't trust it (Backend, Local https) | On | One prompt after startup with **Enable local HTTPS** and **Don't ask again**; never for a friend's backend (Core-Launcher #22) |
 | Host servers | On | Autohost on or off |
 | Servers to keep running | `2` | Save the World's on a build with Battle Royale |
 | Battle Royale servers | `2` | On a build with Battle Royale (1.7.2 on), on top of the servers above; each match takes a server of its own; on a build with Creative (7.00 on) they also host Creative islands, as the backend gives each Creative party a free one |
@@ -260,7 +261,8 @@ user's trusted roots (`CurrentUser\Root`). Windows asks you to confirm first; no
 takes every Core local root out again (Windows asks for each), and the section shows whether the current one is trusted.
 It's off until you press the button, and it is only offered for your own backend, never a friend's. If the backend's data
 folder is reset it makes a new root: the section then says the trusted one is outdated, and you trust it again. Builds
-up to 6.31 don't need it.
+up to 6.31 don't need it. At startup the launcher asks once when the current root isn't trusted or is outdated, with
+**Enable local HTTPS** and **Don't ask again**; that checkbox in Settings → Backend → Local https turns the question back on.
 
 The game itself only says "PageLoadFail" when the page can't open, so with a 7.00 or later build on your own backend the
 launcher checks first: the home page's status line says when Windows doesn't trust the backend's current root (**Trust

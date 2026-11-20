@@ -1,5 +1,7 @@
 using System.ComponentModel;
 using System.Windows;
+using Core.Launcher.Hosting.Backend;
+using Core.Launcher.Hosting.Settings;
 
 namespace Core.Launcher;
 
@@ -20,6 +22,29 @@ public partial class MainWindow : Window
         model.PromptLogin = (suggestion, validate) => LoginPrompt.Ask(this, suggestion, validate, _model.RegisterUrl);
         model.Islands.PickSaveFile = PickIslandSaveFile;
         model.Islands.PickOpenFile = PickIslandOpenFile;
+        Loaded += OnLoaded;
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        _model.PromptLocalHttps = ShowLocalHttpsPromptAsync;
+        _model.TryPromptLocalHttps();
+    }
+
+    /// <summary>
+    /// One prompt at startup while the local backend's current https root is untrusted or outdated (Core-Launcher
+    /// #22). "Don't ask again" saves the setting off; the same setting is in Settings → Backend → Local https.
+    /// </summary>
+    private Task ShowLocalHttpsPromptAsync(LocalTrustStatus status)
+    {
+        if (LocalHttpsPrompt.Ask(this, _model.Host, status))
+        {
+            var updated = SettingsStore.Clone(_model.Host.Settings);
+            updated.AskToTrustLocalHttps = false;
+            _model.Host.SaveSettings(updated);
+        }
+
+        return Task.CompletedTask;
     }
 
     private const string IslandFilter = "Core island files (*.coreisland)|*.coreisland|All files (*.*)|*.*";

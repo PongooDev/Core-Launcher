@@ -172,8 +172,6 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     // The local backend's https root, for buying V-Bucks on 7.00 and later (Core-Backend #377, LocalCertificateTrust).
     // Off until the user clicks Trust; Windows asks them to confirm each add and remove. Only for their own backend.
-    private System.Security.Cryptography.X509Certificates.X509Certificate2? _localRoot;
-
     [ObservableProperty]
     public partial string CertificateTrustMessage { get; set; } = "Checking…";
 
@@ -193,8 +191,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         try
         {
             var (status, root) = await _host.CertificateTrust.CheckAsync(_host.Backend.LocalEndpoint);
-            _localRoot?.Dispose();
-            _localRoot = root;
+            root?.Dispose();
             CertificateTrustMessage = status.Message;
             CertificateTrusted = status.State == LocalTrustState.Trusted;
             CanTrustCertificate = status.CanTrust && root is not null;
@@ -213,15 +210,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanTrustCertificate))]
     private async Task TrustLocalCertificateAsync()
     {
-        await RefreshCertificateTrustAsync();
-        if (_localRoot is not { } root || !CanTrustCertificate)
-        {
-            return;
-        }
-
-        var added = _host.CertificateTrust.Trust(root);
-        _host.Log.Write(added ? $"Trusted the local backend's root certificate ({root.Thumbprint}) for the current user"
-            : "The local backend's root certificate wasn't trusted (Windows' prompt was declined)");
+        var added = await _host.TrustLocalHttpsAsync();
         await RefreshCertificateTrustAsync();
         if (!added)
         {

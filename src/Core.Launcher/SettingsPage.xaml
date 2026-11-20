@@ -295,6 +295,7 @@
                                            Text="7.00 and later open the V-Bucks purchase page at https://127.0.0.1, which only works once Windows trusts your backend's own certificate. Off until you turn it on; Windows asks you to confirm." />
                                 <TextBlock Style="{StaticResource Hint}"
                                            Text="The certificate is limited to 127.0.0.1 and localhost, so it can't vouch for any other site. Its private key was never kept, so nothing else can be signed with it." />
+                                <CheckBox Style="{StaticResource Switch}" Content="Ask me at launch when Windows doesn't trust it" IsChecked="{Binding Settings.AskToTrustLocalHttps}" Margin="0,12,0,0" FontSize="14" />
                                 <WrapPanel Margin="0,12,0,0">
                                     <Button Margin="0,0,8,8" Command="{Binding TrustLocalCertificateCommand}">
                                         <StackPanel Orientation="Horizontal">

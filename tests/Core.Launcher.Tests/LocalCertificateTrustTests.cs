@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using Core.Launcher.Hosting.Backend;
+using Core.Launcher.Hosting.Settings;
 
 namespace Core.Launcher.Tests;
 
@@ -361,5 +362,42 @@ public sealed class LocalCertificateTrustTests
             Asked.Add(url);
             return Task.FromResult(_routes.TryGetValue(url, out var respond) ? respond() : new HttpResponseMessage(HttpStatusCode.NotFound));
         }
+    }
+
+    [Fact]
+    public void StartupPromptIsOnlyForThisPcsUntrustedBackend()
+    {
+        var settings = new LauncherSettings { Builds = [new BuildSettings { Name = "7.30", Changelist = 4834550 }] };
+        var notTrusted = new LocalTrustStatus(LocalTrustState.NotTrusted, "Not trusted.");
+        var outdated = new LocalTrustStatus(LocalTrustState.Outdated, "Outdated.");
+
+        Assert.True(LocalHttpsPromptPolicy.ShouldPrompt(settings, notTrusted));
+        Assert.True(LocalHttpsPromptPolicy.ShouldPrompt(settings, outdated));
+        Assert.False(LocalHttpsPromptPolicy.ShouldPrompt(settings, new LocalTrustStatus(LocalTrustState.Trusted, "Trusted.")));
+        Assert.False(LocalHttpsPromptPolicy.ShouldPrompt(settings, new LocalTrustStatus(LocalTrustState.NoHttps, "No https.")));
+        Assert.False(LocalHttpsPromptPolicy.ShouldPrompt(settings, null));
+
+        settings.AskToTrustLocalHttps = false;
+        Assert.False(LocalHttpsPromptPolicy.ShouldPrompt(settings, notTrusted));
+        settings.AskToTrustLocalHttps = true;
+
+        settings.Backend.UseRemote = true;
+        Assert.False(LocalHttpsPromptPolicy.ShouldPrompt(settings, notTrusted));
+        settings.Backend.UseRemote = false;
+
+        settings.Builds.Clear();
+        Assert.False(LocalHttpsPromptPolicy.ShouldPrompt(settings, notTrusted));
+    }
+
+    [Fact]
+    public void AskToTrustLocalHttpsIsOnByDefaultAndSaved()
+    {
+        using var folder = new TempFolder();
+        var store = new SettingsStore(folder.Combine("settings.json"));
+        Assert.True(store.Load().AskToTrustLocalHttps);
+
+        var settings = new LauncherSettings { AskToTrustLocalHttps = false };
+        store.Save(settings);
+        Assert.False(store.Load().AskToTrustLocalHttps);
     }
 }

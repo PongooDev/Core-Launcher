@@ -678,6 +678,43 @@ public sealed class LauncherHost : IAsyncDisposable
     }
 
     /// <summary>
+    /// Trusts the local backend's current https root in the current user's trusted roots, the same step Settings →
+    /// Backend → Local https and the startup prompt run (Core-Backend #377, Core-Launcher #22). Checks the backend's
+    /// current root first, so an outdated root is replaced. Returns false when there is no local https root, it is
+    /// already trusted, or Windows' prompt was declined; the caller says why.
+    /// </summary>
+    public async Task<bool> TrustLocalHttpsAsync(CancellationToken cancellation = default)
+    {
+        if (Backend.LocalEndpoint is not { } local)
+        {
+            return false;
+        }
+
+        var (status, root) = await CertificateTrust.CheckAsync(local, cancellation);
+        if (root is null || !status.CanTrust)
+        {
+            root?.Dispose();
+            return false;
+        }
+
+        var thumbprint = root.Thumbprint;
+        bool added;
+        try
+        {
+            added = CertificateTrust.Trust(root);
+        }
+        finally
+        {
+            root.Dispose();
+        }
+
+        Log.Write(added ? $"Trusted the local backend's root certificate ({thumbprint}) for the current user"
+            : "The local backend's root certificate wasn't trusted (Windows' prompt was declined)");
+        await CheckLocalHttpsAsync(cancellation: cancellation);
+        return added;
+    }
+
+    /// <summary>
     /// A client's start notes in its log and Launcher.log whether its purchase page can open at the local backend's https
     /// (<see cref="CheckLocalHttpsAsync"/>): a report with either log then says which step the Store's "PageLoadFail" is.
     /// </summary>

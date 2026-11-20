@@ -49,6 +49,14 @@ public sealed class LauncherSettings
     /// </summary>
     public bool DiscordRichPresence { get; set; } = true;
 
+    /// <summary>
+    /// Asks once at launch, after this PC's backend is ready, whether Windows should trust its https root: 7.00 and later
+    /// open the V-Bucks purchase page at https://127.0.0.1, which only loads once Windows trusts the backend's own root
+    /// (Core-Backend #377, Core-Launcher #22). On by default; the prompt's "Don't ask again", and the same setting in
+    /// Settings → Backend → Local https, turn it off. Never asked on a friend's backend.
+    /// </summary>
+    public bool AskToTrustLocalHttps { get; set; } = true;
+
     public DllSettings Dlls { get; set; } = new();
 
     public BackendSettings Backend { get; set; } = new();

@@ -41,6 +41,7 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly Dictionary<int, ServerState> _lastSlots = [];
     private BackendState? _lastBackend;
     private string? _localHttpsChecked;
+    private bool _localHttpsPrompted;
     private string? _announcedUpdate;
     private Action? _statusAction;
     private bool _refreshQueued;
@@ -78,6 +79,12 @@ public sealed partial class MainViewModel : ObservableObject
 
     /// <summary>Asks for the login of another client: (suggested name, validation returning an error or null) → name, or null when cancelled.</summary>
     public Func<string, Func<string, string?>, (string Login, string? Password)?>? PromptLogin { get; set; }
+
+    /// <summary>
+    /// The startup prompt for an untrusted local backend certificate (Core-Launcher #22), set by MainWindow once it can
+    /// own a dialog. <see cref="TryPromptLocalHttps"/> calls it once per launch when the backend's current root isn't trusted.
+    /// </summary>
+    public Func<LocalTrustStatus, Task>? PromptLocalHttps { get; set; }
 
     public ObservableCollection<ClientRowViewModel> Clients { get; } = [];
 
@@ -356,6 +363,7 @@ public sealed partial class MainViewModel : ObservableObject
             RefreshUpdate();
             RefreshLocalHttps(settings);
             RefreshStatus(settings);
+            TryPromptLocalHttps();
         }
         finally
         {
@@ -520,6 +528,34 @@ public sealed partial class MainViewModel : ObservableObject
         {
             _localHttpsChecked = key;
             _ = _host.CheckLocalHttpsAsync();
+        }
+    }
+
+    /// <summary>
+    /// Shows the local-https prompt once, after the backend is up and its current root is untrusted or outdated
+    /// (Core-Launcher #22). The prompt can trust it, or turn this off with "Don't ask again". Never for a friend's
+    /// backend, and never while the setting is off.
+    /// </summary>
+    public void TryPromptLocalHttps()
+    {
+        if (_localHttpsPrompted || PromptLocalHttps is not { } prompt || !LocalHttpsPromptPolicy.ShouldPrompt(_host.Settings, _host.LocalHttps))
+        {
+            return;
+        }
+
+        _localHttpsPrompted = true;
+        _ = AskLocalHttpsAsync(prompt, _host.LocalHttps!);
+    }
+
+    private async Task AskLocalHttpsAsync(Func<LocalTrustStatus, Task> prompt, LocalTrustStatus status)
+    {
+        try
+        {
+            await prompt(status);
+        }
+        catch (Exception exception)
+        {
+            _host.Log.Write($"Local https prompt failed: {exception}");
         }
     }
 
