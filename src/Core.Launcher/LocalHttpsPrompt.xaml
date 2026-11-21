@@ -11,8 +11,8 @@
         <CheckBox x:Name="DontAsk" Content="Don't ask again" Margin="0,16,0,0" />
         <TextBlock x:Name="Error" Foreground="{StaticResource BadBrush}" TextWrapping="Wrap" Margin="0,8,0,0" />
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
-            <Button Content="Not now" IsCancel="True" />
-            <Button x:Name="Enable" Margin="8,0,0,0" MinWidth="170" Style="{StaticResource PrimaryButton}" IsDefault="True" Click="OnEnable">
+            <Button Content="Not now" IsCancel="True" IsDefault="True" />
+            <Button x:Name="Enable" Margin="8,0,0,0" MinWidth="170" Style="{StaticResource PrimaryButton}" Click="OnEnable">
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="&#xE72E;" Style="{StaticResource Icon}" Foreground="White" FontSize="12" Margin="0,0,8,0" />
                     <TextBlock Text="Enable local HTTPS" Foreground="White" FontWeight="SemiBold" />

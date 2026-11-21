@@ -10,6 +10,10 @@ public partial class LocalHttpsPrompt : Window
 {
     private readonly LauncherHost _host;
 
+    // Cancelled when the window closes, so "Not now", Escape or the close button during Enable's check never leads to
+    // Windows' trust dialog afterwards (the owner's rule: no security change without the player's consent).
+    private readonly CancellationTokenSource _closed = new();
+
     private LocalHttpsPrompt(LauncherHost host, LocalTrustStatus status)
     {
         InitializeComponent();
@@ -26,19 +30,35 @@ public partial class LocalHttpsPrompt : Window
         return prompt.DontAsk.IsChecked == true;
     }
 
+    protected override void OnClosed(EventArgs e)
+    {
+        _closed.Cancel();
+        base.OnClosed(e);
+    }
+
     private async void OnEnable(object sender, RoutedEventArgs e)
     {
         Enable.IsEnabled = false;
         Error.Text = "";
         try
         {
-            if (await _host.TrustLocalHttpsAsync())
+            var added = await _host.TrustLocalHttpsAsync(_closed.Token);
+            if (_closed.IsCancellationRequested)
+            {
+                return;
+            }
+
+            if (added)
             {
                 DialogResult = true;
                 return;
             }
 
             Error.Text = "Windows didn't add the certificate (the prompt was declined), so local HTTPS still isn't trusted.";
+        }
+        catch (OperationCanceledException) when (_closed.IsCancellationRequested)
+        {
+            return;
         }
         catch (Exception exception) when (exception is CryptographicException or InvalidOperationException or IOException)
         {

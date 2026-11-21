@@ -701,6 +701,9 @@ public sealed class LauncherHost : IAsyncDisposable
         bool added;
         try
         {
+            // The check above can take seconds; a player who backed out meanwhile (the startup prompt closed) gets no
+            // Windows trust dialog afterwards.
+            cancellation.ThrowIfCancellationRequested();
             added = CertificateTrust.Trust(root);
         }
         finally

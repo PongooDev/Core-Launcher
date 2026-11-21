@@ -551,6 +551,8 @@ public sealed partial class MainViewModel : ObservableObject
     {
         try
         {
+            // The modal prompt opens after Refresh() returns, not inside it (TryPromptLocalHttps runs from Refresh).
+            await Task.Yield();
             await prompt(status);
         }
         catch (Exception exception)
