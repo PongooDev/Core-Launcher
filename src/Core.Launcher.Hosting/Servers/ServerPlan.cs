@@ -58,7 +58,9 @@ public static class ServerPlan
 /// players are on", Core-Launcher #18). A server is idle once it has been ready with nobody in its session for
 /// <see cref="IdleFor"/>. A build gets one only when none of its servers here is free or booting, and an idle server is
 /// never taken from a build that is waiting itself. A moved server stays on its new build until players of another
-/// build need it, its own planned build included, or the settings change.
+/// build need it, its own planned build included, or the settings change. What a running server hosts is the build it was
+/// started on (<see cref="Started"/>): selecting another build changes the plan, but a running server keeps its build
+/// until it restarts (Core-Launcher #23).
 /// </summary>
 public sealed class ServerSwitcher(TimeProvider time)
 {
@@ -67,6 +69,7 @@ public sealed class ServerSwitcher(TimeProvider time)
 
     private readonly Dictionary<int, ServerAssignment> _overrides = [];
     private readonly Dictionary<int, DateTimeOffset> _idleSince = [];
+    private readonly Dictionary<int, ServerAssignment> _started = [];
 
     /// <summary>What slot <paramref name="instance"/> hosts: the build it was moved to, otherwise the plan's.</summary>
     public ServerAssignment? Assignment(IReadOnlyList<ServerAssignment> plan, int instance) =>
@@ -75,6 +78,13 @@ public sealed class ServerSwitcher(TimeProvider time)
         : null;
 
     public bool HasOverrides => _overrides.Count > 0;
+
+    /// <summary>Slot <paramref name="instance"/>'s server was just started hosting <paramref name="hosts"/>.</summary>
+    public void Started(int instance, ServerAssignment hosts) => _started[instance] = hosts;
+
+    /// <summary>What <paramref name="slot"/> hosts now: the build its running server was started on, otherwise its assignment.</summary>
+    public ServerAssignment? Hosting(IReadOnlyList<ServerAssignment> plan, ServerSlotView slot) =>
+        slot.ProcessId is not null && _started.TryGetValue(slot.Instance, out var started) ? started : Assignment(plan, slot.Instance);
 
     /// <summary>Puts every server back on the plan (the settings changed, or switching was turned off).</summary>
     public void Clear()
@@ -116,14 +126,14 @@ public sealed class ServerSwitcher(TimeProvider time)
         foreach (var target in wanted)
         {
             // A server of the build that is (re)starting, or ready and empty (or not counted), takes its players already.
-            if (slots.Any(slot => target.Same(Assignment(plan, slot.Instance)) && (slot.State != ServerState.Ready || counts[slot.Instance] is not { Current: > 0 })))
+            if (slots.Any(slot => target.Same(Hosting(plan, slot)) && (slot.State != ServerState.Ready || counts[slot.Instance] is not { Current: > 0 })))
             {
                 continue;
             }
 
             var candidate = slots
                 .Where(slot => slot.State == ServerState.Ready && _idleSince.TryGetValue(slot.Instance, out var since) && now - since >= IdleFor)
-                .Where(slot => Assignment(plan, slot.Instance) is { } current && !wanted.Any(current.Same))
+                .Where(slot => Hosting(plan, slot) is { } current && !wanted.Any(current.Same))
                 // A server moved off the build first goes back to it; otherwise the last one, the plan's least needed.
                 .OrderByDescending(slot => target.Same(slot.Instance <= plan.Count ? plan[slot.Instance - 1] : null))
                 .ThenByDescending(slot => slot.Instance)
@@ -133,7 +143,7 @@ public sealed class ServerSwitcher(TimeProvider time)
                 continue;
             }
 
-            var from = Assignment(plan, candidate.Instance)!;
+            var from = Hosting(plan, candidate)!;
             if (candidate.Instance <= plan.Count && target.Same(plan[candidate.Instance - 1]))
             {
                 _overrides.Remove(candidate.Instance);

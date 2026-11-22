@@ -105,6 +105,36 @@ public sealed class ServerPlanTests
     }
 
     [Fact]
+    public void AServerStillRunningThePreviouslySelectedBuildMovesToTheNewOnesPlayers()
+    {
+        // Core-Launcher #23: the servers run 4.5, then 3.0 is selected (the plan says 3.0) without restarting them.
+        var settings = Settings(Build("4.5", 4166199), Build("3.0", 3901517));
+        var switcher = new ServerSwitcher(_time);
+        foreach (var (assignment, instance) in ServerPlan.For(settings).Select((assignment, index) => (assignment, index + 1)))
+        {
+            switcher.Started(instance, assignment);
+        }
+
+        settings.SelectedBuild = "3.0";
+        var plan = ServerPlan.For(settings);
+        IReadOnlyList<ServerSlotView> slots = [Slot(1), Slot(2)];
+        var players = new Dictionary<int, SessionPlayers?> { [1] = new(0, 4), [2] = new(0, 100) };
+        ServerSwitch? Decide(params BuildDemand[] waiting) =>
+            switcher.Decide(plan, slots, slot => players[slot.Instance], waiting, demand => ServerPlan.Resolve(settings, demand));
+
+        // Idle time counts before anyone waits, so the server moves as soon as 3.0's players do.
+        Assert.Null(Decide());
+        _time.Advance(ServerSwitcher.IdleFor);
+        Assert.Equal(new ServerSwitch(2, new ServerAssignment("4.5", true), new ServerAssignment("3.0", true)), Decide(new BuildDemand(3901517, true, 1)));
+        Assert.Equal(plan[1], switcher.Assignment(plan, 2));
+
+        // Restarted on 3.0, it takes them: nothing else moves.
+        switcher.Started(2, plan[1]);
+        _time.Advance(ServerSwitcher.IdleFor);
+        Assert.Null(Decide(new BuildDemand(3901517, true, 1)));
+    }
+
+    [Fact]
     public void NoServerMovesWhenItsBuildHasAFreeOneOrTheIdleOnesAreWantedThemselves()
     {
         var settings = Settings(Build("4.5", 4166199, extra: 1), Build("3.0", 3901517, extra: 1));

@@ -930,11 +930,8 @@ public sealed class LauncherHost : IAsyncDisposable
             return;
         }
 
+        // Decide runs with no demand too, so a server's idle time is counted before players wait (Core-Launcher #23).
         var demand = _demand.Current(backend);
-        if (demand.Count == 0)
-        {
-            return;
-        }
 
         // Read outside the lock: the pool takes it (for each slot's build) while holding its own.
         var slots = Servers.Slots;
@@ -1052,6 +1049,11 @@ public sealed class LauncherHost : IAsyncDisposable
             var build = host.ServerBuild(instance) ?? throw new InvalidOperationException("Its build isn't in Settings → Builds any more");
             var battleRoyale = host.HostsBattleRoyale(instance);
             var backend = Backend() ?? throw new InvalidOperationException("The backend isn't ready");
+            lock (host._gate)
+            {
+                host._switcher.Started(instance, new ServerAssignment(build.Name, battleRoyale));
+            }
+
             // The admin panel's first Server Region (Core-Backend #142), NA when none is ticked; a build's own -McpRegion wins.
             var region = host._region.Region(backend) ?? BackendRegion.DefaultRegion;
             var arguments = LaunchArguments.Server(build, backend, ServerLogin(settings, instance), battleRoyale, region);
