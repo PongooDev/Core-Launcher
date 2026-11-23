@@ -242,8 +242,11 @@ public static partial class KnownBuilds
     /// <summary>Fortnite 8.20, ++Fortnite+Release-8.20 CL-5625478 on UE 4.22, Season 8 (released 27 March 2019): the season's next content update (8.10 and 8.11 are skipped), with the changes listed in its patch notes (https://fortnite.fandom.com/wiki/Update_v8.20).</summary>
     public const int Fortnite820 = 5625478;
 
-    /// <summary>Fortnite 8.30, ++Fortnite+Release-8.30 CL-5793395 on UE 4.22, Season 8 (released 17 April 2019): the season's next content update, with the changes listed in its patch notes (https://fortnite.fandom.com/wiki/Update_v8.30).</summary>
+    /// <summary>Fortnite 8.30, ++Fortnite+Release-8.30 CL-5793395 on UE 4.23, Season 8 (released 10 April 2019): the season's next content update, with the changes listed in its patch notes (https://fortnite.fandom.com/wiki/Update_v8.30).</summary>
     public const int Fortnite830 = 5793395;
+
+    /// <summary>Fortnite 8.40, ++Fortnite+Release-8.40 CL-6005771 on UE 4.23, Season 8 (released 17 April 2019): the season's next content update, with the changes listed in its patch notes (https://fortnite.fandom.com/wiki/Update_v8.40).</summary>
+    public const int Fortnite840 = 6005771;
 
     /// <summary>
     /// What a Battle Royale server gets. Core takes the map and playlist from the build's own data (on 1.7.2 the Battle
@@ -386,7 +389,8 @@ public static partial class KnownBuilds
         new(Fortnite740, "7.40", "Fortnite 7.40 (CL-5046157)", BuildSupport.Full, [], BattleRoyale: true, Creative: true),
         new(Fortnite800, "8.00", "Fortnite 8.00 (CL-5203069)", BuildSupport.Full, [], BattleRoyale: true, Creative: true),
         new(Fortnite820, "8.20", "Fortnite 8.20 (CL-5625478)", BuildSupport.Full, [], BattleRoyale: true, Creative: true),
-        new(Fortnite830, "8.30", "Fortnite 8.30 (CL-5793395)", BuildSupport.InProgress, [], BattleRoyale: true, Creative: true),
+        new(Fortnite830, "8.30", "Fortnite 8.30 (CL-5793395)", BuildSupport.Full, [], BattleRoyale: true, Creative: true),
+        new(Fortnite840, "8.40", "Fortnite 8.40 (CL-6005771)", BuildSupport.InProgress, [], BattleRoyale: true, Creative: true),
     ];
 
     private static KnownBuild? Find(int changelist) => Array.Find(Builds, build => build.Changelist == changelist);
