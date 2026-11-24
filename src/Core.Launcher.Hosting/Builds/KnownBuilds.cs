@@ -248,6 +248,9 @@ public static partial class KnownBuilds
     /// <summary>Fortnite 8.40, ++Fortnite+Release-8.40 CL-6005771 on UE 4.23, Season 8 (released 17 April 2019): the season's next content update, with the changes listed in its patch notes (https://fortnite.fandom.com/wiki/Update_v8.40).</summary>
     public const int Fortnite840 = 6005771;
 
+    /// <summary>Fortnite 8.50, ++Fortnite+Release-8.50 CL-6058028 on UE 4.23, Season 8 (released 25 April 2019): the season's next content update, with the changes listed in its patch notes (https://fortnite.fandom.com/wiki/Update_v8.50).</summary>
+    public const int Fortnite850 = 6058028;
+
     /// <summary>
     /// What a Battle Royale server gets. Core takes the map and playlist from the build's own data (on 1.7.2 the Battle
     /// Royale zone theme's Athena_Terrain and solo playlist; the match's playlist comes with its assignment) and
@@ -390,7 +393,8 @@ public static partial class KnownBuilds
         new(Fortnite800, "8.00", "Fortnite 8.00 (CL-5203069)", BuildSupport.Full, [], BattleRoyale: true, Creative: true),
         new(Fortnite820, "8.20", "Fortnite 8.20 (CL-5625478)", BuildSupport.Full, [], BattleRoyale: true, Creative: true),
         new(Fortnite830, "8.30", "Fortnite 8.30 (CL-5793395)", BuildSupport.Full, [], BattleRoyale: true, Creative: true),
-        new(Fortnite840, "8.40", "Fortnite 8.40 (CL-6005771)", BuildSupport.InProgress, [], BattleRoyale: true, Creative: true),
+        new(Fortnite840, "8.40", "Fortnite 8.40 (CL-6005771)", BuildSupport.Full, [], BattleRoyale: true, Creative: true),
+        new(Fortnite850, "8.50", "Fortnite 8.50 (CL-6058028)", BuildSupport.InProgress, [], BattleRoyale: true, Creative: true),
     ];
 
     private static KnownBuild? Find(int changelist) => Array.Find(Builds, build => build.Changelist == changelist);
