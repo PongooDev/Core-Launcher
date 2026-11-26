@@ -260,6 +260,12 @@ public static partial class KnownBuilds
     /// <summary>Fortnite 9.01, ++Fortnite+Release-9.01 CL-6428087 on UE 4.23, Season 9: the season's first hotfix update, with the changes listed in its patch notes (https://fortnite.fandom.com/wiki/Update_v9.01).</summary>
     public const int Fortnite901 = 6428087;
 
+    /// <summary>Fortnite 9.10, ++Fortnite+Release-9.10 CL-6573057 on UE 4.23, Season 9: the earlier of the two builds called v9.10.</summary>
+    public const int Fortnite910Earlier = 6573057;
+
+    /// <summary>Fortnite 9.10, ++Fortnite+Release-9.10 CL-6639283 on UE 4.23, Season 9: the later of the two builds called v9.10, the content update.</summary>
+    public const int Fortnite910 = 6639283;
+
     /// <summary>
     /// What a Battle Royale server gets. Core takes the map and playlist from the build's own data (on 1.7.2 the Battle
     /// Royale zone theme's Athena_Terrain and solo playlist; the match's playlist comes with its assignment) and
@@ -406,7 +412,9 @@ public static partial class KnownBuilds
         new(Fortnite850, "8.50", "Fortnite 8.50 (CL-6058028)", BuildSupport.Full, [], BattleRoyale: true, Creative: true),
         new(Fortnite851, "8.51", "Fortnite 8.51 (CL-6165369)", BuildSupport.Full, [], BattleRoyale: true, Creative: true),
         new(Fortnite900, "9.00", "Fortnite 9.00 (CL-6337466)", BuildSupport.Full, [], BattleRoyale: true, Creative: true),
-        new(Fortnite901, "9.01", "Fortnite 9.01 (CL-6428087)", BuildSupport.InProgress, [], BattleRoyale: true, Creative: true),
+        new(Fortnite901, "9.01", "Fortnite 9.01 (CL-6428087)", BuildSupport.Full, [], BattleRoyale: true, Creative: true),
+        new(Fortnite910Earlier, "9.10", "Fortnite 9.10 (CL-6573057)", BuildSupport.InProgress, [], BattleRoyale: true, Creative: true),
+        new(Fortnite910, "9.10", "Fortnite 9.10 (CL-6639283)", BuildSupport.InProgress, [], BattleRoyale: true, Creative: true),
     ];
 
     private static KnownBuild? Find(int changelist) => Array.Find(Builds, build => build.Changelist == changelist);
