@@ -8,7 +8,7 @@ description: Use for every open Core-Launcher pull request - check it out in a w
 The owner's rule: agents review every open PR, make it right and merge it themselves. Rules: AGENTS.md sections 1,
 2 and 6. Release steps: `docs/agents/releasing.md`.
 
-1. Read `H:\CoreWork\HANDOFF.md` (skip PRs someone is already on). `gh pr list -R PongooDev/Core-Launcher --state open`.
+1. Read `D:\CoreWork\HANDOFF.md` (skip PRs someone is already on). `gh pr list -R PongooDev/Core-Launcher --state open`.
 2. Read it: `gh pr view <n> -R PongooDev/Core-Launcher --comments`, `gh pr diff <n> -R PongooDev/Core-Launcher`.
 3. Reject only if it adds something ruled out (CoreClient changes without the owner's OK, writing into game builds
    beyond what the launcher already writes, a risky feature on by default):
@@ -16,8 +16,8 @@ The owner's rule: agents review every open PR, make it right and merge it themse
 4. Worktree and checkout:
    ```
    git -C $env:USERPROFILE\Documents\GitHub\Core-Launcher fetch origin
-   git -C $env:USERPROFILE\Documents\GitHub\Core-Launcher worktree add --detach H:\CoreWork\lapr-<n> origin/main
-   cd H:\CoreWork\lapr-<n>
+   git -C $env:USERPROFILE\Documents\GitHub\Core-Launcher worktree add --detach D:\CoreWork\lapr-<n> origin/main
+   cd D:\CoreWork\lapr-<n>
    gh pr checkout <n> -R PongooDev/Core-Launcher
    ```
 5. Review: downloads size and SHA-256 checked; build-specific behaviour gated by `KnownBuilds`; no warnings

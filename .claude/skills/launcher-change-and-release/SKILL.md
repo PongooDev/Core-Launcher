@@ -7,12 +7,12 @@ description: Use for any Core-Launcher code change (a fix, a feature, a new or p
 
 Rules: AGENTS.md sections 1 and 2. Depth: `docs/agents/knownbuilds.md`, `docs/agents/releasing.md`.
 
-1. Read `H:\CoreWork\HANDOFF.md`; run the core MCP's `project_status` (if available).
+1. Read `D:\CoreWork\HANDOFF.md`; run the core MCP's `project_status` (if available).
 2. Read the issue and comments: `gh issue view <n> -R PongooDev/Core-Launcher --comments`.
 3. Worktree:
    ```
    git -C $env:USERPROFILE\Documents\GitHub\Core-Launcher fetch origin
-   git -C $env:USERPROFILE\Documents\GitHub\Core-Launcher worktree add -b fix-<n> H:\CoreWork\la-<n> origin/main
+   git -C $env:USERPROFILE\Documents\GitHub\Core-Launcher worktree add -b fix-<n> D:\CoreWork\la-<n> origin/main
    ```
 4. Make the change. Build-specific behaviour is gated by CL through `KnownBuilds`. Nothing new written into game
    builds; downloads stay size and SHA-256 checked; unproven features off by default.
@@ -39,7 +39,7 @@ Rules: AGENTS.md sections 1 and 2. Depth: `docs/agents/knownbuilds.md`, `docs/ag
     ```
     Watch the run until it passes (`gh run watch <id> -R PongooDev/Core-Launcher`).
 11. Comment on the issue with the commit and the release link; close it if fixed.
-12. Remove the worktree and branch. Write anything unfinished in `H:\CoreWork\HANDOFF.md`.
+12. Remove the worktree and branch. Write anything unfinished in `D:\CoreWork\HANDOFF.md`.
 
 Done when: tests pass, the change is on `origin/main`, the release run is green (or the change is docs-only), and
 the issue names the commit and release.

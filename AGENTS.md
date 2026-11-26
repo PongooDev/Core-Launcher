@@ -11,11 +11,11 @@ command examples do.
 
 ## 0. Start of every session
 
-1. Read `H:\CoreWork\HANDOFF.md` (local, shared by every agent, not committed). Don't redo or undo work listed in it.
+1. Read `D:\CoreWork\HANDOFF.md` (local, shared by every agent, not committed). Don't redo or undo work listed in it.
 2. Run the core MCP's `project_status` (if available) for the build in development and the supported range.
-3. Work in your own git worktree under `H:\CoreWork` (section 5), never in the main checkout
+3. Work in your own git worktree under `D:\CoreWork` (section 5), never in the main checkout
    `%USERPROFILE%\Documents\GitHub\Core-Launcher`.
-4. If you can't finish, update `H:\CoreWork\HANDOFF.md`: what is in progress, the branch or worktree, what was
+4. If you can't finish, update `D:\CoreWork\HANDOFF.md`: what is in progress, the branch or worktree, what was
    verified, what's next.
 
 Per-build facts are in the read-only knowledge base
@@ -46,7 +46,7 @@ is the CoreV2 checkout's path with `\` and `:` turned into `-`. Read it; **never
 - **Never** kill a process you didn't start; stop what you started before you finish.
 - **Never** print, copy or commit pak AES keys, tokens or signing material.
 - Run any Python that reads downloaded or untrusted files with `python -I`.
-- Work in worktrees under `H:\CoreWork`. Rebase onto `origin/main` before pushing. Stage only your own paths.
+- Work in worktrees under `D:\CoreWork`. Rebase onto `origin/main` before pushing. Stage only your own paths.
 - **Pre-commit hooks:** `tools/githooks/pre-commit` runs on every commit (enabled per clone with
   `git config core.hooksPath tools/githooks`; this checkout has it on). It blocks pak AES keys, private keys, files
   over 5 MB, build output and dependency folders (`bin`, `obj`, `x64`, `.vs`, `node_modules`), binaries, game files
@@ -103,7 +103,7 @@ updater skips.
 1. Read `HANDOFF.md`; run `project_status`.
 2. Read the issue and its comments (`gh issue view <n> -R PongooDev/Core-Launcher --comments`), and the logs
    (`Launcher.log`, `Backend.log`, `Core\*_log_<pid>.txt`).
-3. Worktree: `git -C $env:USERPROFILE\Documents\GitHub\Core-Launcher worktree add -b fix-<n> H:\CoreWork\la-<n> origin/main`.
+3. Worktree: `git -C $env:USERPROFILE\Documents\GitHub\Core-Launcher worktree add -b fix-<n> D:\CoreWork\la-<n> origin/main`.
 4. Change the code, keeping old builds' behaviour unless the change is for them (gate by CL via `KnownBuilds`).
 5. Add or update tests for the behaviour.
 6. `dotnet build`, run the test exe (or `launcher_tests`).
@@ -129,7 +129,7 @@ updater skips.
 - **Trailer:** commits made by Freebuff or Codebuff end with the line `Agent: Freebuff` and must not use Claude's
   `Co-Authored-By` line. Each Freebuff commit is reviewed later, so say what was verified and how.
 - Close an issue only with a comment naming the commit and the release. Reopen when the reporter says it still happens.
-- Unfinished work goes in `H:\CoreWork\HANDOFF.md`, not in a pushed WIP branch.
+- Unfinished work goes in `D:\CoreWork\HANDOFF.md`, not in a pushed WIP branch.
 
 **Pull requests: review, fix, merge.** Agents review every open PR, make it right and merge it themselves (the
 owner's rule). Check it out in a worktree (`gh pr checkout`), review it against sections 1 and 6 (nothing new written
