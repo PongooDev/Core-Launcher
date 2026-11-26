@@ -53,6 +53,12 @@ is the CoreV2 checkout's path with `\` and `:` turned into `-`. Read it; **never
   and agent-local files. **Never** bypass it (`--no-verify`); fix what it flags.
 - Close an issue only with a comment naming the fixing commit (and the release that ships it).
 
+## 2a. Coordinating work: when to use subagents
+
+Follow CoreV2's `AGENTS.md` section 2a: one subagent per issue, three subagents (promotion, gameserver, backend game
+data) for a new build, and the coordinator alone deploys, restarts the 5595 backend, tags releases and closes
+issues. Subagents report back instead of doing those. A new build's promotion (`KnownBuilds.cs`, tests, README, tag) is one of the three bring-up subagents. The coordinator tags releases for other launcher changes.
+
 ## 3. Repo map
 
 | Path | What lives there |
