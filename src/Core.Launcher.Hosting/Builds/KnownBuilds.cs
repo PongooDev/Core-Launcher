@@ -269,6 +269,9 @@ public static partial class KnownBuilds
     /// <summary>Fortnite 9.20, ++Fortnite+Release-9.20 CL-6822798 on UE 4.23, Season 9, with the changes listed in its patch notes (https://fortnite.fandom.com/wiki/Update_v9.20).</summary>
     public const int Fortnite920 = 6822798;
 
+    /// <summary>Fortnite 9.21, ++Fortnite+Release-9.21 CL-6922310 on UE 4.23, Season 9, with the changes listed in its patch notes (https://fortnite.fandom.com/wiki/Update_v9.21).</summary>
+    public const int Fortnite921 = 6922310;
+
     /// <summary>
     /// What a Battle Royale server gets. Core takes the map and playlist from the build's own data (on 1.7.2 the Battle
     /// Royale zone theme's Athena_Terrain and solo playlist; the match's playlist comes with its assignment) and
@@ -418,7 +421,8 @@ public static partial class KnownBuilds
         new(Fortnite901, "9.01", "Fortnite 9.01 (CL-6428087)", BuildSupport.Full, [], BattleRoyale: true, Creative: true),
         new(Fortnite910Earlier, "9.10", "Fortnite 9.10 (CL-6573057)", BuildSupport.Full, [], BattleRoyale: true, Creative: true),
         new(Fortnite910, "9.10", "Fortnite 9.10 (CL-6639283)", BuildSupport.Full, [], BattleRoyale: true, Creative: true),
-        new(Fortnite920, "9.20", "Fortnite 9.20 (CL-6822798)", BuildSupport.InProgress, [], BattleRoyale: true, Creative: true),
+        new(Fortnite920, "9.20", "Fortnite 9.20 (CL-6822798)", BuildSupport.Full, [], BattleRoyale: true, Creative: true),
+        new(Fortnite921, "9.21", "Fortnite 9.21 (CL-6922310)", BuildSupport.InProgress, [], BattleRoyale: true, Creative: true),
     ];
 
     private static KnownBuild? Find(int changelist) => Array.Find(Builds, build => build.Changelist == changelist);
